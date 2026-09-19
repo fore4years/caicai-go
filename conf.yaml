@@ -1,0 +1,22 @@
+mqtt:
+  broker: "caicai"
+  port: 1883
+  qos: 1
+
+
+redis:
+  host: "11111"
+  port: 12
+  username: "11111"
+  password: "1111"
+  dbnumber: 12
+
+mysql:
+  host: "222"
+  port: 12
+  username: "@2222"
+  password: "222"
+  dbname: "22222"
+
+app:
+  port: 6666
