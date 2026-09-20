@@ -2,11 +2,14 @@ package conf
 
 import (
 	"caicai-go/logger"
-	"log"
+	"fmt"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 type Config struct {
@@ -18,6 +21,7 @@ type Config struct {
 
 var (
 	Cfg *Config
+	Db  *gorm.DB
 )
 
 func init() {
@@ -59,7 +63,7 @@ func MqttConnection(mqcfg MqttConf) {
 	client := mqtt.NewClient(option)
 
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		log.Printf("mqtt链接异常: %v", token.Error())
+		logger.Mylog.Fatal().Err(token.Error()).Msg("MQTT连接异常")
 	}
 
 	topic := "xxxtopicxxx"
@@ -67,4 +71,28 @@ func MqttConnection(mqcfg MqttConf) {
 
 	token := client.Publish(topic, byte(mqcfg.Qos), false, message)
 	token.Wait()
+}
+
+func Dbconnection(dbconf MysqlConf) error {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		dbconf.Username, dbconf.Password, dbconf.Host, dbconf.Port, dbconf.Dbname)
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return fmt.Errorf("数据库连接异常: %w", err)
+	}
+	option, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("获取连接池失败: %w", err)
+	}
+	// SetMaxIdleConns 设置空闲连接池中连接的最大数量。
+	option.SetMaxIdleConns(10)
+
+	// SetMaxOpenConns 设置打开数据库连接的最大数量。
+	option.SetMaxOpenConns(100)
+
+	// SetConnMaxLifetime 设置了可以重新使用连接的最大时间。
+	option.SetConnMaxLifetime(time.Hour)
+
+	Db = db
+	return nil
 }

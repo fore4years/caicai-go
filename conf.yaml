@@ -5,18 +5,17 @@ mqtt:
 
 
 redis:
-  host: "11111"
-  port: 12
-  username: "11111"
-  password: "1111"
-  dbnumber: 12
+  host: "81.69.46.160"
+  port: 6379
+  password: "lanlan1212!!!"
+  dbnumber: 0
 
 mysql:
-  host: "222"
-  port: 12
-  username: "@2222"
-  password: "222"
-  dbname: "22222"
+  host: "81.69.46.160"
+  port: 3306
+  username: "root"
+  password: "lanlan1313!@#"
+  dbname: "parking"
 
 app:
-  port: 6666
+  port: 8081

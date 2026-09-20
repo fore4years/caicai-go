@@ -35,6 +35,7 @@ COPY --from=builder /app/caicai-go .
 
 # 如果你的 conf.yaml 想打进镜像（不推荐，但简单）：
 # COPY --from=builder /app/conf.yaml .
+ENV GIN_MODE=release
 
 # 暴露端口（跟你配置里的 6666 一致）
 EXPOSE 6666

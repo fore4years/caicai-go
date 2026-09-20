@@ -19,6 +19,7 @@ type MysqlConf struct {
 	Password string
 	Username string
 	Port     int16
+	Dbname   string
 }
 
 type AppConf struct {
