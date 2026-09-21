@@ -18,4 +18,4 @@ mysql:
   dbname: "parking"
 
 app:
-  port: 8081
+  port: 8080

@@ -7,10 +7,10 @@ type MqttConf struct {
 }
 
 type RedisConf struct {
+	Host     string
 	Username string
+	Password string
 	Port     int16
-	host     string
-	password string
 	Dbnumber int8
 }
 
