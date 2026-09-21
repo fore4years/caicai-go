@@ -20,7 +20,7 @@ func connection() *gorm.DB {
 
 func main() {
 	g := gen.NewGenerator(gen.Config{
-		OutPath: "../../objects",
+		OutPath: "./objects",
 		Mode:    gen.WithDefaultQuery | gen.WithQueryInterface,
 	})
 
