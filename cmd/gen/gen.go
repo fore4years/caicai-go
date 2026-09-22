@@ -19,10 +19,19 @@ func connection() *gorm.DB {
 }
 
 func main() {
-	g := gen.NewGenerator(gen.Config{
-		OutPath: "./objects",
+	cfg := gen.Config{
+		OutPath: "objects",
 		Mode:    gen.WithDefaultQuery | gen.WithQueryInterface,
+	}
+	// 金额列 DECIMAL 映射为 decimal.Decimal，避免生成 float64 导致精度丢失。
+	cfg.WithDataTypeMap(map[string]func(columnType gorm.ColumnType) (dataType string){
+		"decimal": func(columnType gorm.ColumnType) (dataType string) {
+			return "decimal.Decimal"
+		},
 	})
+	cfg.WithImportPkgPath("github.com/shopspring/decimal")
+
+	g := gen.NewGenerator(cfg)
 
 	g.UseDB(connection())
 

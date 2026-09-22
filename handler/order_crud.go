@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/shopspring/decimal"
 	"math"
 	"net/http"
 	"time"
@@ -46,11 +47,11 @@ func orderPrivateToDTO(o model.OrderPrivateTbl) orderPrivateDTO {
 }
 
 type orderTwiceDTO struct {
-	Orderid     string         `json:"orderid"`
-	PowerRate   float64        `json:"powerRate,omitempty"`
-	ServiceRate float64        `json:"serviceRate,omitempty"`
-	CreateTime  *LocalDateTime `json:"createTime,omitempty"`
-	UpdateTime  *LocalDateTime `json:"updateTime,omitempty"`
+	Orderid     string          `json:"orderid"`
+	PowerRate   decimal.Decimal `json:"powerRate,omitempty"`
+	ServiceRate decimal.Decimal `json:"serviceRate,omitempty"`
+	CreateTime  *LocalDateTime  `json:"createTime,omitempty"`
+	UpdateTime  *LocalDateTime  `json:"updateTime,omitempty"`
 }
 
 func orderTwiceToDTO(o model.OrderTwiceTbl) orderTwiceDTO {
@@ -58,16 +59,16 @@ func orderTwiceToDTO(o model.OrderTwiceTbl) orderTwiceDTO {
 }
 
 type rechargeOrderDTO struct {
-	OrderID               string         `json:"orderId"`
-	Openid                string         `json:"openid,omitempty"`
-	RechargeAmount        float64        `json:"rechargeAmount,omitempty"`
-	RefundedAmount        float64        `json:"refundedAmount,omitempty"`
-	RemainingRefundAmount float64        `json:"remainingRefundAmount,omitempty"`
-	OrderStatus           string         `json:"orderStatus,omitempty"`
-	CreateTime            *LocalDateTime `json:"createTime,omitempty"`
-	PaymentTime           *LocalDateTime `json:"paymentTime,omitempty"`
-	RefundTime            *LocalDateTime `json:"refundTime,omitempty"`
-	WechatTransactionID   string         `json:"wechatTransactionId,omitempty"`
+	OrderID               string          `json:"orderId"`
+	Openid                string          `json:"openid,omitempty"`
+	RechargeAmount        decimal.Decimal `json:"rechargeAmount,omitempty"`
+	RefundedAmount        decimal.Decimal `json:"refundedAmount,omitempty"`
+	RemainingRefundAmount decimal.Decimal `json:"remainingRefundAmount,omitempty"`
+	OrderStatus           string          `json:"orderStatus,omitempty"`
+	CreateTime            *LocalDateTime  `json:"createTime,omitempty"`
+	PaymentTime           *LocalDateTime  `json:"paymentTime,omitempty"`
+	RefundTime            *LocalDateTime  `json:"refundTime,omitempty"`
+	WechatTransactionID   string          `json:"wechatTransactionId,omitempty"`
 }
 
 func rechargeOrderToDTO(r model.RechargeOrderTbl) rechargeOrderDTO {
@@ -81,17 +82,17 @@ func rechargeOrderToDTO(r model.RechargeOrderTbl) rechargeOrderDTO {
 }
 
 type withdrawalDTO struct {
-	RecordID               string         `json:"recordId"`
-	Openid                 string         `json:"openid,omitempty"`
-	WithdrawalAmount       float64        `json:"withdrawalAmount,omitempty"`
-	RefundOrderID          string         `json:"refundOrderId,omitempty"`
-	RelatedRechargeOrderID string         `json:"relatedRechargeOrderId,omitempty"`
-	WithdrawalStatus       string         `json:"withdrawalStatus,omitempty"`
-	CreateTime             *LocalDateTime `json:"createTime,omitempty"`
-	ProcessTime            *LocalDateTime `json:"processTime,omitempty"`
-	RejectReason           string         `json:"rejectReason,omitempty"`
-	WithdrawalType         string         `json:"withdrawalType,omitempty"`
-	WxRefundID             string         `json:"wxRefundId,omitempty"`
+	RecordID               string          `json:"recordId"`
+	Openid                 string          `json:"openid,omitempty"`
+	WithdrawalAmount       decimal.Decimal `json:"withdrawalAmount,omitempty"`
+	RefundOrderID          string          `json:"refundOrderId,omitempty"`
+	RelatedRechargeOrderID string          `json:"relatedRechargeOrderId,omitempty"`
+	WithdrawalStatus       string          `json:"withdrawalStatus,omitempty"`
+	CreateTime             *LocalDateTime  `json:"createTime,omitempty"`
+	ProcessTime            *LocalDateTime  `json:"processTime,omitempty"`
+	RejectReason           string          `json:"rejectReason,omitempty"`
+	WithdrawalType         string          `json:"withdrawalType,omitempty"`
+	WxRefundID             string          `json:"wxRefundId,omitempty"`
 }
 
 func withdrawalToDTO(w model.WithdrawalRecordTbl) withdrawalDTO {
@@ -105,7 +106,7 @@ func withdrawalToDTO(w model.WithdrawalRecordTbl) withdrawalDTO {
 }
 
 // electronicFeesByOrderid 计算订单的电费与服务费（对齐 Java getElectronicByOrderid，季节电价表）。
-func electronicFeesByOrderid(orderid string) (totalFee, serviceFee float64) {
+func electronicFeesByOrderid(orderid string) (totalFee, serviceFee decimal.Decimal) {
 	season := currentSeason()
 	sql := `SELECT
 		COALESCE(SUM((e.over_value - e.start_value) / 100 * CASE s.price_mode WHEN 1 THEN p.total1 WHEN 2 THEN p.total2 ELSE p.total END),0),
@@ -116,8 +117,9 @@ func electronicFeesByOrderid(orderid string) (totalFee, serviceFee float64) {
 		LEFT JOIN order_tbl o ON o.orderid = e.order_id
 		LEFT JOIN tab_parking_spaces s ON s.id = o.spaces_id
 		WHERE e.order_id = ?`
-	conf.Db.Raw(sql, orderid).Row().Scan(&totalFee, &serviceFee)
-	return round2(totalFee), round2(serviceFee)
+	var tf, sf decimal.Decimal
+	conf.Db.Raw(sql, orderid).Row().Scan(&tf, &sf)
+	return tf.Round(2), sf.Round(2)
 }
 
 func round2(v float64) float64 {
@@ -250,8 +252,8 @@ func (c *OrderTwiceController) GetByOrderid(ctx *gin.Context) {
 	var maxPower float64
 	conf.Db.Raw("SELECT COALESCE(MAX(power),0) FROM re_order_electronic_tbl WHERE order_id = ?", o.Orderid).Row().Scan(&maxPower)
 	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{
-		"totalFee":   round2(o.PowerRate),
-		"serviceFee": round2(o.ServiceRate),
+		"totalFee":   o.PowerRate.Round(2),
+		"serviceFee": o.ServiceRate.Round(2),
 		"maxPower":   round2(maxPower),
 	}))
 }
@@ -289,11 +291,12 @@ func (c *RechargeOrderController) Detail(ctx *gin.Context) {
 }
 
 func (c *RechargeOrderController) Statistics(ctx *gin.Context) {
-	var total, count float64
+	var total decimal.Decimal
+	var count int64
 	conf.Db.Model(&model.RechargeOrderTbl{}).
 		Where("openid = ? AND order_status = ?", ctx.Param("openid"), "已支付").
 		Select("COALESCE(SUM(recharge_amount),0), COUNT(*)").Row().Scan(&total, &count)
-	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{"totalAmount": round2(total), "count": int(count)}))
+	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{"totalAmount": total.Round(2), "count": count}))
 }
 
 func (c *RechargeOrderController) UpdateStatus(ctx *gin.Context) {
@@ -315,9 +318,9 @@ type WithdrawalController struct{}
 
 func (c *WithdrawalController) Apply(ctx *gin.Context) {
 	var req struct {
-		Openid                 string  `json:"openid"`
-		Amount                 float64 `json:"amount"`
-		RelatedRechargeOrderID string  `json:"relatedRechargeOrderId"`
+		Openid                 string          `json:"openid"`
+		Amount                 decimal.Decimal `json:"amount"`
+		RelatedRechargeOrderID string          `json:"relatedRechargeOrderId"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
@@ -336,9 +339,9 @@ func (c *WithdrawalController) Apply(ctx *gin.Context) {
 
 func (c *WithdrawalController) Refund(ctx *gin.Context) {
 	var req struct {
-		Openid          string  `json:"openid"`
-		RechargeOrderID string  `json:"rechargeOrderId"`
-		RefundAmount    float64 `json:"refundAmount"`
+		Openid          string          `json:"openid"`
+		RechargeOrderID string          `json:"rechargeOrderId"`
+		RefundAmount    decimal.Decimal `json:"refundAmount"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))

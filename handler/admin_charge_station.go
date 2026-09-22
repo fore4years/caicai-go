@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"caicai-go/conf"
@@ -232,14 +233,14 @@ func (a *AdminChargeStationFourController) GetStationById(c *gin.Context) {
 // UpdateById POST /system/chargeStationFour/updateById
 func (a *AdminChargeStationFourController) UpdateById(c *gin.Context) {
 	var req struct {
-		ID            int32   `json:"id"`
-		Name          string  `json:"name"`
-		Place         string  `json:"place"`
-		SpacesCode    string  `json:"spacesCode"`
-		LockID        string  `json:"lockId"`
-		ChargingGunID int32   `json:"chargingGunId"`
-		Service       float64 `json:"service"`
-		ServiceFee    float64 `json:"serviceFee"`
+		ID            int32           `json:"id"`
+		Name          string          `json:"name"`
+		Place         string          `json:"place"`
+		SpacesCode    string          `json:"spacesCode"`
+		LockID        string          `json:"lockId"`
+		ChargingGunID int32           `json:"chargingGunId"`
+		Service       decimal.Decimal `json:"service"`
+		ServiceFee    decimal.Decimal `json:"serviceFee"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(false))
@@ -260,6 +261,12 @@ func (a *AdminChargeStationFourController) UpdateById(c *gin.Context) {
 	}
 	if req.ChargingGunID != 0 {
 		updates["charging_gun_id"] = req.ChargingGunID
+	}
+	if !req.Service.IsZero() {
+		updates["service"] = req.Service
+	}
+	if !req.ServiceFee.IsZero() {
+		updates["service_fee"] = req.ServiceFee
 	}
 	res := conf.Db.Table("tab_parking_spaces").Where("id = ?", req.ID).Updates(updates)
 	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))

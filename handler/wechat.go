@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/shopspring/decimal"
 
 	"caicai-go/logger"
 	"caicai-go/model"
@@ -146,8 +147,8 @@ func addUser(ctx *gin.Context, openid, phone, idEntity string) (TokenBean, error
 		Openid:       openid,
 		Phone:        phone,
 		IDEntity:     idEntity,
-		Balans:       0,
-		FreezeBalans: 0,
+		Balans:       decimal.Zero,
+		FreezeBalans: decimal.Zero,
 	}
 	if err := objects.UserTbl.WithContext(ctx.Request.Context()).Create(newUser); err != nil {
 		return TokenBean{}, fmt.Errorf("用户注册失败")

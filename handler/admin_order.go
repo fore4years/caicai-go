@@ -1,12 +1,12 @@
 package handler
 
 import (
-	"database/sql"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"caicai-go/conf"
@@ -118,8 +118,8 @@ func (a *AdminOrderController) GetOrderStatistics(c *gin.Context) {
 	}
 
 	type agg struct {
-		Degree float64 `gorm:"column:d"`
-		Fee    float64 `gorm:"column:f"`
+		Degree float64         `gorm:"column:d"`
+		Fee    decimal.Decimal `gorm:"column:f"`
 	}
 
 	var totalOrders, todayOrders int64
@@ -197,7 +197,7 @@ func (a *AdminOrderController) BatchDeleteOrders(c *gin.Context) {
 
 // orderSum 汇总某列（charging_degree / basic_consumption），返回字符串；无数据返回 nil。
 func orderSum(pid, startDate, endDate, column string, today bool) *string {
-	q := "SELECT SUM(" + column + ") FROM order_tbl WHERE state = '已完成'"
+	q := "SELECT COALESCE(SUM(" + column + "),0) FROM order_tbl WHERE state = '已完成'"
 	var args []interface{}
 	if pid != "" {
 		q += " AND pid = ?"
@@ -218,11 +218,11 @@ func orderSum(pid, startDate, endDate, column string, today bool) *string {
 		}
 	}
 
-	var v sql.NullFloat64
-	if err := conf.Db.Raw(q, args...).Row().Scan(&v); err != nil || !v.Valid {
+	var v decimal.Decimal
+	if err := conf.Db.Raw(q, args...).Row().Scan(&v); err != nil {
 		return nil
 	}
-	s := strconv.FormatFloat(v.Float64, 'f', -1, 64)
+	s := v.String()
 	return &s
 }
 

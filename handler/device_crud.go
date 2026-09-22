@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/shopspring/decimal"
 	"net/http"
 	"strconv"
 
@@ -14,16 +15,16 @@ import (
 
 // chargingGunDTO 对应 Java model.ChargingGunBean（tab_charging_gun）。
 type chargingGunDTO struct {
-	ID         int32          `json:"id"`
-	Name       string         `json:"name,omitempty"`
-	UnitPrice  float64        `json:"unitPrice,omitempty"`
-	MeterValue int32          `json:"meterValue,omitempty"`
-	State      string         `json:"state,omitempty"`
-	ProductID  string         `json:"productId,omitempty"`
-	Direction  string         `json:"direction,omitempty"`
-	Model      int32          `json:"model,omitempty"`
-	Pwm        int32          `json:"pwm,omitempty"`
-	UpdateTime *LocalDateTime `json:"updateTime,omitempty"`
+	ID         int32           `json:"id"`
+	Name       string          `json:"name,omitempty"`
+	UnitPrice  decimal.Decimal `json:"unitPrice,omitempty"`
+	MeterValue int32           `json:"meterValue,omitempty"`
+	State      string          `json:"state,omitempty"`
+	ProductID  string          `json:"productId,omitempty"`
+	Direction  string          `json:"direction,omitempty"`
+	Model      int32           `json:"model,omitempty"`
+	Pwm        int32           `json:"pwm,omitempty"`
+	UpdateTime *LocalDateTime  `json:"updateTime,omitempty"`
 }
 
 func chargingGunToDTO(g model.TabChargingGun) chargingGunDTO {

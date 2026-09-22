@@ -5,6 +5,7 @@
 package model
 
 import (
+	"github.com/shopspring/decimal"
 	"time"
 )
 
@@ -12,11 +13,11 @@ const TableNameOrderTwiceTbl = "order_twice_tbl"
 
 // OrderTwiceTbl 二轮车订单-计费表
 type OrderTwiceTbl struct {
-	Orderid     string    `gorm:"column:orderid;primaryKey;comment:订单id" json:"orderid"`                        // 订单id
-	PowerRate   float64   `gorm:"column:power_rate;comment:电费" json:"power_rate"`                               // 电费
-	ServiceRate float64   `gorm:"column:service_rate;comment:服务费" json:"service_rate"`                          // 服务费
-	CreateTime  time.Time `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
-	UpdateTime  time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"` // 更新时间
+	Orderid     string          `gorm:"column:orderid;primaryKey;comment:订单id" json:"orderid"`                        // 订单id
+	PowerRate   decimal.Decimal `gorm:"column:power_rate;comment:电费" json:"power_rate"`                               // 电费
+	ServiceRate decimal.Decimal `gorm:"column:service_rate;comment:服务费" json:"service_rate"`                          // 服务费
+	CreateTime  time.Time       `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
+	UpdateTime  time.Time       `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"` // 更新时间
 }
 
 // TableName OrderTwiceTbl's table name

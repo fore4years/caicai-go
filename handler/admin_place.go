@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"github.com/shopspring/decimal"
 	"net/http"
 	"strconv"
 	"time"
@@ -63,24 +64,24 @@ type chargeDTO struct {
 // parkingSpaceDTO 对应 Java model.ParkingSpacesBean（驼峰）。
 // price_mode / overtime_fee 用 int（DB 值可为 0/1/2），不能用 model 里的 bool。
 type parkingSpaceDTO struct {
-	ID            int32   `gorm:"column:id" json:"id"`
-	Point         string  `gorm:"column:point" json:"point,omitempty"`
-	Place         string  `gorm:"column:place" json:"place,omitempty"`
-	Name          string  `gorm:"column:name" json:"name,omitempty"`
-	Openid        string  `gorm:"column:openid" json:"openid,omitempty"`
-	LotID         int32   `gorm:"column:lot_id" json:"lotId,omitempty"`
-	LockID        string  `gorm:"column:lock_id" json:"lockId,omitempty"`
-	SpacesCode    string  `gorm:"column:spaces_code" json:"spacesCode,omitempty"`
-	ChargingGunID int32   `gorm:"column:charging_gun_id" json:"chargingGunId,omitempty"`
-	OpenTime      string  `gorm:"column:open_time" json:"openTime,omitempty"`
-	CloseTime     string  `gorm:"column:close_time" json:"closeTime,omitempty"`
-	ImageID       int32   `gorm:"column:image_id" json:"imageId,omitempty"`
-	Enable        bool    `gorm:"column:enable" json:"enable"`
-	Certificate   int32   `gorm:"column:certificate" json:"certificate,omitempty"`
-	OvertimeFee   int     `gorm:"column:overtime_fee" json:"overtimeFee,omitempty"`
-	Service       float64 `gorm:"column:service" json:"service,omitempty"`
-	ServiceFee    float64 `gorm:"column:service_fee" json:"serviceFee,omitempty"`
-	PriceMode     int     `gorm:"column:price_mode" json:"priceMode,omitempty"`
+	ID            int32           `gorm:"column:id" json:"id"`
+	Point         string          `gorm:"column:point" json:"point,omitempty"`
+	Place         string          `gorm:"column:place" json:"place,omitempty"`
+	Name          string          `gorm:"column:name" json:"name,omitempty"`
+	Openid        string          `gorm:"column:openid" json:"openid,omitempty"`
+	LotID         int32           `gorm:"column:lot_id" json:"lotId,omitempty"`
+	LockID        string          `gorm:"column:lock_id" json:"lockId,omitempty"`
+	SpacesCode    string          `gorm:"column:spaces_code" json:"spacesCode,omitempty"`
+	ChargingGunID int32           `gorm:"column:charging_gun_id" json:"chargingGunId,omitempty"`
+	OpenTime      string          `gorm:"column:open_time" json:"openTime,omitempty"`
+	CloseTime     string          `gorm:"column:close_time" json:"closeTime,omitempty"`
+	ImageID       int32           `gorm:"column:image_id" json:"imageId,omitempty"`
+	Enable        bool            `gorm:"column:enable" json:"enable"`
+	Certificate   int32           `gorm:"column:certificate" json:"certificate,omitempty"`
+	OvertimeFee   int             `gorm:"column:overtime_fee" json:"overtimeFee,omitempty"`
+	Service       decimal.Decimal `gorm:"column:service" json:"service,omitempty"`
+	ServiceFee    decimal.Decimal `gorm:"column:service_fee" json:"serviceFee,omitempty"`
+	PriceMode     int             `gorm:"column:price_mode" json:"priceMode,omitempty"`
 }
 
 // AdminPlaceController 对齐 Java System.controller.PlaceListCon。
@@ -448,12 +449,12 @@ func parkingSpaceStats(c *gin.Context, spacesCode string, weekly bool) {
 		"LEFT JOIN order_tbl o ON o.orderid = e.order_id " +
 		"LEFT JOIN tab_parking_spaces s ON s.id = o.spaces_id " +
 		"WHERE o.spaces_id = ? AND o.consumption_type = '驿享充电' AND o.state = '已完成' AND o.over_time >= ? AND o.over_time < ?"
-	var fee sql.NullFloat64
+	var fee decimal.Decimal
 	conf.Db.Raw(feeSQL, space.ID, startStr, endStr).Row().Scan(&fee)
 
 	c.JSON(http.StatusOK, ResultSuccess(gin.H{
 		"totalChargingDegree": degree.Float64,
-		"totalElectricityFee": fee.Float64,
+		"totalElectricityFee": fee,
 	}))
 }
 

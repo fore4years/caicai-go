@@ -4,24 +4,26 @@
 
 package model
 
+import "github.com/shopspring/decimal"
+
 const TableNameChargeOrderTbl = "charge_order_tbl"
 
 // ChargeOrderTbl 订单(未使用)
 type ChargeOrderTbl struct {
-	Orderid     string  `gorm:"column:orderid;primaryKey" json:"orderid"`
-	Openid      string  `gorm:"column:openid" json:"openid"`
-	Lockid      string  `gorm:"column:lockid" json:"lockid"`
-	ReserveTime string  `gorm:"column:reserveTime" json:"reserveTime"`
-	BeginTime   string  `gorm:"column:beginTime" json:"beginTime"`
-	OverTime    string  `gorm:"column:overTime" json:"overTime"`
-	State       string  `gorm:"column:state" json:"state"`
-	TotalPrice  float64 `gorm:"column:totalPrice" json:"totalPrice"`
-	CloseTime   string  `gorm:"column:closeTime" json:"closeTime"`
-	PlateNum    string  `gorm:"column:plate_num" json:"plate_num"`
-	StartKwh    float64 `gorm:"column:start_kwh" json:"start_kwh"`
-	EndKwh      float64 `gorm:"column:end_kwh" json:"end_kwh"`
-	ParkPrice   float64 `gorm:"column:park_price;default:0.00" json:"park_price"`
-	CouponPrice float64 `gorm:"column:coupon_price;default:0.00" json:"coupon_price"`
+	Orderid     string          `gorm:"column:orderid;primaryKey" json:"orderid"`
+	Openid      string          `gorm:"column:openid" json:"openid"`
+	Lockid      string          `gorm:"column:lockid" json:"lockid"`
+	ReserveTime string          `gorm:"column:reserveTime" json:"reserveTime"`
+	BeginTime   string          `gorm:"column:beginTime" json:"beginTime"`
+	OverTime    string          `gorm:"column:overTime" json:"overTime"`
+	State       string          `gorm:"column:state" json:"state"`
+	TotalPrice  decimal.Decimal `gorm:"column:totalPrice" json:"totalPrice"`
+	CloseTime   string          `gorm:"column:closeTime" json:"closeTime"`
+	PlateNum    string          `gorm:"column:plate_num" json:"plate_num"`
+	StartKwh    float64         `gorm:"column:start_kwh" json:"start_kwh"`
+	EndKwh      float64         `gorm:"column:end_kwh" json:"end_kwh"`
+	ParkPrice   decimal.Decimal `gorm:"column:park_price;default:0.00" json:"park_price"`
+	CouponPrice decimal.Decimal `gorm:"column:coupon_price;default:0.00" json:"coupon_price"`
 }
 
 // TableName ChargeOrderTbl's table name

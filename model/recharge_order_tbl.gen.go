@@ -5,6 +5,7 @@
 package model
 
 import (
+	"github.com/shopspring/decimal"
 	"time"
 )
 
@@ -12,20 +13,20 @@ const TableNameRechargeOrderTbl = "recharge_order_tbl"
 
 // RechargeOrderTbl 充值订单表
 type RechargeOrderTbl struct {
-	OrderID               string    `gorm:"column:order_id;primaryKey;comment:充值订单号" json:"order_id"`                              // 充值订单号
-	Openid                string    `gorm:"column:openid;not null;comment:用户openid" json:"openid"`                                 // 用户openid
-	RechargeAmount        float64   `gorm:"column:recharge_amount;not null;comment:充值金额" json:"recharge_amount"`                   // 充值金额
-	RefundedAmount        float64   `gorm:"column:refunded_amount;not null;comment:已退款金额" json:"refunded_amount"`                  // 已退款金额
-	RemainingRefundAmount float64   `gorm:"column:remaining_refund_amount;not null;comment:剩余可退金额" json:"remaining_refund_amount"` // 剩余可退金额
-	OrderStatus           string    `gorm:"column:order_status;not null;comment:订单状态（待支付、已支付、已退款、已关闭）" json:"order_status"`        // 订单状态（待支付、已支付、已退款、已关闭）
-	CreateTime            time.Time `gorm:"column:create_time;comment:创建时间" json:"create_time"`                                    // 创建时间
-	UpdateTime            time.Time `gorm:"column:update_time;comment:更新时间" json:"update_time"`                                    // 更新时间
-	PaymentTime           time.Time `gorm:"column:payment_time;comment:支付时间" json:"payment_time"`                                  // 支付时间
-	RefundTime            time.Time `gorm:"column:refund_time;comment:退款时间" json:"refund_time"`                                    // 退款时间
-	RefundCount           int32     `gorm:"column:refund_count;comment:退款次数" json:"refund_count"`                                  // 退款次数
-	MaxRefundAmount       float64   `gorm:"column:max_refund_amount;comment:最大可退金额" json:"max_refund_amount"`                      // 最大可退金额
-	RefundApplyCount      int32     `gorm:"column:refund_apply_count;comment:退款申请次数" json:"refund_apply_count"`                    // 退款申请次数
-	WechatTransactionID   string    `gorm:"column:wechat_transaction_id;comment:微信支付交易号" json:"wechat_transaction_id"`             // 微信支付交易号
+	OrderID               string          `gorm:"column:order_id;primaryKey;comment:充值订单号" json:"order_id"`                              // 充值订单号
+	Openid                string          `gorm:"column:openid;not null;comment:用户openid" json:"openid"`                                 // 用户openid
+	RechargeAmount        decimal.Decimal `gorm:"column:recharge_amount;not null;comment:充值金额" json:"recharge_amount"`                   // 充值金额
+	RefundedAmount        decimal.Decimal `gorm:"column:refunded_amount;not null;comment:已退款金额" json:"refunded_amount"`                  // 已退款金额
+	RemainingRefundAmount decimal.Decimal `gorm:"column:remaining_refund_amount;not null;comment:剩余可退金额" json:"remaining_refund_amount"` // 剩余可退金额
+	OrderStatus           string          `gorm:"column:order_status;not null;comment:订单状态（待支付、已支付、已退款、已关闭）" json:"order_status"`        // 订单状态（待支付、已支付、已退款、已关闭）
+	CreateTime            time.Time       `gorm:"column:create_time;comment:创建时间" json:"create_time"`                                    // 创建时间
+	UpdateTime            time.Time       `gorm:"column:update_time;comment:更新时间" json:"update_time"`                                    // 更新时间
+	PaymentTime           time.Time       `gorm:"column:payment_time;comment:支付时间" json:"payment_time"`                                  // 支付时间
+	RefundTime            time.Time       `gorm:"column:refund_time;comment:退款时间" json:"refund_time"`                                    // 退款时间
+	RefundCount           int32           `gorm:"column:refund_count;comment:退款次数" json:"refund_count"`                                  // 退款次数
+	MaxRefundAmount       decimal.Decimal `gorm:"column:max_refund_amount;comment:最大可退金额" json:"max_refund_amount"`                      // 最大可退金额
+	RefundApplyCount      int32           `gorm:"column:refund_apply_count;comment:退款申请次数" json:"refund_apply_count"`                    // 退款申请次数
+	WechatTransactionID   string          `gorm:"column:wechat_transaction_id;comment:微信支付交易号" json:"wechat_transaction_id"`             // 微信支付交易号
 }
 
 // TableName RechargeOrderTbl's table name

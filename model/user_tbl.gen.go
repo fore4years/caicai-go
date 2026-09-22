@@ -5,6 +5,7 @@
 package model
 
 import (
+	"github.com/shopspring/decimal"
 	"time"
 )
 
@@ -12,30 +13,30 @@ const TableNameUserTbl = "user_tbl"
 
 // UserTbl 用户表
 type UserTbl struct {
-	Openid       string    `gorm:"column:openid;comment:用户唯一标识" json:"openid"`                                     // 用户唯一标识
-	Omid         string    `gorm:"column:omid;comment:运维微信id" json:"omid"`                                         // 运维微信id
-	YiparlOpenid string    `gorm:"column:yiparl_openid;comment:逸泊停车微信id" json:"yiparl_openid"`                     // 逸泊停车微信id
-	NickName     string    `gorm:"column:nick_name;comment:用户昵称" json:"nick_name"`                                 // 用户昵称
-	Province     string    `gorm:"column:province;comment:微信所在省" json:"province"`                                  // 微信所在省
-	City         string    `gorm:"column:city;comment:微信所在市" json:"city"`                                          // 微信所在市
-	Phone        string    `gorm:"column:phone;primaryKey;comment:手机号" json:"phone"`                               // 手机号
-	Integral     string    `gorm:"column:integral;comment:用户积分" json:"integral"`                                   // 用户积分
-	FreeTime     string    `gorm:"column:free_time;comment:免费停车时长" json:"free_time"`                               // 免费停车时长
-	PlateNum     string    `gorm:"column:plate_num;comment:用户首选车牌" json:"plate_num"`                               // 用户首选车牌
-	IDNumber     string    `gorm:"column:id_number;comment:用户身份证号" json:"id_number"`                               // 用户身份证号
-	Name         string    `gorm:"column:name;comment:用户姓名" json:"name"`                                           // 用户姓名
-	Avatar       []byte    `gorm:"column:avatar;comment:头像" json:"avatar"`                                         // 头像
-	IDCardEmblem int32     `gorm:"column:id_card_emblem;comment:身份证国徽面image_id" json:"id_card_emblem"`             // 身份证国徽面image_id
-	IDCardAvatar int32     `gorm:"column:id_card_avatar;comment:身份证头像面image_id" json:"id_card_avatar"`             // 身份证头像面image_id
-	Balans       float64   `gorm:"column:balans;comment:用户余额" json:"balans"`                                       // 用户余额
-	FreezeBalans float64   `gorm:"column:freeze_balans;comment:用户冻结金额" json:"freeze_balans"`                       // 用户冻结金额
-	IDEntity     string    `gorm:"column:id_entity;comment:身份标识 , 1驾驶人员,2业主,3酒店老板,4酒店管理人员" json:"id_entity"`       // 身份标识 , 1驾驶人员,2业主,3酒店老板,4酒店管理人员
-	OmEnable     string    `gorm:"column:om_enable;comment:运维身份审核,0未审核,1,审核通过,-1审核未通过" json:"om_enable"`           // 运维身份审核,0未审核,1,审核通过,-1审核未通过
-	IsSteer      string    `gorm:"column:is_steer;comment:首页用户引导状态(0,未读,1,已读)" json:"is_steer"`                    // 首页用户引导状态(0,未读,1,已读)
-	IsProcedure  string    `gorm:"column:is_procedure;comment:二轮车充电操作流程状态(0,未读,1,已读)" json:"is_procedure"`         // 二轮车充电操作流程状态(0,未读,1,已读)
-	IsLogin      string    `gorm:"column:is_login;comment:是否登录(0,未登录,1,已登录)" json:"is_login"`                      // 是否登录(0,未登录,1,已登录)
-	CreateTime   time.Time `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建账户时间" json:"create_time"` // 创建账户时间
-	UpdateTime   time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"`   // 修改时间
+	Openid       string          `gorm:"column:openid;comment:用户唯一标识" json:"openid"`                                     // 用户唯一标识
+	Omid         string          `gorm:"column:omid;comment:运维微信id" json:"omid"`                                         // 运维微信id
+	YiparlOpenid string          `gorm:"column:yiparl_openid;comment:逸泊停车微信id" json:"yiparl_openid"`                     // 逸泊停车微信id
+	NickName     string          `gorm:"column:nick_name;comment:用户昵称" json:"nick_name"`                                 // 用户昵称
+	Province     string          `gorm:"column:province;comment:微信所在省" json:"province"`                                  // 微信所在省
+	City         string          `gorm:"column:city;comment:微信所在市" json:"city"`                                          // 微信所在市
+	Phone        string          `gorm:"column:phone;primaryKey;comment:手机号" json:"phone"`                               // 手机号
+	Integral     string          `gorm:"column:integral;comment:用户积分" json:"integral"`                                   // 用户积分
+	FreeTime     string          `gorm:"column:free_time;comment:免费停车时长" json:"free_time"`                               // 免费停车时长
+	PlateNum     string          `gorm:"column:plate_num;comment:用户首选车牌" json:"plate_num"`                               // 用户首选车牌
+	IDNumber     string          `gorm:"column:id_number;comment:用户身份证号" json:"id_number"`                               // 用户身份证号
+	Name         string          `gorm:"column:name;comment:用户姓名" json:"name"`                                           // 用户姓名
+	Avatar       []byte          `gorm:"column:avatar;comment:头像" json:"avatar"`                                         // 头像
+	IDCardEmblem int32           `gorm:"column:id_card_emblem;comment:身份证国徽面image_id" json:"id_card_emblem"`             // 身份证国徽面image_id
+	IDCardAvatar int32           `gorm:"column:id_card_avatar;comment:身份证头像面image_id" json:"id_card_avatar"`             // 身份证头像面image_id
+	Balans       decimal.Decimal `gorm:"column:balans;comment:用户余额" json:"balans"`                                       // 用户余额
+	FreezeBalans decimal.Decimal `gorm:"column:freeze_balans;comment:用户冻结金额" json:"freeze_balans"`                       // 用户冻结金额
+	IDEntity     string          `gorm:"column:id_entity;comment:身份标识 , 1驾驶人员,2业主,3酒店老板,4酒店管理人员" json:"id_entity"`       // 身份标识 , 1驾驶人员,2业主,3酒店老板,4酒店管理人员
+	OmEnable     string          `gorm:"column:om_enable;comment:运维身份审核,0未审核,1,审核通过,-1审核未通过" json:"om_enable"`           // 运维身份审核,0未审核,1,审核通过,-1审核未通过
+	IsSteer      string          `gorm:"column:is_steer;comment:首页用户引导状态(0,未读,1,已读)" json:"is_steer"`                    // 首页用户引导状态(0,未读,1,已读)
+	IsProcedure  string          `gorm:"column:is_procedure;comment:二轮车充电操作流程状态(0,未读,1,已读)" json:"is_procedure"`         // 二轮车充电操作流程状态(0,未读,1,已读)
+	IsLogin      string          `gorm:"column:is_login;comment:是否登录(0,未登录,1,已登录)" json:"is_login"`                      // 是否登录(0,未登录,1,已登录)
+	CreateTime   time.Time       `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建账户时间" json:"create_time"` // 创建账户时间
+	UpdateTime   time.Time       `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"`   // 修改时间
 }
 
 // TableName UserTbl's table name

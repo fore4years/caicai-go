@@ -2,7 +2,14 @@ package handler
 
 import (
 	"time"
+
+	"github.com/shopspring/decimal"
 )
+
+// init 金额字段（decimal.Decimal）序列化为 JSON 数字（对齐 Java BigDecimal），而非字符串。
+func init() {
+	decimal.MarshalJSONWithoutQuotes = true
+}
 
 // LocalDateTime 对应 Java 的 LocalDateTime。
 // Jackson 对 LocalDateTime 默认按 ISO 序列化（无时区），这里对齐为 2006-01-02T15:04:05。
@@ -86,41 +93,41 @@ type PlaceDtoDTO struct {
 // OrderDTO 对应 Java domain.OrderBean，JSON 字段名对齐 Jackson 序列化（驼峰）。
 // 时间字段（LocalDateTime）使用可空指针，nil 时省略，对齐 Java 的 non_null 配置。
 type OrderDTO struct {
-	Orderid              string         `json:"orderid,omitempty"`
-	Openid               string         `json:"openid,omitempty"`
-	Lockid               string         `json:"lockid,omitempty"`
-	ReserveTime          *LocalDateTime `json:"reserveTime,omitempty"`
-	BeginTime            *LocalDateTime `json:"beginTime,omitempty"`
-	OverTime             *LocalDateTime `json:"overTime,omitempty"`
-	State                string         `json:"state,omitempty"`
-	TotalPrice           float64        `json:"totalPrice,omitempty"`
-	CloseTime            *LocalDateTime `json:"closeTime,omitempty"`
-	PlateNum             string         `json:"plateNum,omitempty"`
-	SpacesID             int32          `json:"spacesId,omitempty"`
-	BookingStartTime     *LocalDateTime `json:"bookingStartTime,omitempty"`
-	BookingEndTime       *LocalDateTime `json:"bookingEndTime,omitempty"`
-	ConsumptionLocation  string         `json:"consumptionLocation,omitempty"`
-	ConsumptionType      string         `json:"consumptionType,omitempty"`
-	ChargingRates        float64        `json:"chargingRates,omitempty"`
-	ChargerPower         int32          `json:"chargerPower,omitempty"`
-	StartMode            string         `json:"startMode,omitempty"`
-	StopMode             string         `json:"stopMode,omitempty"`
-	ChargingTime         string         `json:"chargingTime,omitempty"`
-	SettlementTime       *LocalDateTime `json:"settlementTime,omitempty"`
-	BasicConsumption     float64        `json:"basicConsumption,omitempty"`
-	GiftAmount           string         `json:"giftAmount,omitempty"`
-	TwiceChargeTime      string         `json:"twiceChargeTime,omitempty"`
-	Pid                  string         `json:"pid,omitempty"`
-	ChargingDegree       float64        `json:"chargingDegree,omitempty"`
-	FullTime             string         `json:"fullTime,omitempty"`
-	LeaveTime            string         `json:"leaveTime,omitempty"`
-	ChargeGunPull        int32          `json:"chargeGunPull,omitempty"`
-	GunDisconnectTime    *LocalDateTime `json:"gunDisconnectTime,omitempty"`
-	DecideAmount         int32          `json:"decideAmount,omitempty"`
-	NeighborRelocateTime *LocalDateTime `json:"neighborRelocateTime,omitempty"`
-	MoveCarTime          *LocalDateTime `json:"moveCarTime,omitempty"`
-	ImageID              string         `json:"imageId,omitempty"`
-	WechatTransactionID  string         `json:"wechatTransactionId,omitempty"`
+	Orderid              string          `json:"orderid,omitempty"`
+	Openid               string          `json:"openid,omitempty"`
+	Lockid               string          `json:"lockid,omitempty"`
+	ReserveTime          *LocalDateTime  `json:"reserveTime,omitempty"`
+	BeginTime            *LocalDateTime  `json:"beginTime,omitempty"`
+	OverTime             *LocalDateTime  `json:"overTime,omitempty"`
+	State                string          `json:"state,omitempty"`
+	TotalPrice           decimal.Decimal `json:"totalPrice,omitempty"`
+	CloseTime            *LocalDateTime  `json:"closeTime,omitempty"`
+	PlateNum             string          `json:"plateNum,omitempty"`
+	SpacesID             int32           `json:"spacesId,omitempty"`
+	BookingStartTime     *LocalDateTime  `json:"bookingStartTime,omitempty"`
+	BookingEndTime       *LocalDateTime  `json:"bookingEndTime,omitempty"`
+	ConsumptionLocation  string          `json:"consumptionLocation,omitempty"`
+	ConsumptionType      string          `json:"consumptionType,omitempty"`
+	ChargingRates        decimal.Decimal `json:"chargingRates,omitempty"`
+	ChargerPower         int32           `json:"chargerPower,omitempty"`
+	StartMode            string          `json:"startMode,omitempty"`
+	StopMode             string          `json:"stopMode,omitempty"`
+	ChargingTime         string          `json:"chargingTime,omitempty"`
+	SettlementTime       *LocalDateTime  `json:"settlementTime,omitempty"`
+	BasicConsumption     decimal.Decimal `json:"basicConsumption,omitempty"`
+	GiftAmount           string          `json:"giftAmount,omitempty"`
+	TwiceChargeTime      string          `json:"twiceChargeTime,omitempty"`
+	Pid                  string          `json:"pid,omitempty"`
+	ChargingDegree       float64         `json:"chargingDegree,omitempty"`
+	FullTime             string          `json:"fullTime,omitempty"`
+	LeaveTime            string          `json:"leaveTime,omitempty"`
+	ChargeGunPull        int32           `json:"chargeGunPull,omitempty"`
+	GunDisconnectTime    *LocalDateTime  `json:"gunDisconnectTime,omitempty"`
+	DecideAmount         decimal.Decimal `json:"decideAmount,omitempty"`
+	NeighborRelocateTime *LocalDateTime  `json:"neighborRelocateTime,omitempty"`
+	MoveCarTime          *LocalDateTime  `json:"moveCarTime,omitempty"`
+	ImageID              string          `json:"imageId,omitempty"`
+	WechatTransactionID  string          `json:"wechatTransactionId,omitempty"`
 }
 
 // ChargeOrderResultDTO 对应 Java dto.ChargeOrderResultDto。注意 plate_num 是下划线字段名。
@@ -173,26 +180,26 @@ func ResultSuccessPage(total int64, list interface{}) Result {
 
 // UserDTO 对应 Java model.UserBean，JSON 字段名对齐 Jackson 序列化（驼峰）。
 type UserDTO struct {
-	Openid       string  `json:"openid,omitempty"`
-	Omid         string  `json:"omid,omitempty"`
-	YiparlOpenid string  `json:"yiparlOpenid,omitempty"`
-	NickName     string  `json:"nickName,omitempty"`
-	Province     string  `json:"province,omitempty"`
-	City         string  `json:"city,omitempty"`
-	Phone        string  `json:"phone,omitempty"`
-	Integral     string  `json:"integral,omitempty"`
-	FreeTime     string  `json:"freeTime,omitempty"`
-	PlateNum     string  `json:"plateNum,omitempty"`
-	IDNumber     string  `json:"idNumber,omitempty"`
-	Name         string  `json:"name,omitempty"`
-	Avatar       []byte  `json:"avatar,omitempty"`
-	IDCardEmblem int32   `json:"idCardEmblem,omitempty"`
-	IDCardAvatar int32   `json:"idCardAvatar,omitempty"`
-	Balans       float64 `json:"balans,omitempty"`
-	FreezeBalans float64 `json:"freezeBalans,omitempty"`
-	IDEntity     string  `json:"idEntity,omitempty"`
-	OmEnable     string  `json:"omEnable,omitempty"`
-	IsSteer      string  `json:"isSteer,omitempty"`
-	IsProcedure  string  `json:"isProcedure,omitempty"`
-	IsLogin      string  `json:"isLogin,omitempty"`
+	Openid       string          `json:"openid,omitempty"`
+	Omid         string          `json:"omid,omitempty"`
+	YiparlOpenid string          `json:"yiparlOpenid,omitempty"`
+	NickName     string          `json:"nickName,omitempty"`
+	Province     string          `json:"province,omitempty"`
+	City         string          `json:"city,omitempty"`
+	Phone        string          `json:"phone,omitempty"`
+	Integral     string          `json:"integral,omitempty"`
+	FreeTime     string          `json:"freeTime,omitempty"`
+	PlateNum     string          `json:"plateNum,omitempty"`
+	IDNumber     string          `json:"idNumber,omitempty"`
+	Name         string          `json:"name,omitempty"`
+	Avatar       []byte          `json:"avatar,omitempty"`
+	IDCardEmblem int32           `json:"idCardEmblem,omitempty"`
+	IDCardAvatar int32           `json:"idCardAvatar,omitempty"`
+	Balans       decimal.Decimal `json:"balans,omitempty"`
+	FreezeBalans decimal.Decimal `json:"freezeBalans,omitempty"`
+	IDEntity     string          `json:"idEntity,omitempty"`
+	OmEnable     string          `json:"omEnable,omitempty"`
+	IsSteer      string          `json:"isSteer,omitempty"`
+	IsProcedure  string          `json:"isProcedure,omitempty"`
+	IsLogin      string          `json:"isLogin,omitempty"`
 }

@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"caicai-go/conf"
@@ -13,20 +15,20 @@ import (
 
 // invoiceDTO 对应 Java domain.Invoice（invoice，驼峰）。
 type invoiceDTO struct {
-	ID          int32          `json:"id"`
-	InvoiceType string         `json:"invoiceType,omitempty"`
-	InvoiceDate *LocalDateTime `json:"invoiceDate,omitempty"`
-	FarmTax     string         `json:"farmTax,omitempty"`
-	FarmName    string         `json:"farmName,omitempty"`
-	FarmAddress string         `json:"farmAddress,omitempty"`
-	InvoiceCode string         `json:"invoiceCode,omitempty"`
-	InvoiceNum  string         `json:"invoiceNum,omitempty"`
-	Amount      float64        `json:"amount,omitempty"`
-	TaxAmount   float64        `json:"taxAmount,omitempty"`
-	InvoiceID   int32          `json:"invoiceId,omitempty"`
-	State       int32          `json:"state,omitempty"`
-	Openid      string         `json:"openid,omitempty"`
-	ApplyTime   *LocalDateTime `json:"applyTime,omitempty"`
+	ID          int32           `json:"id"`
+	InvoiceType string          `json:"invoiceType,omitempty"`
+	InvoiceDate *LocalDateTime  `json:"invoiceDate,omitempty"`
+	FarmTax     string          `json:"farmTax,omitempty"`
+	FarmName    string          `json:"farmName,omitempty"`
+	FarmAddress string          `json:"farmAddress,omitempty"`
+	InvoiceCode string          `json:"invoiceCode,omitempty"`
+	InvoiceNum  string          `json:"invoiceNum,omitempty"`
+	Amount      decimal.Decimal `json:"amount,omitempty"`
+	TaxAmount   decimal.Decimal `json:"taxAmount,omitempty"`
+	InvoiceID   int32           `json:"invoiceId,omitempty"`
+	State       int32           `json:"state,omitempty"`
+	Openid      string          `json:"openid,omitempty"`
+	ApplyTime   *LocalDateTime  `json:"applyTime,omitempty"`
 }
 
 func invoiceToDTO(i model.Invoice) invoiceDTO {
@@ -165,36 +167,63 @@ func (a *AdminBalanceController) BalanceSource(c *gin.Context) {
 }
 
 // Recharge POST /system/balanceDetail/recharge?openid=&amount=
+// 金额用 decimal 解析并传字符串，配合 CAST(? AS DECIMAL(10,2)) 避免 MySQL DECIMAL→DOUBLE 精度丢失；
+// 事务包裹单条原子 UPDATE。
 func (a *AdminBalanceController) Recharge(c *gin.Context) {
 	openid := c.Query("openid")
-	amount := queryFloat(c, "amount")
 	if openid == "" {
 		c.JSON(http.StatusOK, ResultError(400, "用户openid不能为空"))
 		return
 	}
-	if amount <= 0 {
+	amount, err := decimal.NewFromString(c.Query("amount"))
+	if err != nil || !amount.IsPositive() {
 		c.JSON(http.StatusOK, ResultError(400, "充值金额必须大于0"))
 		return
 	}
-	conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).
-		UpdateColumn("balans", gorm.Expr("balans + ?", amount))
+	amt := amount.StringFixed(2)
+	if err := conf.Db.Transaction(func(tx *gorm.DB) error {
+		return tx.Exec(
+			"UPDATE user_tbl SET balans = balans + CAST(? AS DECIMAL(10,2)) WHERE openid = ?",
+			amt, openid,
+		).Error
+	}); err != nil {
+		c.JSON(http.StatusOK, ResultError(500, "充值余额失败"))
+		return
+	}
 	c.JSON(http.StatusOK, ResultSuccess(true))
 }
 
 // Deduct POST /system/balanceDetail/deduct?openid=&amount=
+// 扣款在原子 UPDATE 上加 AND balans >= ?，RowsAffected==0 表示余额不足，保证不出现负余额。
 func (a *AdminBalanceController) Deduct(c *gin.Context) {
 	openid := c.Query("openid")
-	amount := queryFloat(c, "amount")
 	if openid == "" {
 		c.JSON(http.StatusOK, ResultError(400, "用户openid不能为空"))
 		return
 	}
-	if amount <= 0 {
+	amount, err := decimal.NewFromString(c.Query("amount"))
+	if err != nil || !amount.IsPositive() {
 		c.JSON(http.StatusOK, ResultError(400, "扣除金额必须大于0"))
 		return
 	}
-	conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).
-		UpdateColumn("balans", gorm.Expr("balans - ?", amount))
+	amt := amount.StringFixed(2)
+	err = conf.Db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Exec(
+			"UPDATE user_tbl SET balans = balans - CAST(? AS DECIMAL(10,2)) WHERE openid = ? AND balans >= CAST(? AS DECIMAL(10,2))",
+			amt, openid, amt,
+		)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errors.New("余额不足")
+		}
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusOK, ResultError(500, err.Error()))
+		return
+	}
 	c.JSON(http.StatusOK, ResultSuccess(true))
 }
 
@@ -413,26 +442,26 @@ func (a *AdminProfitSharingController) BatchDelete(c *gin.Context) {
 
 // purchasePoleDTO 对应 Java domain.PurchasePoleApplication（驼峰）。
 type purchasePoleDTO struct {
-	OrderNumber          string         `json:"orderNumber"`
-	Openid               string         `json:"openid,omitempty"`
-	Name                 string         `json:"name,omitempty"`
-	IDNumber             string         `json:"idNumber,omitempty"`
-	PhoneNumber          string         `json:"phoneNumber,omitempty"`
-	SelectedPackage      string         `json:"selectedPackage,omitempty"`
-	SelectedColor        string         `json:"selectedColor,omitempty"`
-	InstallationDistance float64        `json:"installationDistance,omitempty"`
-	InstallationDate     string         `json:"installationDate,omitempty"`
-	UsageScenario        string         `json:"usageScenario,omitempty"`
-	InstallationAddress  string         `json:"installationAddress,omitempty"`
-	DetailedAddress      string         `json:"detailedAddress,omitempty"`
-	ApplyTime            *LocalDateTime `json:"applyTime,omitempty"`
-	OrderStatus          string         `json:"orderStatus,omitempty"`
-	ActualPayment        float64        `json:"actualPayment,omitempty"`
-	PayTime              *LocalDateTime `json:"payTime,omitempty"`
-	TransactionID        string         `json:"transactionId,omitempty"`
-	RefundReason         string         `json:"refundReason,omitempty"`
-	RefundTime           *LocalDateTime `json:"refundTime,omitempty"`
-	PaymentType          string         `json:"paymentType,omitempty"`
+	OrderNumber          string          `json:"orderNumber"`
+	Openid               string          `json:"openid,omitempty"`
+	Name                 string          `json:"name,omitempty"`
+	IDNumber             string          `json:"idNumber,omitempty"`
+	PhoneNumber          string          `json:"phoneNumber,omitempty"`
+	SelectedPackage      string          `json:"selectedPackage,omitempty"`
+	SelectedColor        string          `json:"selectedColor,omitempty"`
+	InstallationDistance float64         `json:"installationDistance,omitempty"`
+	InstallationDate     string          `json:"installationDate,omitempty"`
+	UsageScenario        string          `json:"usageScenario,omitempty"`
+	InstallationAddress  string          `json:"installationAddress,omitempty"`
+	DetailedAddress      string          `json:"detailedAddress,omitempty"`
+	ApplyTime            *LocalDateTime  `json:"applyTime,omitempty"`
+	OrderStatus          string          `json:"orderStatus,omitempty"`
+	ActualPayment        decimal.Decimal `json:"actualPayment,omitempty"`
+	PayTime              *LocalDateTime  `json:"payTime,omitempty"`
+	TransactionID        string          `json:"transactionId,omitempty"`
+	RefundReason         string          `json:"refundReason,omitempty"`
+	RefundTime           *LocalDateTime  `json:"refundTime,omitempty"`
+	PaymentType          string          `json:"paymentType,omitempty"`
 }
 
 func purchasePoleToDTO(p model.PurchasePoleApplicationTbl) purchasePoleDTO {
@@ -533,30 +562,30 @@ func (a *AdminPurchasePoleController) BatchDelete(c *gin.Context) {
 
 // privateChargingDTO 对应 Java domain.PrivateChargingBean（驼峰）。
 type privateChargingDTO struct {
-	ID                 int32          `json:"id"`
-	Openid             string         `json:"openid,omitempty"`
-	Name               string         `json:"name,omitempty"`
-	IDCard             string         `json:"idCard,omitempty"`
-	Phone              string         `json:"phone,omitempty"`
-	CommunityName      string         `json:"communityName,omitempty"`
-	CommunityAddress   string         `json:"communityAddress,omitempty"`
-	CommunitySpacesNum string         `json:"communitySpacesNum,omitempty"`
-	ProductType        string         `json:"productType,omitempty"`
-	ElectricityType    string         `json:"electricityType,omitempty"`
-	ProductID          string         `json:"productId,omitempty"`
-	SpacesNum          string         `json:"spacesNum,omitempty"`
-	ImageID            int32          `json:"imageId,omitempty"`
-	Status             int32          `json:"status,omitempty"`
-	OneClickOpening    int32          `json:"oneClickOpening,omitempty"`
-	ShareTime          string         `json:"shareTime,omitempty"`
-	ExchangePlace      bool           `json:"exchangePlace,omitempty"`
-	Fee                float64        `json:"fee,omitempty"`
-	OfficialUse        bool           `json:"officialUse,omitempty"`
-	OvertimeFee        bool           `json:"overtimeFee,omitempty"`
-	LedID              int32          `json:"ledId,omitempty"`
-	HasCpLine          int32          `json:"hasCpLine,omitempty"`
-	CreateTime         *LocalDateTime `json:"createTime,omitempty"`
-	UpdateTime         *LocalDateTime `json:"updateTime,omitempty"`
+	ID                 int32           `json:"id"`
+	Openid             string          `json:"openid,omitempty"`
+	Name               string          `json:"name,omitempty"`
+	IDCard             string          `json:"idCard,omitempty"`
+	Phone              string          `json:"phone,omitempty"`
+	CommunityName      string          `json:"communityName,omitempty"`
+	CommunityAddress   string          `json:"communityAddress,omitempty"`
+	CommunitySpacesNum string          `json:"communitySpacesNum,omitempty"`
+	ProductType        string          `json:"productType,omitempty"`
+	ElectricityType    string          `json:"electricityType,omitempty"`
+	ProductID          string          `json:"productId,omitempty"`
+	SpacesNum          string          `json:"spacesNum,omitempty"`
+	ImageID            int32           `json:"imageId,omitempty"`
+	Status             int32           `json:"status,omitempty"`
+	OneClickOpening    int32           `json:"oneClickOpening,omitempty"`
+	ShareTime          string          `json:"shareTime,omitempty"`
+	ExchangePlace      bool            `json:"exchangePlace,omitempty"`
+	Fee                decimal.Decimal `json:"fee,omitempty"`
+	OfficialUse        bool            `json:"officialUse,omitempty"`
+	OvertimeFee        bool            `json:"overtimeFee,omitempty"`
+	LedID              int32           `json:"ledId,omitempty"`
+	HasCpLine          int32           `json:"hasCpLine,omitempty"`
+	CreateTime         *LocalDateTime  `json:"createTime,omitempty"`
+	UpdateTime         *LocalDateTime  `json:"updateTime,omitempty"`
 }
 
 func privateChargingToDTO(p model.PrivateChargingTbl) privateChargingDTO {

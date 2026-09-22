@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 
 	"caicai-go/conf"
 	"caicai-go/model"
@@ -76,9 +77,9 @@ type PackageRecordController struct{}
 
 func (c *PackageRecordController) Save(ctx *gin.Context) {
 	var req struct {
-		Openid  string  `json:"openid"`
-		Amount  float64 `json:"amount"`
-		Package string  `json:"package"`
+		Openid  string          `json:"openid"`
+		Amount  decimal.Decimal `json:"amount"`
+		Package string          `json:"package"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "套餐充值订单创建失败"))

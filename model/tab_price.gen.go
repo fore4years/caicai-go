@@ -4,16 +4,18 @@
 
 package model
 
+import "github.com/shopspring/decimal"
+
 const TableNameTabPrice = "tab_price"
 
 // TabPrice 电价
 type TabPrice struct {
-	ID      int32   `gorm:"column:id;primaryKey;autoIncrement:true;comment:电价id" json:"id"` // 电价id
-	Total   float64 `gorm:"column:total;not null;comment:单价" json:"total"`                  // 单价
-	Total1  float64 `gorm:"column:total1;comment:单一制电价" json:"total1"`                      // 单一制电价
-	Total2  float64 `gorm:"column:total2;comment:两步制电价" json:"total2"`                      // 两步制电价
-	Name    string  `gorm:"column:name;comment:电价名称" json:"name"`                           // 电价名称
-	Service float64 `gorm:"column:service;comment:服务费" json:"service"`                      // 服务费
+	ID      int32           `gorm:"column:id;primaryKey;autoIncrement:true;comment:电价id" json:"id"` // 电价id
+	Total   decimal.Decimal `gorm:"column:total;not null;comment:单价" json:"total"`                  // 单价
+	Total1  decimal.Decimal `gorm:"column:total1;comment:单一制电价" json:"total1"`                      // 单一制电价
+	Total2  decimal.Decimal `gorm:"column:total2;comment:两步制电价" json:"total2"`                      // 两步制电价
+	Name    string          `gorm:"column:name;comment:电价名称" json:"name"`                           // 电价名称
+	Service decimal.Decimal `gorm:"column:service;comment:服务费" json:"service"`                      // 服务费
 }
 
 // TableName TabPrice's table name

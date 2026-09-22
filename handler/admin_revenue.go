@@ -1,11 +1,11 @@
 package handler
 
 import (
-	"database/sql"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"caicai-go/conf"
@@ -41,12 +41,12 @@ func revenueSpaces(spacesCode, typ string) (int32, string, bool) {
 }
 
 // sumBasicConsumption 对给定订单查询条件求和 basic_consumption（对齐 Java getAll）。
-func sumBasicConsumption(db *gorm.DB) float64 {
-	var v sql.NullFloat64
-	if err := db.Select("COALESCE(SUM(basic_consumption), 0)").Row().Scan(&v); err != nil || !v.Valid {
-		return 0
+func sumBasicConsumption(db *gorm.DB) decimal.Decimal {
+	var v decimal.Decimal
+	if err := db.Select("COALESCE(SUM(basic_consumption), 0)").Row().Scan(&v); err != nil {
+		return decimal.Zero
 	}
-	return v.Float64
+	return v
 }
 
 // MoneyPlaces /system/moneyPlaces → {max, list}（原始 Map）

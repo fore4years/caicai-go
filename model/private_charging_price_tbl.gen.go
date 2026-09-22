@@ -4,14 +4,16 @@
 
 package model
 
+import "github.com/shopspring/decimal"
+
 const TableNamePrivateChargingPriceTbl = "private_charging_price_tbl"
 
 // PrivateChargingPriceTbl 私桩--电价
 type PrivateChargingPriceTbl struct {
-	ID      int32   `gorm:"column:id;primaryKey;autoIncrement:true;comment:电价id" json:"id"` // 电价id
-	Total   float64 `gorm:"column:total;not null;comment:单价" json:"total"`                  // 单价
-	Name    string  `gorm:"column:name;comment:电价名称" json:"name"`                           // 电价名称
-	Service float64 `gorm:"column:service;comment:服务费" json:"service"`                      // 服务费
+	ID      int32           `gorm:"column:id;primaryKey;autoIncrement:true;comment:电价id" json:"id"` // 电价id
+	Total   decimal.Decimal `gorm:"column:total;not null;comment:单价" json:"total"`                  // 单价
+	Name    string          `gorm:"column:name;comment:电价名称" json:"name"`                           // 电价名称
+	Service decimal.Decimal `gorm:"column:service;comment:服务费" json:"service"`                      // 服务费
 }
 
 // TableName PrivateChargingPriceTbl's table name

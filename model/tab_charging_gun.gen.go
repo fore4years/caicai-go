@@ -5,6 +5,7 @@
 package model
 
 import (
+	"github.com/shopspring/decimal"
 	"time"
 )
 
@@ -12,16 +13,16 @@ const TableNameTabChargingGun = "tab_charging_gun"
 
 // TabChargingGun 充电枪
 type TabChargingGun struct {
-	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:充电枪id" json:"id"`                // 充电枪id
-	Name       string    `gorm:"column:name;comment:充电枪名" json:"name"`                                           // 充电枪名
-	UnitPrice  float64   `gorm:"column:unit_price;comment:单价" json:"unit_price"`                                 // 单价
-	MeterValue int32     `gorm:"column:meter_value;comment:电表示数" json:"meter_value"`                             // 电表示数
-	State      string    `gorm:"column:state;comment:当前状态" json:"state"`                                         // 当前状态
-	ProductID  string    `gorm:"column:product_id;comment:产品id" json:"product_id"`                               // 产品id
-	Direction  string    `gorm:"column:direction;comment:设备方向" json:"direction"`                                 // 设备方向
-	Model      int32     `gorm:"column:model;comment:设备型号(220V/380V)" json:"model"`                              // 设备型号(220V/380V)
-	Pwm        int32     `gorm:"column:pwm;comment:pwm占空比" json:"pwm"`                                           // pwm占空比
-	UpdateTime time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:电表更新时间" json:"update_time"` // 电表更新时间
+	ID         int32           `gorm:"column:id;primaryKey;autoIncrement:true;comment:充电枪id" json:"id"`                // 充电枪id
+	Name       string          `gorm:"column:name;comment:充电枪名" json:"name"`                                           // 充电枪名
+	UnitPrice  decimal.Decimal `gorm:"column:unit_price;comment:单价" json:"unit_price"`                                 // 单价
+	MeterValue int32           `gorm:"column:meter_value;comment:电表示数" json:"meter_value"`                             // 电表示数
+	State      string          `gorm:"column:state;comment:当前状态" json:"state"`                                         // 当前状态
+	ProductID  string          `gorm:"column:product_id;comment:产品id" json:"product_id"`                               // 产品id
+	Direction  string          `gorm:"column:direction;comment:设备方向" json:"direction"`                                 // 设备方向
+	Model      int32           `gorm:"column:model;comment:设备型号(220V/380V)" json:"model"`                              // 设备型号(220V/380V)
+	Pwm        int32           `gorm:"column:pwm;comment:pwm占空比" json:"pwm"`                                           // pwm占空比
+	UpdateTime time.Time       `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:电表更新时间" json:"update_time"` // 电表更新时间
 }
 
 // TableName TabChargingGun's table name

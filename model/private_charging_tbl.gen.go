@@ -5,6 +5,7 @@
 package model
 
 import (
+	"github.com/shopspring/decimal"
 	"time"
 )
 
@@ -12,30 +13,30 @@ const TableNamePrivateChargingTbl = "private_charging_tbl"
 
 // PrivateChargingTbl 私桩用户表
 type PrivateChargingTbl struct {
-	ID                 int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                     // 主键id
-	Openid             string    `gorm:"column:openid;not null;comment:微信用户唯一openid" json:"openid"`                          // 微信用户唯一openid
-	Name               string    `gorm:"column:name;not null;comment:桩主姓名" json:"name"`                                      // 桩主姓名
-	IDCard             string    `gorm:"column:id_card;not null;comment:身份证号" json:"id_card"`                                // 身份证号
-	Phone              string    `gorm:"column:phone;comment:手机号" json:"phone"`                                              // 手机号
-	CommunityName      string    `gorm:"column:community_name;comment:小区名称" json:"community_name"`                           // 小区名称
-	CommunityAddress   string    `gorm:"column:community_address;comment:小区地址" json:"community_address"`                     // 小区地址
-	CommunitySpacesNum string    `gorm:"column:community_spaces_num;comment:小区车位号" json:"community_spaces_num"`              // 小区车位号
-	ProductType        string    `gorm:"column:product_type;comment:充电桩类型" json:"product_type"`                              // 充电桩类型
-	ElectricityType    string    `gorm:"column:electricity_type;comment:用电类型" json:"electricity_type"`                       // 用电类型
-	ProductID          string    `gorm:"column:product_id;comment:充电桩编号" json:"product_id"`                                  // 充电桩编号
-	SpacesNum          string    `gorm:"column:spaces_num;comment:系统车位编号" json:"spaces_num"`                                 // 系统车位编号
-	ImageID            int32     `gorm:"column:image_id;comment:车位照片id,对应image_tbl表" json:"image_id"`                        // 车位照片id,对应image_tbl表
-	Status             int32     `gorm:"column:status;comment:状态(0：未审核，1：审核通过，-1：未通过)" json:"status"`                        // 状态(0：未审核，1：审核通过，-1：未通过)
-	OneClickOpening    int32     `gorm:"column:one_click_opening;comment:一键开放" json:"one_click_opening"`                     // 一键开放
-	ShareTime          string    `gorm:"column:share_time;comment:共享时段" json:"share_time"`                                   // 共享时段
-	ExchangePlace      bool      `gorm:"column:exchange_place;comment:是否调换车位（0 - 不需要调换车位，1 - 需要调换车位）" json:"exchange_place"` // 是否调换车位（0 - 不需要调换车位，1 - 需要调换车位）
-	Fee                float64   `gorm:"column:fee;default:0.20;comment:服务费率(元/度)" json:"fee"`                               // 服务费率(元/度)
-	OfficialUse        bool      `gorm:"column:official_use;comment:是否正式投入使用（0-否，1-是）" json:"official_use"`                  // 是否正式投入使用（0-否，1-是）
-	OvertimeFee        bool      `gorm:"column:overtime_fee;comment:是否收取超时停车费（0-否，1-是）" json:"overtime_fee"`                 // 是否收取超时停车费（0-否，1-是）
-	LedID              int32     `gorm:"column:led_id;comment:车位牌设备id" json:"led_id"`                                        // 车位牌设备id
-	HasCpLine          int32     `gorm:"column:has_cp_line;default:1;comment:是否有CP线" json:"has_cp_line"`                     // 是否有CP线
-	CreateTime         time.Time `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"`       // 创建时间
-	UpdateTime         time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"`       // 修改时间
+	ID                 int32           `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                     // 主键id
+	Openid             string          `gorm:"column:openid;not null;comment:微信用户唯一openid" json:"openid"`                          // 微信用户唯一openid
+	Name               string          `gorm:"column:name;not null;comment:桩主姓名" json:"name"`                                      // 桩主姓名
+	IDCard             string          `gorm:"column:id_card;not null;comment:身份证号" json:"id_card"`                                // 身份证号
+	Phone              string          `gorm:"column:phone;comment:手机号" json:"phone"`                                              // 手机号
+	CommunityName      string          `gorm:"column:community_name;comment:小区名称" json:"community_name"`                           // 小区名称
+	CommunityAddress   string          `gorm:"column:community_address;comment:小区地址" json:"community_address"`                     // 小区地址
+	CommunitySpacesNum string          `gorm:"column:community_spaces_num;comment:小区车位号" json:"community_spaces_num"`              // 小区车位号
+	ProductType        string          `gorm:"column:product_type;comment:充电桩类型" json:"product_type"`                              // 充电桩类型
+	ElectricityType    string          `gorm:"column:electricity_type;comment:用电类型" json:"electricity_type"`                       // 用电类型
+	ProductID          string          `gorm:"column:product_id;comment:充电桩编号" json:"product_id"`                                  // 充电桩编号
+	SpacesNum          string          `gorm:"column:spaces_num;comment:系统车位编号" json:"spaces_num"`                                 // 系统车位编号
+	ImageID            int32           `gorm:"column:image_id;comment:车位照片id,对应image_tbl表" json:"image_id"`                        // 车位照片id,对应image_tbl表
+	Status             int32           `gorm:"column:status;comment:状态(0：未审核，1：审核通过，-1：未通过)" json:"status"`                        // 状态(0：未审核，1：审核通过，-1：未通过)
+	OneClickOpening    int32           `gorm:"column:one_click_opening;comment:一键开放" json:"one_click_opening"`                     // 一键开放
+	ShareTime          string          `gorm:"column:share_time;comment:共享时段" json:"share_time"`                                   // 共享时段
+	ExchangePlace      bool            `gorm:"column:exchange_place;comment:是否调换车位（0 - 不需要调换车位，1 - 需要调换车位）" json:"exchange_place"` // 是否调换车位（0 - 不需要调换车位，1 - 需要调换车位）
+	Fee                decimal.Decimal `gorm:"column:fee;default:0.20;comment:服务费率(元/度)" json:"fee"`                               // 服务费率(元/度)
+	OfficialUse        bool            `gorm:"column:official_use;comment:是否正式投入使用（0-否，1-是）" json:"official_use"`                  // 是否正式投入使用（0-否，1-是）
+	OvertimeFee        bool            `gorm:"column:overtime_fee;comment:是否收取超时停车费（0-否，1-是）" json:"overtime_fee"`                 // 是否收取超时停车费（0-否，1-是）
+	LedID              int32           `gorm:"column:led_id;comment:车位牌设备id" json:"led_id"`                                        // 车位牌设备id
+	HasCpLine          int32           `gorm:"column:has_cp_line;default:1;comment:是否有CP线" json:"has_cp_line"`                     // 是否有CP线
+	CreateTime         time.Time       `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"`       // 创建时间
+	UpdateTime         time.Time       `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"`       // 修改时间
 }
 
 // TableName PrivateChargingTbl's table name

@@ -259,7 +259,7 @@ func orderToDTO(o model.OrderTbl) OrderDTO {
 		LeaveTime:            timeToString(o.LeaveTime),
 		ChargeGunPull:        o.ChargeGunPull,
 		GunDisconnectTime:    timeToLocal(o.GunDisconnectTime),
-		DecideAmount:         int32(o.DecideAmount),
+		DecideAmount:         o.DecideAmount,
 		NeighborRelocateTime: timeToLocal(o.NeighborRelocateTime),
 		MoveCarTime:          timeToLocal(o.MoveCarTime),
 		ImageID:              o.ImageID,
