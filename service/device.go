@@ -28,11 +28,17 @@ const deviceTopicPrefix = "device/"
 
 // InitDevice 初始化设备通信依赖的 MQTT 与 Redis 客户端。
 // 连接 broker，并订阅所有设备的上行主题（report/event/alarm/heartbeat）。
+// MQTT 开启自动重连，并在每次（重）连接成功后重新订阅（避免重连后订阅丢失）。
 func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 	opts := mqtt.NewClientOptions().
 		AddBroker("tcp://" + mqcfg.Broker + ":" + strconv.Itoa(int(mqcfg.Port)))
 	opts.SetClientID("caicai-go-device")
 	opts.SetKeepAlive(60 * time.Second)
+	opts.SetConnectTimeout(10 * time.Second)
+	opts.SetAutoReconnect(true)
+	opts.SetConnectRetry(true)
+	opts.SetConnectRetryInterval(5 * time.Second)
+	opts.SetMaxReconnectInterval(30 * time.Second)
 	if mqcfg.Username != "" {
 		opts.SetUsername(mqcfg.Username)
 	}
@@ -40,29 +46,46 @@ func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 		opts.SetPassword(mqcfg.Password)
 	}
 
+	// 连接成功（含重连成功）时重新订阅上行主题。
+	opts.SetOnConnectHandler(func(client mqtt.Client) {
+		logger.Mylog.Info().Msg("MQTT 连接成功")
+		for _, sub := range []string{"report", "event", "alarm", "heartbeat"} {
+			topic := deviceTopicPrefix + "+/" + sub
+			if token := client.Subscribe(topic, byte(mqcfg.Qos), onDeviceMessage); token.Wait() && token.Error() != nil {
+				logger.Mylog.Err(token.Error()).Msgf("订阅主题失败: %s", topic)
+			} else {
+				logger.Mylog.Info().Msgf("已订阅主题: %s", topic)
+			}
+		}
+	})
+	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
+		logger.Mylog.Warn().Err(err).Msg("MQTT 连接断开，等待重连")
+	})
+	opts.SetReconnectingHandler(func(client mqtt.Client, opts *mqtt.ClientOptions) {
+		logger.Mylog.Info().Msg("MQTT 重连中...")
+	})
+
 	mqttClient = mqtt.NewClient(opts)
 	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
 		logger.Mylog.Err(token.Error()).Msg("MQTT 连接失败")
-	} else {
-		logger.Mylog.Info().Msg("MQTT 连接成功")
 	}
 
-	// 订阅所有设备的上行主题
-	for _, sub := range []string{"report", "event", "alarm", "heartbeat"} {
-		topic := deviceTopicPrefix + "+/" + sub
-		if token := mqttClient.Subscribe(topic, byte(mqcfg.Qos), onDeviceMessage); token.Wait() && token.Error() != nil {
-			logger.Mylog.Err(token.Error()).Msgf("订阅主题失败: %s", topic)
-		} else {
-			logger.Mylog.Info().Msgf("已订阅主题: %s", topic)
-		}
-	}
-
-	// Redis
+	// Redis（go-redis 按需自动重连，这里补启动探测）
 	rdb = redis.NewClient(&redis.Options{
 		Addr:     rcfg.Host + ":" + strconv.Itoa(int(rcfg.Port)),
 		Password: rcfg.Password,
 		DB:       int(rcfg.Dbnumber),
 	})
+	for i := range 3 {
+		if err := rdb.Ping(context.Background()).Err(); err == nil {
+			logger.Mylog.Info().Msg("Redis 连接成功")
+			break
+		} else if i == 2 {
+			logger.Mylog.Warn().Err(err).Msg("Redis 连接失败")
+		} else {
+			time.Sleep(2 * time.Second)
+		}
+	}
 }
 
 // onDeviceMessage 处理上行设备数据：解析帧并按 cmd 缓存到 Redis（供查询用）。

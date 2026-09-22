@@ -4,24 +4,38 @@ import (
 	"os"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/rs/zerolog"
 )
 
 var Mylog zerolog.Logger
 
 func init() {
-	if gin.IsDebugging() {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-		// 开发环境：带颜色的 ConsoleWriter，人肉友好
-		output := zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			TimeFormat: time.RFC3339,
-		}
-		Mylog = zerolog.New(output).With().Timestamp().Logger()
-	} else {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	// 确保日志目录存在
+	if err := os.MkdirAll("log", 0755); err != nil {
+		// 目录创建失败则退化为仅控制台输出
 		Mylog = zerolog.New(os.Stdout).With().Timestamp().Logger()
+		return
 	}
 
+	// 按天滚动：每天一个文件 log/2026-09-22.log，零点切换，保留 30 天。
+	rl, err := rotatelogs.New(
+		"log/%Y-%m-%d.log",
+		rotatelogs.WithRotationTime(24*time.Hour),
+		rotatelogs.WithClock(rotatelogs.Local),
+		rotatelogs.WithMaxAge(30*24*time.Hour),
+	)
+	if err != nil {
+		Mylog = zerolog.New(os.Stdout).With().Timestamp().Logger()
+		return
+	}
+	defer rl.Close()
+
+	// 控制台：彩色可读格式；文件：JSON 结构化（便于检索）。
+	consoleWriter := zerolog.ConsoleWriter{
+		Out:        os.Stdout,
+		TimeFormat: "2006-01-02 15:04:05",
+	}
+	writer := zerolog.MultiLevelWriter(consoleWriter, rl)
+	Mylog = zerolog.New(writer).With().Timestamp().Logger()
 }

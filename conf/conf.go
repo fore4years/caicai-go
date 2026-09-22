@@ -76,7 +76,41 @@ func Dbconnection(dbconf MysqlConf) error {
 
 	// SetConnMaxLifetime 设置了可以重新使用连接的最大时间。
 	option.SetConnMaxLifetime(time.Hour)
+	// SetConnMaxIdleTime 设置空闲连接的最大空闲时间。
+	option.SetConnMaxIdleTime(30 * time.Minute)
+
+	// 启动时 Ping 验证连接，重试 3 次（间隔 2s）。
+	var pingErr error
+	for i := range 3 {
+		if pingErr = option.Ping(); pingErr == nil {
+			break
+		}
+		logger.Mylog.Warn().Err(pingErr).Msgf("MySQL Ping 失败，重试 %d/3", i+1)
+		time.Sleep(2 * time.Second)
+	}
+	if pingErr != nil {
+		return fmt.Errorf("数据库连接异常: %w", pingErr)
+	}
 
 	Db = db
+
+	// 后台健康检查：每 30s Ping 一次，记录断连/恢复（database/sql 会自动重建连接）。
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		healthy := true
+		for range ticker.C {
+			if err := option.Ping(); err != nil {
+				if healthy {
+					logger.Mylog.Warn().Err(err).Msg("MySQL 连接断开")
+					healthy = false
+				}
+			} else if !healthy {
+				logger.Mylog.Info().Msg("MySQL 连接恢复")
+				healthy = true
+			}
+		}
+	}()
+
 	return nil
 }
