@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>产品管理</title>
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <link rel="stylesheet" href="product_list.css">
+</head>
+<body>
+
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search">
+        <el-input
+                size="mini"
+                style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="params.tiaojian"
+                placeholder="请输入产品ID查询"
+        ></el-input>
+        
+        <el-input
+                size="mini"
+                style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="params.gatewayId"
+                placeholder="请输入网关ID查询"
+        ></el-input>
+        
+        <el-button size="mini" type="info" @click="unifiedSearch(1)" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="reset()" plain>重置</el-button>
+    </div>
+
+    <!-- 添加 -->
+    <div class="search" style="margin-top: 10px;">
+        <el-button size="mini" type="primary" @click="openAddDialog" :disabled="!isAdmin" :title="isAdmin ? '添加新产品' : '无权限操作，请联系管理员'" plain>添加产品</el-button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table
+                ref="multipleTable"
+                :data="tableData"
+                tooltip-effect="dark"
+                style="width: 100%"
+                @selection-change="handleSelectionChange"
+                :row-class-name="tableRowClassName"
+                @sort-change="handleSortChange"
+        >
+            <el-table-column type="selection" width="55"></el-table-column>
+            <el-table-column type="index" label="序号" width="80"></el-table-column>
+            <el-table-column prop="pid" label="产品ID" width="180" sortable="custom"></el-table-column>
+            <el-table-column prop="nid" label="nid" width="180"></el-table-column>
+            <el-table-column prop="imei" label="4G通道IMEI" width="200"></el-table-column>
+            <el-table-column prop="gatewayId" label="网关ID" width="120"></el-table-column>
+            <el-table-column prop="productionTime" label="生产日期" width="220"></el-table-column>
+            <el-table-column width="200px" label="操作">
+                <template slot-scope="scope">
+                    <el-button
+                            size="mini"
+                            type="primary"
+                            @click="handleEdit(scope.$index, scope.row)"
+                            :disabled="!isAdmin"
+                            :title="isAdmin ? '编辑该产品' : '无权限操作，请联系管理员'">
+                        编辑
+                    </el-button>
+                    <el-button
+                            size="mini"
+                            type="danger"
+                            @click="handleDelete(scope.$index, scope.row)"
+                            :disabled="!isAdmin"
+                            :title="isAdmin ? '删除该产品' : '无权限操作，请联系管理员'">
+                        删除
+                    </el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="params.current"
+                :page-sizes="[10, 20, 30]"
+                :page-size="params.size"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total">
+        </el-pagination>
+    </div>
+
+    <!-- 添加产品对话框 -->
+    <el-dialog title="添加产品" :visible.sync="dialogFormVisible" width="500px">
+        <el-form :model="form" :rules="rules" ref="productForm" label-width="100px">
+            <el-form-item label="设备类型" prop="isTwicecar">
+                <el-select v-model="form.isTwicecar" placeholder="请选择设备类型">
+                    <el-option label="车位锁" :value="0"></el-option>
+                    <el-option label="充电桩" :value="1"></el-option>
+                    <el-option label="二轮车充电站" :value="2"></el-option>
+                    <el-option label="私人充电桩" :value="3"></el-option>
+                </el-select>
+            </el-form-item>
+            <el-form-item label="设备ID" prop="nid">
+                <el-input v-model="form.nid" autocomplete="off"></el-input>
+            </el-form-item>
+            <el-form-item label="4G通道IMEI" prop="imei">
+                <el-input v-model="form.imei" autocomplete="off"></el-input>
+            </el-form-item>
+            <el-form-item label="网关ID" prop="gatewayId">
+                <el-input v-model="form.gatewayId" autocomplete="off" type="number"></el-input>
+            </el-form-item>
+<!--            <el-form-item label="适用环境" prop="environment">-->
+<!--                <el-input v-model="form.environment" autocomplete="off"></el-input>-->
+<!--            </el-form-item>-->
+        </el-form>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="dialogFormVisible = false">取 消</el-button>
+            <el-button type="primary" @click="submitForm">确 定</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 编辑产品对话框 -->
+    <el-dialog title="编辑产品" :visible.sync="editDialogVisible" width="500px">
+        <el-form :model="editForm" :rules="rules" ref="editProductForm" label-width="100px">
+            <el-form-item label="产品ID" prop="pid">
+                <el-input v-model="editForm.pid" autocomplete="off" disabled></el-input>
+            </el-form-item>
+            <el-form-item label="nid" prop="nid">
+                <el-input v-model="editForm.nid" autocomplete="off"></el-input>
+            </el-form-item>
+            <el-form-item label="4G通道IMEI" prop="imei">
+                <el-input v-model="editForm.imei" autocomplete="off"></el-input>
+            </el-form-item>
+            <el-form-item label="网关ID" prop="gatewayId">
+                <el-input v-model="editForm.gatewayId" autocomplete="off" type="number"></el-input>
+            </el-form-item>
+        </el-form>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="editDialogVisible = false">取 消</el-button>
+            <el-button type="primary" @click="submitEditForm">确 定</el-button>
+        </div>
+    </el-dialog>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                formLabelWidth: '100px',
+                params: {
+                    tiaojian: "",
+                    gatewayId: "",
+                    current: 1,
+                    size: 10,
+                    radio: '',
+                    sortField: 'pid',
+                    sortOrder: null
+                },
+                total: 0,
+                tableData: [],
+                multipleSelection: [],
+                yisousuo: false,
+                dialogFormVisible: false,
+                editDialogVisible: false,
+                isAdmin: false,
+                form: {
+                    pid: '',
+                    nid: '',
+                    imei: '',
+                    environment: '',
+                    gatewayId: '',
+                    isTwicecar: null
+                },
+                editForm: {
+                    pid: '',
+                    nid: '',
+                    imei: '',
+                    environment: '',
+                    gatewayId: '',
+                    isTwicecar: 0
+                },
+                rules: {
+                    nid: [
+                        { max: 8, message: '长度不能超过8个字符', trigger: 'blur' }
+                    ],
+                    imei: [
+                        { max: 16, message: '长度不能超过16个字符', trigger: 'blur' }
+                    ],
+                    isTwicecar: [
+                        { required: true, message: '请选择设备类型', trigger: 'change' }
+                    ],
+                    gatewayId: [
+                        { required: true, message: '请输入网关ID', trigger: 'blur' }
+                    ]
+                }
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.checkAdminStatus();
+            this.loadData();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                // 如果按下的是Enter键，并且弹窗没有打开
+                if ((event.keyCode === 13 || event.key === 'Enter') && !this.dialogFormVisible && !this.editDialogVisible) {
+                    this.unifiedSearch(1);
+                }
+            },
+            // 检查管理员状态
+            checkAdminStatus() {
+                // 从Cookie中获取用户信息
+                let username = this.getCookie('username');
+                if (username) {
+                    // 发送请求检查管理员状态
+                    axios.get('/system/checkAdmin', {
+                        params: {
+                            account: username
+                        }
+                    }).then(response => {
+                        if (response.data.code === 200) {
+                            this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                        } else {
+                            this.isAdmin = false;
+                            console.error('获取管理员状态失败:', response.data.msg);
+                        }
+                    }).catch(error => {
+                        this.isAdmin = false;
+                        console.error('检查管理员状态出错:', error);
+                    });
+                } else {
+                    this.isAdmin = false;
+                    console.warn('未找到用户信息，默认非管理员状态');
+                }
+            },
+
+            // 从Cookie获取值
+            getCookie(name) {
+                let value = '; ' + document.cookie;
+                let parts = value.split('; ' + name + '=');
+                if (parts.length === 2) {
+                    return parts.pop().split(';').shift();
+                }
+                return null;
+            },
+
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.getPage(1);
+
+                loading.close(); // 关闭加载提示
+            },
+
+            // 获取数据
+            getPage(page) {
+                this.params.current = page;
+
+                axios.get('/system/product/getAll', {
+                    params: {
+                        current: this.params.current,
+                        size: this.params.size,
+                        sortField: this.params.sortField,
+                        sortOrder: this.params.sortOrder
+                    }
+                }).then(res => {
+                    console.log('获取产品列表成功', res)
+
+                    // 这里暂不知道是什么问题，接口返回的格式不一样，先这样处理
+                    const  data = res.data ? res.data.data : res;
+
+                    if (data) {
+                        this.tableData = data.list || [];
+                        this.total = data.total || 0;
+                    } else {
+                        this.tableData = [];
+                        this.total = 0;
+                        this.$message.warning('获取数据为空');
+                    }
+                }).catch(error => {
+                    this.$message.error('获取产品列表失败');
+                    console.error('获取产品列表失败', error);
+                    this.tableData = [];
+                    this.total = 0;
+                });
+            },
+
+            // 获取产品类型名称
+            getProductType(type) {
+                switch (type) {
+                    case 0:
+                        return '车位锁';
+                    case 1:
+                        return '充电桩';
+                    case 2:
+                        return '二轮车充电站';
+                    case 3:
+                        return '私人充电桩';
+                    default:
+                        return '未知类型';
+                }
+            },
+
+            // 表格行样式
+            tableRowClassName({row}) {
+                return '';
+            },
+
+            // 统一搜索按钮
+            unifiedSearch(page) {
+                this.params.current = page;
+                this.yisousuo = false;
+
+                // 判断搜索条件：优先使用产品ID，如果产品ID为空则使用网关ID
+                let searchUrl = '';
+                let searchParams = {
+                    current: this.params.current,
+                    size: this.params.size
+                };
+
+                if (this.params.tiaojian && this.params.tiaojian.trim() !== '') {
+                    // 使用产品ID搜索
+                    searchUrl = '/system/product/search';
+                    searchParams.tiaojian = this.params.tiaojian;
+                } else if (this.params.gatewayId && this.params.gatewayId.trim() !== '') {
+                    // 使用网关ID搜索
+                    searchUrl = '/system/product/searchByGatewayId';
+                    searchParams.gatewayId = this.params.gatewayId;
+                } else {
+                    // 如果两个搜索条件都为空，则显示全部数据
+                    this.getPage(1);
+                    return;
+                }
+
+                axios.get(searchUrl, {
+                    params: searchParams
+                }).then(res => {
+                    console.log(res)
+                    if (res.total === 0) {
+                        this.$message({
+                            message: '未搜索到数据',
+                            type: 'warning'
+                        });
+                        this.total = 0;
+                        this.tableData = [];
+                    } else {
+                        this.tableData = res.list;
+                        this.total = res.total;
+
+                        if (!this.yisousuo) {
+                            this.yisousuo = true;
+                            this.$message({
+                                message: `为您搜索到${res.total}条数据！`,
+                                type: 'success'
+                            });
+                        }
+                    }
+                }).catch(error => {
+                    this.$message.error('搜索失败');
+                    console.error('搜索失败', error);
+                });
+            },
+
+            // 打开添加对话框
+            openAddDialog() {
+                this.dialogFormVisible = true;
+                this.form = {
+                    nid: '',
+                    imei: '',
+                    environment: '',
+                    gatewayId: '',
+                    isTwicecar: null
+                };
+                this.$nextTick(() => {
+                    this.$refs.productForm.resetFields();
+                });
+            },
+
+            // 提交表单
+            submitForm() {
+                this.$refs.productForm.validate((valid) => {
+                    if (valid) {
+                        let url = '';
+                        switch (this.form.isTwicecar) {
+                            case 0:
+                                url = '/system/product/addLockProduct';
+                                break;
+                            case 1:
+                                url = '/system/product/addChargingProduct';
+                                break;
+                            case 2:
+                                url = '/system/product/addTwiceChargingProduct';
+                                break;
+                            case 3:
+                                url = '/system/product/addPrivateChargingProduct';
+                                break;
+                        }
+
+                        axios.post(url, this.form).then(res => {
+                            console.log(res);
+                            
+                            if (res) {
+                                this.$message({
+                                    message: '添加成功',
+                                    type: 'success'
+                                });
+                                this.dialogFormVisible = false;
+                                this.getPage(1);
+                            } else {
+                                this.$message.error(res.data.msg || '添加失败');
+                            }
+                        }).catch(error => {
+                            this.$message.error('添加失败：' + (error.response?.data?.msg || error.message));
+                            console.error('添加失败', error);
+                        });
+                    } else {
+                        return false;
+                    }
+                });
+            },
+
+            // 编辑产品
+            handleEdit(index, row) {
+                this.editForm = JSON.parse(JSON.stringify(row));
+                this.editDialogVisible = true;
+            },
+
+            // 提交编辑表单
+            submitEditForm() {
+                this.$refs.editProductForm.validate((valid) => {
+                    if (valid) {
+                        axios.post('/system/product/update', this.editForm).then(res => {
+                            console.log(res)
+                            if (res) {
+                                this.$message({
+                                    message: '更新成功',
+                                    type: 'success'
+                                });
+                                this.editDialogVisible = false;
+                                this.getPage(this.params.current);
+                            } else {
+                                this.$message.error('更新失败');
+                            }
+                        }).catch(error => {
+                            this.$message.error('更新失败');
+                            console.error('更新失败', error);
+                        });
+                    } else {
+                        return false;
+                    }
+                });
+            },
+
+            // 删除产品
+            handleDelete(index, row) {
+                this.$confirm('确定要删除此产品吗?', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    axios.delete(`/system/product/deleteById/${row.pid}`).then(res => {
+                        if (res) {
+                            this.$message({
+                                message: '删除成功',
+                                type: 'success'
+                            });
+                            this.getPage(this.params.current);
+                        } else {
+                            this.$message.error('删除失败');
+                        }
+                    }).catch(error => {
+                        this.$message.error('删除失败');
+                        console.error('删除失败', error);
+                    });
+                }).catch(() => {
+                    this.$message({
+                        type: 'info',
+                        message: '已取消删除'
+                    });
+                });
+            },
+
+            // 存放选中的数据
+            handleSelectionChange(val) {
+                this.multipleSelection = val;
+            },
+
+            // 重置
+            reset() {
+                this.params.tiaojian = "";
+                this.params.gatewayId = "";
+                this.yisousuo = false;
+                this.getPage(1);
+            },
+
+            // 分页大小改变
+            handleSizeChange(val) {
+                this.params.size = val;
+                this.getPage(1);
+            },
+
+            // 分页页码改变
+            handleCurrentChange(val) {
+                this.getPage(val);
+            },
+
+            // 处理排序变化
+            handleSortChange({ column, prop, order }) {
+                this.params.sortField = prop;
+                this.params.sortOrder = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : null;
+                this.getPage(1);
+            }
+        }
+    });
+</script>
+
+</body>
+</html> 

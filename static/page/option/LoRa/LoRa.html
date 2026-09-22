@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>网关管理</title>
+    <link rel="stylesheet" href="LoRa.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+<body>
+
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search">
+        <el-input
+                size="mini"
+                style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="params.mac"
+                placeholder="请输入网关MAC地址查询"
+        ></el-input>
+        <el-button size="mini" type="info" @click="searchByMac(1)" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="reset()" plain>重置</el-button>
+    </div>
+
+    <!-- 添加-删除 -->
+    <div class="search" style="margin-top: 10px;">
+        <el-button size="mini" type="danger" @click="mushDel()" plain :disabled="!isAdmin" :title="isAdmin ? '批量删除选中的网关信息' : '无权限操作，请联系管理员'">批量删除</el-button>
+        <el-button size="mini" type="primary" @click="insLora()" plain style="margin-left: 10px;" :disabled="!isAdmin" :title="isAdmin ? '添加新的网关信息' : '无权限操作，请联系管理员'">添加</el-button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table
+                ref="multipleTable"
+                :data="tableData"
+                tooltip-effect="dark"
+                style="width: 100%"
+                @selection-change="handleSelectionChange"
+        >
+            <el-table-column type="selection" width="55"></el-table-column>
+            <el-table-column prop="id" label="id" width="60"></el-table-column>
+            <el-table-column prop="mac" label="网关mac地址" width="220"></el-table-column>
+            <el-table-column prop="iccid" label="4G卡的ICCID" width="220"></el-table-column>
+            <el-table-column prop="name" label="网关名称" width="150"></el-table-column>
+            <el-table-column prop="installPlace" label="网关安装位置" width="300"></el-table-column>
+            <el-table-column prop="installTime" label="创建时间" width="200"></el-table-column>
+            <el-table-column width="150px" label="操作">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="primary" @click="upbyid(scope.row.id)" :disabled="!isAdmin" :title="isAdmin ? '编辑该网关信息' : '无权限操作，请联系管理员'">编辑</el-button>
+                    <el-button size="mini" type="danger" @click="debyid(scope.row.id)" :disabled="!isAdmin" :title="isAdmin ? '删除该网关信息' : '无权限操作，请联系管理员'">删除</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="params.current"
+                :page-sizes="[10, 20, 30]"
+                :page-size="params.size"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total">
+        </el-pagination>
+    </div>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                formLabelWidth: '100px', //表单内每行的宽度
+                //表单校验
+                params: {
+                    mac: "",
+                    current: 1,
+                    size: 10,
+                    radio: ''
+                },
+                total: 0,
+                tableData: [],
+                multipleSelection: [],
+                yisousuo: false,
+                isAdmin: false
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.loadData();
+            this.checkAdminStatus();
+            // 检查URL参数，处理兼容旧版本的搜索请求
+            const urlParams = new URLSearchParams(window.location.search);
+            const tiaojian = urlParams.get('tiaojian');
+            if (tiaojian) {
+                this.params.mac = tiaojian;
+                this.searchByMac(1);
+            }
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                if ((event.keyCode === 13 || event.key === 'Enter')) {
+                    this.searchByMac(1);
+                }
+            },
+            // 检查管理员状态
+            checkAdminStatus() {
+                // 从Cookie中获取用户信息
+                let username = this.getCookie('username');
+                if (username) {
+                    // 发送请求检查管理员状态
+                    axios.get('/system/checkAdmin', {
+                        params: {
+                            account: username
+                        }
+                    }).then(response => {
+                        if (response.data.code === 200) {
+                            this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                        } else {
+                            this.isAdmin = false;
+                            console.error('获取管理员状态失败:', response.data.msg);
+                        }
+                    }).catch(error => {
+                        this.isAdmin = false;
+                        console.error('检查管理员状态出错:', error);
+                    });
+                } else {
+                    this.isAdmin = false;
+                    console.warn('未找到用户信息，默认非管理员状态');
+                }
+            },
+
+            // 从Cookie获取值
+            getCookie(name) {
+                let value = '; ' + document.cookie;
+                let parts = value.split('; ' + name + '=');
+                if (parts.length === 2) {
+                    return parts.pop().split(';').shift();
+                }
+                return null;
+            },
+
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.getMax();
+                this.getPage(1);
+
+                loading.close(); // 关闭加载提示
+            },
+
+            // 获取最大数量
+            getMax() {
+                axios.get('/system/getLoRaMax').then(res => {
+                    this.total = res.data;
+                });
+            },
+
+            // 获取数据
+            getPage(page) {
+                this.params.current = page;
+
+                axios.get('/system/getLoRapage', {
+                    params: {
+                        page: this.params.current,
+                        length: this.params.size,
+                    }
+                }).then(res => {
+                    this.tableData = res.data;
+                });
+            },
+
+            // 搜索按钮 - 根据MAC地址搜索
+            searchByMac(page) {
+                this.params.current = page;
+                this.yisousuo = false;
+
+                axios.get('/system/searchByMac', {
+                    params: {
+                        mac: this.params.mac,
+                        page: this.params.current,
+                        length: this.params.size
+                    }
+                }).then(res => {
+                    if (!res.data) {
+                        this.$message({
+                            message: '未搜索到数据',
+                            type: 'warning'
+                        });
+                        this.total = 0;
+                        this.tableData = [];
+                    } else {
+                        this.total = res.data.max;
+                        this.tableData = res.data.list;
+
+                        if (!this.yisousuo) {
+                            this.yisousuo = true;
+                            this.$message({
+                                message: `为您搜索到${res.data.max}条数据！`,
+                                type: 'success'
+                            });
+                        }
+                    }
+                });
+            },
+
+            // 筛选功能
+            opChange(page) {
+                this.params.current = page;
+                this.yisousuo = false;
+                this.params.tiaojian = '';
+
+                axios.get('/system/raChange', {
+                    params: {
+                        tiaojian: this.params.radio,
+                        page: this.params.current,
+                        length: this.params.size
+                    }
+                }).then(res => {
+                    this.total = res.data.max;
+                    this.tableData = res.data.list;
+                });
+            },
+
+            // 批量删除
+            mushDel() {
+                if (this.multipleSelection.length === 0) {
+                    this.$message({
+                        message: '未选中任何选项！',
+                        type: 'warning'
+                    });
+                    return;
+                }
+
+                this.$confirm('确定批量删除这些网关信息吗?', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    const ids = this.multipleSelection.map(item => item.id);
+                    axios.post('/system/LoRaDel', {
+                        xuanzhong: ids
+                    }).then(res => {
+                        this.$message({
+                            message: res.data,
+                            type: 'success'
+                        });
+                        this.getPage(1);
+                    });
+                }).catch(() => {
+                    this.$message({
+                        type: 'info',
+                        message: '已取消删除'
+                    });
+                });
+            },
+
+            // 添加
+            insLora() {
+                window.location.href = "../LoRa_from/LoRa_from.html";
+            },
+
+            // 修改
+            upbyid(id) {
+                window.location.href = "../LoRa_from/LoRa_from.html?id=" + id;
+            },
+
+            // 删除
+            debyid(id) {
+                this.$confirm('确定要删除该网关信息吗?', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    axios.get('/system/debyid/' + id).then(res => {
+                        if (res.data == id) {
+                            this.$message({
+                                message: '删除成功',
+                                type: 'success'
+                            });
+                            this.getPage(this.params.current);
+                        } else {
+                            this.$message({
+                                message: '删除失败，请重新操作；或者请联系管理员',
+                                type: 'error'
+                            });
+                        }
+                    });
+                }).catch(() => {
+                    this.$message({
+                        type: 'info',
+                        message: '已取消删除'
+                    });
+                });
+            },
+
+            // 存放选中的数据
+            handleSelectionChange(val) {
+                this.multipleSelection = val;
+            },
+
+            // 重置
+            reset() {
+                this.params.mac = "";
+                this.params.radio = "";
+                this.yisousuo = false;
+                this.getPage(1);
+            },
+
+            // 分页
+            handleSizeChange(pageSize) {
+                this.params.size = pageSize;
+                this.getPage(this.params.current);
+            },
+
+            handleCurrentChange(pageNum) {
+                this.params.current = pageNum;
+                this.getPage(pageNum);
+            }
+        }
+    });
+</script>
+
+</body>
+</html>

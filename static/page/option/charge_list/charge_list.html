@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>充电桩申请</title>
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <link rel="stylesheet" href="dev_list.css">
+</head>
+<body>
+
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search">
+        <el-input
+                size="mini"
+                style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="params.tiaojian"
+                placeholder="请输入关键字查询"
+        ></el-input>
+        <el-button size="mini" type="info" @click="sousuoanniu(1)" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="reset()" plain>重置</el-button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table
+                ref="multipleTable"
+                :data="tableData"
+                tooltip-effect="dark"
+                style="width: 100%"
+                @selection-change="handleSelectionChange"
+                :row-class-name="tableRowClassName"
+        >
+            <el-table-column type="selection" width="55"></el-table-column>
+            <el-table-column type="index" label="序号" width="80"></el-table-column>
+            <el-table-column prop="placeid" label="车位编号" width="150"></el-table-column>
+            <el-table-column prop="charge" label="状态" width="120">
+                <template slot-scope="scope">
+                    <span :style="{ color: getStatusColor(scope.row.charge) }">
+                        {{ scope.row.charge }}
+                    </span>
+                </template>
+            </el-table-column>
+            <el-table-column width="150px" label="操作">
+                <template slot-scope="scope">
+                    <el-button
+                            size="mini"
+                            type="success"
+                            :disabled="scope.row.charge !== '待审核'"
+                            @click="access(scope.$index, scope.row)">
+                        通过
+                    </el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="params.current"
+                :page-sizes="[10, 20, 30]"
+                :page-size="params.size"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total">
+        </el-pagination>
+    </div>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                formLabelWidth: '100px',
+                params: {
+                    tiaojian: "",
+                    current: 1,
+                    size: 10,
+                    radio: ''
+                },
+                total: 0,
+                tableData: [],
+                multipleSelection: [],
+                yisousuo: false,
+                places: [],
+                subflag: true
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.loadData();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                if ((event.keyCode === 13 || event.key === 'Enter')) {
+                    this.sousuoanniu(1);
+                }
+            },
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.getPage(1);
+
+                loading.close(); // 关闭加载提示
+            },
+
+            // 获取数据
+            getPage(page) {
+                this.params.current = page;
+                this.places = [];
+
+                axios.get('/system/getChargePage', {
+                    params: {
+                        page: this.params.current,
+                        length: this.params.size,
+                    }
+                }).then(res => {
+                    // 获取设备数据后，需要获取每个设备对应的场所信息
+                    const promises = res.data.map(item => {
+                        return axios.post('/system/getPlace', {
+                            placeid: item.placeid
+                        }).then(placeRes => {
+                            this.places.push(placeRes.data);
+                            return item;
+                        });
+                    });
+
+                    Promise.all(promises).then(() => {
+                        this.tableData = res.data;
+                        // 设置分页数据总数
+                        axios.get('/system/getChargeCount').then(countRes => {
+                            this.total = countRes.data || res.data.length;
+                        }).catch(() => {
+                            this.total = res.data.length;
+                        });
+                    });
+                });
+            },
+
+            // 根据状态获取颜色
+            getStatusColor(status) {
+                if (status === '待审核') return '#f60707';
+                else return '#33D9A9';
+            },
+
+            // 表格行样式
+            tableRowClassName({row}) {
+                if (row.charge === '待审核') {
+                    return 'warning-row';
+                } else {
+                    return 'success-row';
+                }
+            },
+
+            // 搜索按钮
+            sousuoanniu(page) {
+                this.params.current = page;
+                this.yisousuo = false;
+                this.places = [];
+
+                axios.get('/system/LockBean/sousuo', {
+                    params: {
+                        tiaojian: this.params.tiaojian,
+                        page: this.params.current,
+                        length: this.params.size
+                    }
+                }).then(res => {
+                    if (!res.data) {
+                        this.$message({
+                            message: '未搜索到数据',
+                            type: 'warning'
+                        });
+                        this.total = 0;
+                        this.tableData = [];
+                    } else {
+                        this.total = res.data.max;
+
+                        const promises = res.data.list.map(item => {
+                            return axios.post('/system/getPlace', {
+                                placeid: item.placeid
+                            }).then(placeRes => {
+                                this.places.push(placeRes.data);
+                                return item;
+                            });
+                        });
+
+                        Promise.all(promises).then(updatedList => {
+                            this.tableData = updatedList;
+
+                            if (!this.yisousuo) {
+                                this.yisousuo = true;
+                                this.$message({
+                                    message: `为您搜索到${res.data.max}条数据！`,
+                                    type: 'success'
+                                });
+                            }
+                        });
+                    }
+                });
+            },
+
+            // 通过操作
+            access(index, row) {
+                const placeData = this.places.find(p => p.placeid === row.placeid);
+                const ownerid = placeData ? placeData.ownerid : '';
+
+                this.$confirm('确定要通过此设备申请吗?', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    axios.post('/system/accessupdatestate', {
+                        placeid: row.placeid,
+                        ownerid: ownerid
+                    }).then(res => {
+                        this.$message({
+                            message: res.data,
+                            type: 'success'
+                        });
+                        this.subflag = true;
+                        this.getPage(this.params.current);
+                    });
+                }).catch(() => {
+                    this.$message({
+                        type: 'info',
+                        message: '已取消操作'
+                    });
+                });
+            },
+
+            // 存放选中的数据
+            handleSelectionChange(val) {
+                this.multipleSelection = val;
+            },
+
+            // 重置
+            reset() {
+                this.params.tiaojian = "";
+                this.yisousuo = false;
+                this.getPage(1);
+            },
+
+            // 分页
+            handleSizeChange(pageSize) {
+                this.params.size = pageSize;
+                this.getPage(this.params.current);
+            },
+
+            handleCurrentChange(pageNum) {
+                this.params.current = pageNum;
+                this.getPage(pageNum);
+            }
+        }
+    });
+</script>
+
+</body>
+</html>

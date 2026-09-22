@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>商户管理</title>
+    <link rel="stylesheet" href="hotel_management.css">
+    <script src="../../../js/system.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+
+</head>
+
+<body>
+
+    <div class="home" id="home">
+
+        <div class="search" style="display: flex; align-items: center; flex-wrap: wrap;">
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="searchParams.id" placeholder="请输入商户id查询"></el-input>
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="searchParams.openid" placeholder="请输入用户openid查询"></el-input>
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="searchParams.hotelName" placeholder="请输入商户名称查询"></el-input>
+            <el-button size="mini" type="info" style="margin-right:10px;" @click="searchHotel" plain>查询</el-button>
+            <el-button size="mini" type="warning" @click="resetSearch" plain>重置</el-button>
+        </div>
+
+        <div class="search" style="margin-top: 10px;">
+            <el-button size="mini" type="danger" @click="batchDelete()" :disabled="!isAdmin" :title="isAdmin ? '批量删除选中的商户' : '无权限操作，请联系管理员'" plain>批量删除</el-button>
+        </div>
+
+        <div class="search" style="margin-top: 10px; font-size:12px;">
+            <el-table ref="multipleTable" :data="hotelList" tooltip-effect="dark" style="width: 100%"
+                @selection-change="handleSelectionChange">
+                <el-table-column type="selection" width="55" align="center"></el-table-column>
+                <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+                <el-table-column prop="id" label="商户id" width="120" align="center"
+                    show-overflow-tooltip></el-table-column>
+                <el-table-column prop="openid" label="用户openid" width="280" align="center"
+                    show-overflow-tooltip></el-table-column>
+                <el-table-column prop="hotelName" label="商户名称" width="180" align="center"></el-table-column>
+                <el-table-column prop="hotelAddress" label="商户地址" width="200" align="center"></el-table-column>
+                <el-table-column prop="parkingNumber" label="车位数量" width="100" align="center"></el-table-column>
+                <el-table-column prop="phone" label="联系电话" width="120" align="center"></el-table-column>
+                <el-table-column prop="hotelTime" label="开放时间" width="120" align="center"></el-table-column>
+                <el-table-column prop="review" label="审核状态" width="100" align="center">
+                    <template slot-scope="scope">
+                        <el-tag :type="getReviewType(scope.row.review)" size="mini">{{getReviewText(scope.row.review)}}</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column width="200" label="操作" align="center" fixed="right">
+                    <template slot-scope="scope">
+                        <el-button size="mini" type="danger" @click="rejectHotel(scope.row)" :disabled="!isAdmin" :title="isAdmin ? '拒绝该商户' : '无权限操作，请联系管理员'" plain>拒绝</el-button>
+                        <el-button size="mini" type="success" @click="approveHotel(scope.row)" :disabled="!isAdmin" :title="isAdmin ? '同意该商户' : '无权限操作，请联系管理员'" plain>同意</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+
+        <div style="margin-top:10px; float: right">
+            <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange"
+                :current-page="currentPage" :page-sizes="[10, 20, 30]" :page-size="pageSize"
+                layout="total, sizes, prev, pager, next, jumper" :total="total">
+            </el-pagination>
+        </div>
+
+    </div>
+
+    <script>
+        let vm = new Vue({
+            el: "#home",
+            data() {
+            return {
+                isAdmin: false,
+                hotelList: [],
+                total: 0,
+                pageSize: 10,
+                currentPage: 1,
+                searchParams: {
+                    id: '',
+                    openid: '',
+                    hotelName: ''
+                },
+                multipleSelection: []
+            };
+            },
+            created() {
+                this.checkAdminStatus();
+                this.loadData();
+            },
+            mounted() {
+                // 添加键盘事件监听器，Enter键触发查询
+                document.addEventListener('keydown', this.handleKeyDown);
+            },
+            beforeDestroy() {
+                // 移除键盘事件监听器
+                document.removeEventListener('keydown', this.handleKeyDown);
+            },
+            methods: {
+                // 处理键盘按下事件
+                handleKeyDown(event) {
+                    if ((event.keyCode === 13 || event.key === 'Enter')) {
+                        this.searchHotel();
+                    }
+                },
+                checkAdminStatus() {
+                    let username = this.getCookie('username');
+                    if (username) {
+                        axios.get('/system/checkAdmin', {
+                            params: {
+                                account: username
+                            }
+                        }).then(response => {
+                            if (response.data.code === 200) {
+                                this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                            } else {
+                                this.isAdmin = false;
+                                console.error('获取管理员状态失败:', response.data.msg);
+                            }
+                        }).catch(error => {
+                            this.isAdmin = false;
+                            console.error('检查管理员状态出错:', error);
+                        });
+                    } else {
+                        this.isAdmin = false;
+                        console.warn('未找到用户信息，默认非管理员状态');
+                    }
+                },
+
+                getCookie(name) {
+                    let value = '; ' + document.cookie;
+                    let parts = value.split('; ' + name + '=');
+                    if (parts.length === 2) {
+                        return parts.pop().split(';').shift();
+                    }
+                    return null;
+                },
+                
+                loadData() {
+                    const loading = this.$loading({
+                        lock: true,
+                        text: '数据加载中...',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    this.searchHotel();
+                    loading.close();
+                },
+
+                searchHotel() {
+                    const params = {
+                        pageNum: this.currentPage,
+                        pageSize: this.pageSize,
+                        id: this.searchParams.id,
+                        openid: this.searchParams.openid,
+                        hotelName: this.searchParams.hotelName
+                    };
+
+                    axios.get('/system/hotel/list', { params })
+                        .then(res => {
+                            const data = res.data ? res.data.data : res;
+                            
+                            if (data && data.list) {
+                                this.hotelList = data.list;
+                                this.total = data.total;
+                            } else if (data) {
+                                this.hotelList = Array.isArray(data) ? data : [];
+                                this.total = this.hotelList.length;
+                            } else {
+                                console.log('API响应异常:', res);
+                                this.hotelList = [];
+                                this.total = 0;
+                            }
+                        })
+                        .catch(err => {
+                            console.error('获取商户列表失败:', err);
+                            this.$message.error('获取商户列表失败');
+                            this.hotelList = [];
+                            this.total = 0;
+                        });
+                },
+
+                resetSearch() {
+                    this.searchParams = {
+                        id: '',
+                        openid: '',
+                        hotelName: ''
+                    };
+                    this.currentPage = 1;
+                    this.searchHotel();
+                },
+
+                handleSizeChange(pageSize) {
+                    this.pageSize = pageSize;
+                    this.searchHotel();
+                },
+
+                handleCurrentChange(pageNum) {
+                    this.currentPage = pageNum;
+                    this.searchHotel();
+                },
+
+                getReviewText(review) {
+                    switch (review) {
+                        case 0:
+                            return '待审核';
+                        case -1:
+                            return '未通过';
+                        case 1:
+                            return '已通过';
+                        default:
+                            return '未知';
+                    }
+                },
+
+                getReviewType(review) {
+                    switch (review) {
+                        case 0:
+                            return 'warning';
+                        case -1:
+                            return 'danger';
+                        case 1:
+                            return 'success';
+                        default:
+                            return 'info';
+                    }
+                },
+
+                approveHotel(row) {
+                    this.$confirm('确定要同意该商户的审核吗？', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'success'
+                    }).then(() => {
+                        axios.put('/system/hotel/updateReview', null, {
+                            params: {
+                                id: row.id,
+                                review: 1
+                            }
+                        }).then(res => {
+                            const data = res.data ? res.data.data : res;
+                            if (data) {
+                                this.$message.success('商户审核已通过');
+                                this.searchHotel();
+                            } else {
+                                const errorMsg = res && res.data && res.data.msg ? res.data.msg : '操作失败';
+                                this.$message.error(errorMsg);
+                            }
+                        }).catch(error => {
+                            console.error('审核操作失败:', error);
+                            const errorMsg = error && error.response && error.response.data && error.response.data.msg ? error.response.data.msg : '操作失败';
+                            this.$message.error(errorMsg);
+                        });
+                    }).catch(() => {
+                        this.$message.info('已取消操作');
+                    });
+                },
+
+                rejectHotel(row) {
+                    this.$confirm('确定要拒绝该商户的审核吗？', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        axios.put('/system/hotel/updateReview', null, {
+                            params: {
+                                id: row.id,
+                                review: -1
+                            }
+                        }).then(res => {
+                            const data = res.data ? res.data.data : res;
+                            if (data) {
+                                this.$message.success('商户审核已拒绝');
+                                this.searchHotel();
+                            } else {
+                                const errorMsg = res && res.data && res.data.msg ? res.data.msg : '操作失败';
+                                this.$message.error(errorMsg);
+                            }
+                        }).catch(error => {
+                            console.error('审核操作失败:', error);
+                            const errorMsg = error && error.response && error.response.data && error.response.data.msg ? error.response.data.msg : '操作失败';
+                            this.$message.error(errorMsg);
+                        });
+                    }).catch(() => {
+                        this.$message.info('已取消操作');
+                    });
+                },
+
+                handleSelectionChange(val) {
+                    this.multipleSelection = val;
+                },
+
+                batchDelete() {
+                    if (this.multipleSelection.length === 0) {
+                        this.$message.warning('请选择要删除的商户');
+                        return;
+                    }
+
+                    this.$confirm('确定要删除选中的商户吗？', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        const ids = this.multipleSelection.map(hotel => hotel.id);
+                        
+                        axios.post('/system/hotel/batchDelete', ids).then(res => {
+                            const data = res.data ? res.data.data : res;
+                            
+                            if (data) {
+                                this.$message.success('批量删除成功');
+                                this.searchHotel();
+                                this.multipleSelection = [];
+                            } else {
+                                const errorMsg = res && res.data && res.data.msg ? res.data.msg : '批量删除失败';
+                                this.$message.error(errorMsg);
+                            }
+                        }).catch(error => {
+                            console.error('批量删除失败:', error);
+                            const errorMsg = error && error.response && error.response.data && error.response.data.msg ? error.response.data.msg : '批量删除失败';
+                            this.$message.error(errorMsg);
+                        });
+                    }).catch(() => {
+                        this.$message.info('已取消删除');
+                    });
+                }
+            }
+        });
+    </script>
+
+</body>
+
+</html>

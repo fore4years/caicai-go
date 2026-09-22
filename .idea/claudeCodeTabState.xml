@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ClaudeCodeTabState">
+    <option name="tabSessions">
+      <map>
+        <entry key="0">
+          <value>
+            <TabSessionState>
+              <option name="provider" value="claude" />
+              <option name="sessionId" value="df3a28b6-3138-48f7-8276-277f8c0589a1" />
+              <option name="cwd" value="E:\code\go\caicai-go" />
+              <option name="model" value="claude-sonnet-5[1m]" />
+              <option name="permissionMode" value="plan" />
+            </TabSessionState>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

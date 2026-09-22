@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>七彩云创后台管理系统</title>
+    <link rel="stylesheet" href="index.css">
+    <script src="../../js/system.js"></script>
+</head>
+<body>
+
+<div class="title" id="title">
+
+
+    <div class="left_t">
+
+        <div class="logo"></div>
+
+        <div class="text">七彩云创后台管理系统</div>
+
+    </div>
+
+
+    <div class="right_t" @click="toggleDropdown" style="cursor: pointer; position: relative;">
+
+        <div class="touxiang"></div>
+
+        <div class="username">{{account}}</div>
+
+        <div class="icon"></div>
+
+        <div class="dropdown-menu" v-if="showDropdown" @click.stop>
+            <div class="dropdown-item" @click="switchAccount">切换账号</div>
+        </div>
+
+    </div>
+
+</div>
+
+<div class="neirong">
+
+    <div class="left" id="left">
+        <div :class="select[13]" @click="select_c(13)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_order icon"></div>
+
+            <div class="text">订单管理</div>
+
+            <div :class="orderJiantou"></div>
+
+        </div>
+
+        <div :class="order_c[0]" v-if="order_zk" @click="order_ck(0)">驿享充电</div>
+
+        <div :class="order_c[1]" v-if="order_zk" @click="order_ck(1)">邻享充电</div>
+
+        <div :class="order_c[2]" v-if="order_zk" @click="order_ck(2)">逸泊停车</div>
+
+        <div :class="order_c[3]" v-if="order_zk" @click="order_ck(3)">二轮车充电</div>
+
+<!--        <div :class="select[0]" @click="select_c(0)">-->
+
+<!--            <div class="shuxian"></div>-->
+
+<!--            <div class="icon_yezhu icon"></div>-->
+
+<!--            <div class="text">车位审核</div>-->
+
+<!--        </div>-->
+
+        <div :class="select[9]" @click="select_c(9)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_yezhu icon"></div>
+
+            <div class="text">运维审核</div>
+
+        </div>
+
+        <div :class="select[18]" @click="select_c(18)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_yezhu icon"></div>
+
+            <div class="text">职工管理</div>
+
+        </div>
+
+
+        <div :class="select[1]" @click="select_c(1)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_chewei icon"></div>
+
+            <div class="text">车位管理</div>
+
+        </div>
+
+
+        <div :class="select[2]" @click="select_c(2)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_chesuo icon"></div>
+
+            <div class="text">设备管理</div>
+
+            <div :class="jiantou[0]"></div>
+
+        </div>
+
+        <div :class="chesuo_c[0]" v-if="chesuo_zk" @click="chesuo_ck(0)">车位锁列表</div>
+
+        <div :class="chesuo_c[1]" v-if="chesuo_zk" @click="chesuo_ck(1)">充电桩列表</div>
+        <!--            <div :class="chesuo_c[1]" v-if="chesuo_zk" @click="chesuo_ck(1)">维修列表</div>-->
+        <div :class="chesuo_c[3]" v-if="chesuo_zk" @click="chesuo_ck(3)">充电桩状态</div>
+
+        <div :class="chesuo_c[2]" v-if="chesuo_zk" @click="chesuo_ck(2)">故障上报</div>
+
+        <!--            <div :class="select[3]" @click="select_c(3)">-->
+
+        <!--                <div class="shuxian"></div>-->
+
+        <!--                <div class="icon_anzhuang icon"></div>-->
+
+        <!--                <div class="text">安装人员管理</div>-->
+
+        <!--            </div>-->
+
+        <div :class="select[4]" @click="select_c(4)" v-if="showRevenueManagement">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_shouyi icon"></div>
+
+            <div class="text">收益管理</div>
+
+        </div>
+
+
+        <!--            <div :class="select[5]" @click="select_c(5)">-->
+
+        <!--                <div class="shuxian"></div>-->
+
+        <!--                <div class="icon_xiaoxi icon"></div>-->
+
+        <!--                <div class="text">消息管理</div>-->
+
+        <!--                <div :class="jiantou[1]"></div>-->
+
+        <!--            </div>-->
+
+        <!--            <div :class="xiaoxi_c[0]" v-if="xiaoxi_zk" @click="xiaoxi_ck(0)">系统消息</div>-->
+        <!--            <div :class="xiaoxi_c[1]" v-if="xiaoxi_zk" @click="xiaoxi_ck(1)">消息设置</div>-->
+
+        <div :class="select[6]" @click="select_c(6)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_mima icon"></div>
+
+            <div class="text">修改密码</div>
+
+        </div>
+        <div :class="select[12]" @click="select_c(12)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_product icon"></div>
+
+            <div class="text">产品管理</div>
+
+        </div>
+        <div :class="select[8]" @click="select_c(8)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_gateway icon"></div>
+
+            <div class="text">网关管理</div>
+
+        </div>
+
+
+        <div :class="select[16]" @click="select_c(16)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_purchase_pile icon"></div>
+
+            <div class="text">购桩管理</div>
+
+        </div>
+
+        <div :class="select[15]" @click="select_c(15)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_product icon"></div>
+
+            <div class="text">私桩管理</div>
+
+        </div>
+
+        <div :class="select[17]" @click="select_c(17)" v-if="showUserManagement">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_product icon"></div>
+
+            <div class="text">用户管理</div>
+
+        </div>
+
+        <div :class="select[20]" @click="select_c(20)" v-if="showRevenueManagement">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_product icon"></div>
+
+            <div class="text">分账管理</div>
+
+        </div>
+
+        <div :class="select[19]" @click="select_c(19)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_product icon"></div>
+
+            <div class="text">运营管理</div>
+
+        </div>
+
+        <div :class="select[23]" @click="select_c(23)" v-if="showRevenueManagement">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_product icon"></div>
+
+            <div class="text">余额明细</div>
+
+        </div>
+
+        <div :class="select[24]" @click="select_c(24)" v-if="showRevenueManagement">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_product icon"></div>
+
+            <div class="text">发票明细</div>
+
+        </div>
+
+        <div :class="select[22]" @click="select_c(22)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_product icon"></div>
+
+            <div class="text">商户管理</div>
+
+        </div>
+
+        <div :class="select[14]" @click="select_c(14)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_yezhu icon"></div>
+
+            <div class="text">邻享充入网</div>
+
+        </div>
+
+        <div :class="select[7]" @click="select_c(7)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_charging_station icon"></div>
+
+            <div class="text">充电桩申请</div>
+
+        </div>
+
+        <div :class="select[10]" @click="select_c(10)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_charging icon"></div>
+
+            <div class="text">二轮车电量</div>
+
+        </div>
+
+        <div :class="select[11]" @click="select_c(11)">
+
+            <div class="shuxian"></div>
+
+            <div class="icon_charging icon"></div>
+
+            <div class="text">四轮车电量</div>
+
+        </div>
+
+<!--        <div :class="select[21]" @click="select_c(21)">-->
+
+<!--            <div class="shuxian"></div>-->
+
+<!--            <div class="icon_statistics icon"></div>-->
+
+<!--            <div class="text">数据统计</div>-->
+
+<!--        </div>-->
+
+<!-- 自定义发票申请提示弹窗 -->
+<div v-if="showInvoiceAlert" class="invoice-alert-overlay" @click="closeInvoiceAlert">
+    <div class="invoice-alert-modal" @click.stop>
+        <div class="invoice-alert-header">
+            <span class="invoice-alert-title">提示</span>
+        </div>
+        <div class="invoice-alert-body">
+            <p>有待处理的开票申请</p>
+        </div>
+        <div class="invoice-alert-footer">
+            <button class="invoice-alert-btn invoice-alert-btn-cancel" @click="closeInvoiceAlert">取消</button>
+            <button class="invoice-alert-btn invoice-alert-btn-confirm" @click="viewInvoiceDetail">查看</button>
+        </div>
+    </div>
+</div>
+
+    </div>
+
+    <iframe class="right" :src="right_url" id="right">
+
+
+    </iframe>
+
+</div>
+
+<div class="sign" style="position: absolute;color: black;bottom: 10px;right: 10px;font-size: 10px">
+    @2021-现在 caiparking.com 版权所有 / <a style="color: black;text-decoration: none;"
+                                            href="http://beian.miit.gov.cn/">蜀ICP备2021021637号</a>
+</div>
+
+</body>
+
+<script>
+
+    window.onload = function () {
+        title.account = location.search.split('account=')[1];
+        console.log(title.account)
+        // 页面加载时检查用户权限
+        left.checkUserPermission();
+        
+        // 页面加载时检查是否有两天内的发票申请
+        left.checkRecentInvoiceApply();
+        
+        // 点击页面其他地方时关闭下拉菜单
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.right_t')) {
+                title.showDropdown = false;
+            }
+        });
+    }
+
+    let title = new Vue({
+        el: '#title',
+        data: {
+            account: '',
+            showDropdown: false
+        },
+        methods: {
+            toggleDropdown() {
+                this.showDropdown = !this.showDropdown;
+            },
+            switchAccount() {
+                this.showDropdown = false;
+                window.location.href = '../login/login.html';
+            }
+        }
+    })
+
+    let left = new Vue({
+        el: '#left',
+        data: {
+            showUserManagement: false,
+            showRevenueManagement: false,
+            showInvoiceAlert: false,
+            select: [
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false},
+                {select: true, select_c: false}, // 产品管理
+                {select: false, select_c: true}, // 订单管理,默认是在订单管理页面
+                {select: true, select_c: false}, // 入网审核
+                {select: true, select_c: false}, // 私桩管理
+                {select: true, select_c: false}, // 购桩管理
+                {select: true, select_c: false}, // 用户管理
+                {select: true, select_c: false}, // 职工管理
+                {select: true, select_c: false}, // 驿享充车位
+                {select: true, select_c: false}, // 分账管理
+                {select: true, select_c: false}, // 数据统计
+                {select: true, select_c: false}, // 商户管理
+                {select: true, select_c: false}, // 余额明细
+                {select: true, select_c: false}, // 发票明细
+            ],
+
+            jiantou: [
+                {jiantou_xia: false, jiantou_zuo: true},
+                {jiantou_xia: false, jiantou_zuo: true},
+            ],
+
+            chesuo_zk: false,
+
+            xiaoxi_zk: false,
+
+            // 订单管理下拉相关
+            order_zk: false,
+            orderJiantou: 'jiantou_zuo',
+            order_c: [
+                {chicked: false, chesuo_zk: true},
+                {chicked: false, chesuo_zk: true},
+                {chicked: false, chesuo_zk: true},
+                {chicked: false, chesuo_zk: true},
+            ],
+
+            chesuo_c: [
+                {chicked: false, chesuo_zk: true},
+                {chicked: false, chesuo_zk: true},
+                {chicked: false, chesuo_zk: true},
+                {chicked: false, chesuo_zk: true},
+            ],
+
+            xiaoxi_c: [
+                {chicked: false, chesuo_zk: true},
+                {chicked: false, chesuo_zk: true},
+            ]
+        },
+        methods: {
+            // 检查用户权限
+            checkUserPermission() {
+                let self = this;
+                // 使用原生JavaScript调用后端接口检查用户权限
+                let xhr = new XMLHttpRequest();
+                let url = '/system/checkAdmin?account=' + encodeURIComponent(title.account);
+                
+                xhr.open('GET', url, true);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4) {
+                        if (xhr.status === 200) {
+                            try {
+                                let response = JSON.parse(xhr.responseText);
+                                if (response.code === 200) {
+                                    // 只有当isAdmin值为2时才显示用户管理选项
+                                    if (response.data && response.data.isAdmin === 2) {
+                                        self.showUserManagement = true;
+                                    } else {
+                                        self.showUserManagement = false;
+                                    }
+                                    
+                                    // 当isAdmin值为1或2时才显示收益管理选项
+                                    if (response.data && (response.data.isAdmin === 1 || response.data.isAdmin === 2)) {
+                                        self.showRevenueManagement = true;
+                                    } else {
+                                        self.showRevenueManagement = false;
+                                    }
+                                } else {
+                                    console.error('权限检查失败:', response.msg);
+                                    self.showUserManagement = false;
+                                    self.showRevenueManagement = false;
+                                }
+                            } catch (e) {
+                                console.error('解析响应数据失败:', e);
+                                self.showUserManagement = false;
+                                self.showRevenueManagement = false;
+                            }
+                        } else {
+                            console.error('权限检查请求失败，状态码:', xhr.status);
+                            self.showUserManagement = false;
+                            self.showRevenueManagement = false;
+                        }
+                    }
+                };
+                xhr.send();
+            },
+            
+            // 检查是否有两天内的发票申请
+            checkRecentInvoiceApply() {
+                let self = this;
+                // 使用原生JavaScript调用后端接口检查发票申请
+                let xhr = new XMLHttpRequest();
+                let url = '/system/invoice/checkRecentApply';
+                
+                xhr.open('GET', url, true);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4) {
+                        if (xhr.status === 200) {
+                            try {
+                                let response = JSON.parse(xhr.responseText);
+                                if (response.code === 200 && response.data === true) {
+                                    // 有两天内的发票申请，显示弹窗
+                                    self.showInvoiceApplyAlert();
+                                }
+                            } catch (e) {
+                                console.error('解析发票申请检查响应失败:', e);
+                            }
+                        } else {
+                            console.error('发票申请检查请求失败，状态码:', xhr.status);
+                        }
+                    }
+                };
+                xhr.send();
+            },
+            
+            // 显示发票申请提示弹窗
+            showInvoiceApplyAlert() {
+                // 显示自定义弹窗
+                this.showInvoiceAlert = true;
+            },
+            
+            // 关闭发票申请提示弹窗
+            closeInvoiceAlert() {
+                this.showInvoiceAlert = false;
+            },
+            
+            // 查看发票明细
+            viewInvoiceDetail() {
+                // 关闭弹窗
+                this.showInvoiceAlert = false;
+                // 跳转到发票明细页面
+                this.select_c(24);
+            },
+            
+            //选中index选项
+            select_c(index) {
+                console.log("当前点击的是:", index)
+                this.option_change(index)
+
+                if (index != 2 && index != 5 && index != 13) {
+                    right.right_url = right.url[index];
+                }
+
+                if (index == 2) {
+                    this.chesuo_change();
+                }
+
+                if (index == 5) {
+                    this.xiaoxi_change();
+                }
+
+                if (index == 13) {
+                    this.order_change();
+                }
+
+                for (let i = 0; i < this.chesuo_c.length; i++) {
+                    this.chesuo_c[i].chicked = false
+                }
+
+                for (let i = 0; i < this.xiaoxi_c.length; i++) {
+                    this.xiaoxi_c[i].chicked = false
+                }
+
+                for (let i = 0; i < this.order_c.length; i++) {
+                    this.order_c[i].chicked = false
+                }
+
+            },
+
+            option_change(index) {
+                for (let i = 0; i < this.select.length; i++) {
+                    this.select[i].select_c = false
+                    this.select[i].select = true
+                }
+                this.select[index].select_c = true
+                this.select[index].select = false
+            },
+
+            //车锁列表打开或关闭
+            chesuo_change() {
+                if (this.chesuo_zk) {
+                    this.chesuo_zk = false;
+                    this.jiantou[0].jiantou_zuo = true;
+                    this.jiantou[0].jiantou_xia = false;
+                } else {
+                    this.chesuo_zk = true;
+                    this.jiantou[0].jiantou_zuo = false;
+                    this.jiantou[0].jiantou_xia = true;
+                }
+            },
+
+            xiaoxi_change() {
+                if (this.xiaoxi_zk) {
+                    this.xiaoxi_zk = false;
+                    this.jiantou[1].jiantou_zuo = true;
+                    this.jiantou[1].jiantou_xia = false;
+                } else {
+                    this.xiaoxi_zk = true;
+                    this.jiantou[1].jiantou_zuo = false;
+                    this.jiantou[1].jiantou_xia = true;
+                }
+            },
+
+            chesuo_ck(index) {
+                for (let i = 0; i < this.chesuo_c.length; i++) {
+                    this.chesuo_c[i].chicked = false
+                }
+                this.chesuo_c[index].chicked = true
+
+                right.right_url = right.LockBean[index];
+
+                this.option_change(2)
+            },
+
+            // 订单管理下拉展开/关闭
+            order_change() {
+                if (this.order_zk) {
+                    this.order_zk = false;
+                    this.orderJiantou = 'jiantou_zuo';
+                } else {
+                    this.order_zk = true;
+                    this.orderJiantou = 'jiantou_xia';
+                    // 展开时显示原有订单管理页面
+                    right.right_url = right.url[13];
+                }
+            },
+
+            // 订单管理子选项点击
+            order_ck(index) {
+                for (let i = 0; i < this.order_c.length; i++) {
+                    this.order_c[i].chicked = false
+                }
+                this.order_c[index].chicked = true
+
+                // 根据选择的类型跳转到订单管理页面，并传递类型参数
+                right.right_url = right.OrderType[index];
+
+                this.option_change(13)
+            },
+
+            xiaoxi_ck(index) {
+                for (let i = 0; i < this.xiaoxi_c.length; i++) {
+                    this.xiaoxi_c[i].chicked = false
+                }
+                this.xiaoxi_c[index].chicked = true
+
+                this.option_change(5)
+            }
+
+        }
+    })
+
+    let right = new Vue({
+        el: '#right',
+        data: {
+            right_url: '../option/order_list/orderManage.html',
+            url: [
+                "../option/yezhu/yezhu.html",
+                "../option/place_list/place_list.html",
+                "../option/yezhu/yezhu.html",
+                "../option/yezhu/yezhu.html",
+                "../option/money_show/money_show.html",
+                "../option/yezhu/yezhu.html",
+                "../option/pwdChange/pwdChange.html",
+                "../option/charge_list/charge_list.html",
+                "../option/LoRa/LoRa.html",
+                "../option/om_enable/om_enable.html",
+                "../option/charge_total/charge_total.html",
+                "../option/charge_total_four/charge_total_four.html",
+                "../option/product_list/product_list.html",
+                "../option/order_list/orderManage.html",
+                "../option/private_pile_audit/private_pile_audit.html",
+                "../option/private_charging/private_charging.html", // 私桩管理
+                "../option/purchase_pile_manage/purchasePileManage.html", // 购桩管理
+                "../option/user_manage/user_manage.html", // 用户管理
+                "../option/employee/employee.html", // 职工管理
+                "../option/parking_spaces/parking_spaces.html", // 驿享充车位
+                "../option/profit_sharing_config/profit_sharing_config.html", // 分账管理
+                "../option/data_statistics/data_statistics.html", // 数据统计
+                "../option/hotel_management/hotel_management.html", // 商户管理
+                "../option/balance_detail/balance_detail.html", // 余额明细
+                "../option/invoice_detail/invoice_detail.html", // 发票明细
+            ],
+            LockBean: [
+                "../option/dev_list/dev_list.html",
+                // "../option/yezhu/yezhu.html",
+                "../option/charging_station_list/charging_station_list.html",
+                "../option/dev_fault/dev_fault.html",
+                "../option/charge_state/charge_state.html",
+            ],
+            // 订单类型对应的URL，传递type参数
+            OrderType: [
+                "../option/order_list/orderManage.html?type=驿享充电",
+                "../option/order_list/orderManage.html?type=邻享充电",
+                "../option/order_list/orderManage.html?type=踩踩停车",
+                "../option/order_list/orderManage.html?type=二轮车充电",
+            ]
+        },
+        methods: {}
+    })
+
+</script>
+
+</html>

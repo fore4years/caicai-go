@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>充电桩数据统计</title>
+    <link rel="stylesheet" href="data_statistics.css">
+    <script src="../../../js/system.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+
+<body>
+<div class="home" id="home">
+    <div class="header">
+        <h2 class="title">充电桩数据统计</h2>
+        <div class="filter-box">
+            <el-date-picker
+                    v-model="dateRange"
+                    type="daterange"
+                    range-separator="至"
+                    start-placeholder="开始日期"
+                    end-placeholder="结束日期"
+                    size="small"
+                    value-format="yyyy-MM-dd"
+                    @change="handleDateChange">
+            </el-date-picker>
+            <el-button size="small" type="primary" @click="refreshData" style="margin-left: 10px;">查询</el-button>
+        </div>
+    </div>
+    
+    <div class="chart-container">
+        <div id="lineChart" class="chart"></div>
+    </div>
+    
+    <div class="stats-cards">
+        <div class="stat-card">
+            <div class="stat-icon current-icon"></div>
+            <div class="stat-info">
+                <div class="stat-label">总电流</div>
+                <div class="stat-value">{{ totalCurrent }} A</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon power-icon"></div>
+            <div class="stat-info">
+                <div class="stat-label">总电量</div>
+                <div class="stat-value">{{ totalPower }} kWh</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon avg-icon"></div>
+            <div class="stat-info">
+                <div class="stat-label">平均电流</div>
+                <div class="stat-value">{{ avgCurrent }} A</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon peak-icon"></div>
+            <div class="stat-info">
+                <div class="stat-label">峰值电量</div>
+                <div class="stat-value">{{ peakPower }} kWh</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                dateRange: [],
+                chart: null,
+                totalCurrent: 0,
+                totalPower: 0,
+                avgCurrent: 0,
+                peakPower: 0,
+                chartData: {
+                    dates: [],
+                    currentData: [],
+                    powerData: []
+                }
+            };
+        },
+        mounted() {
+            this.initChart();
+            this.loadData();
+            window.addEventListener('resize', this.handleResize);
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            window.removeEventListener('resize', this.handleResize);
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+            if (this.chart) {
+                this.chart.dispose();
+            }
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                if ((event.keyCode === 13 || event.key === 'Enter')) {
+                    this.refreshData();
+                }
+            },
+            initChart() {
+                this.chart = echarts.init(document.getElementById('lineChart'));
+                
+                const option = {
+                    title: {
+                        text: '充电桩数据统计',
+                        left: 'center',
+                        textStyle: {
+                            fontSize: 18,
+                            fontWeight: 'bold',
+                            color: '#333'
+                        }
+                    },
+                    tooltip: {
+                        trigger: 'axis',
+                        axisPointer: {
+                            type: 'cross'
+                        },
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        borderColor: '#eee',
+                        borderWidth: 1,
+                        textStyle: {
+                            color: '#333'
+                        }
+                    },
+                    legend: {
+                        data: ['电流统计', '电量统计'],
+                        bottom: 10
+                    },
+                    grid: {
+                        left: '3%',
+                        right: '4%',
+                        bottom: '15%',
+                        top: '15%',
+                        containLabel: true
+                    },
+                    xAxis: {
+                        type: 'category',
+                        boundaryGap: false,
+                        data: this.chartData.dates,
+                        axisLine: {
+                            lineStyle: {
+                                color: '#ddd'
+                            }
+                        },
+                        axisLabel: {
+                            color: '#666'
+                        }
+                    },
+                    yAxis: [
+                        {
+                            type: 'value',
+                            name: '电流(A)',
+                            position: 'left',
+                            axisLine: {
+                                lineStyle: {
+                                    color: '#24C6FE'
+                                }
+                            },
+                            axisLabel: {
+                                color: '#666',
+                                formatter: '{value} A'
+                            },
+                            splitLine: {
+                                lineStyle: {
+                                    color: '#f0f0f0'
+                                }
+                            }
+                        },
+                        {
+                            type: 'value',
+                            name: '电量',
+                            position: 'right',
+                            axisLine: {
+                                lineStyle: {
+                                    color: '#67C23A'
+                                }
+                            },
+                            axisLabel: {
+                                color: '#666',
+                                formatter: '{value} kWh'
+                            },
+                            splitLine: {
+                                show: false
+                            }
+                        }
+                    ],
+                    series: [
+                        {
+                            name: '电流统计',
+                            type: 'line',
+                            smooth: true,
+                            symbol: 'circle',
+                            symbolSize: 8,
+                            lineStyle: {
+                                width: 3,
+                                color: '#24C6FE'
+                            },
+                            itemStyle: {
+                                color: '#24C6FE'
+                            },
+                            areaStyle: {
+                                color: {
+                                    type: 'linear',
+                                    x: 0,
+                                    y: 0,
+                                    x2: 0,
+                                    y2: 1,
+                                    colorStops: [
+                                        { offset: 0, color: 'rgba(36, 198, 254, 0.3)' },
+                                        { offset: 1, color: 'rgba(36, 198, 254, 0.05)' }
+                                    ]
+                                }
+                            },
+                            data: this.chartData.currentData
+                        },
+                        {
+                            name: '电量统计',
+                            type: 'line',
+                            smooth: true,
+                            symbol: 'circle',
+                            symbolSize: 8,
+                            yAxisIndex: 1,
+                            lineStyle: {
+                                width: 3,
+                                color: '#67C23A'
+                            },
+                            itemStyle: {
+                                color: '#67C23A'
+                            },
+                            areaStyle: {
+                                color: {
+                                    type: 'linear',
+                                    x: 0,
+                                    y: 0,
+                                    x2: 0,
+                                    y2: 1,
+                                    colorStops: [
+                                        { offset: 0, color: 'rgba(103, 194, 58, 0.3)' },
+                                        { offset: 1, color: 'rgba(103, 194, 58, 0.05)' }
+                                    ]
+                                }
+                            },
+                            data: this.chartData.powerData
+                        }
+                    ]
+                };
+                
+                this.chart.setOption(option);
+            },
+            
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                
+                this.generateMockData();
+                this.updateChart();
+                this.calculateStats();
+                
+                setTimeout(() => {
+                    loading.close();
+                }, 500);
+            },
+            
+            generateMockData() {
+                const dates = [];
+                const currentData = [];
+                const powerData = [];
+                
+                const days = 30;
+                const today = new Date();
+                
+                for (let i = days - 1; i >= 0; i--) {
+                    const date = new Date(today);
+                    date.setDate(date.getDate() - i);
+                    dates.push(this.formatDate(date));
+                    
+                    currentData.push((Math.random() * 50 + 10).toFixed(2));
+                    powerData.push((Math.random() * 100 + 20).toFixed(2));
+                }
+                
+                this.chartData = {
+                    dates: dates,
+                    currentData: currentData,
+                    powerData: powerData
+                };
+            },
+            
+            formatDate(date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            },
+            
+            updateChart() {
+                if (this.chart) {
+                    this.chart.setOption({
+                        xAxis: {
+                            data: this.chartData.dates
+                        },
+                        series: [
+                            { data: this.chartData.currentData },
+                            { data: this.chartData.powerData }
+                        ]
+                    });
+                }
+            },
+            
+            calculateStats() {
+                const currentValues = this.chartData.currentData.map(v => parseFloat(v));
+                const powerValues = this.chartData.powerData.map(v => parseFloat(v));
+                
+                this.totalCurrent = currentValues.reduce((a, b) => a + b, 0).toFixed(2);
+                this.totalPower = powerValues.reduce((a, b) => a + b, 0).toFixed(2);
+                this.avgCurrent = (this.totalCurrent / currentValues.length).toFixed(2);
+                this.peakPower = Math.max(...powerValues).toFixed(2);
+            },
+            
+            handleDateChange(val) {
+                if (val) {
+                    console.log('日期范围:', val);
+                }
+            },
+            
+            refreshData() {
+                this.loadData();
+                this.$message({
+                    message: '数据已刷新',
+                    type: 'success'
+                });
+            },
+            
+            handleResize() {
+                if (this.chart) {
+                    this.chart.resize();
+                }
+            }
+        }
+    });
+</script>
+</body>
+</html>

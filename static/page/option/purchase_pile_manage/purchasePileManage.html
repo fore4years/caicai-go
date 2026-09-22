@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>购桩管理</title>
+    <link rel="stylesheet" href="purchasePileManage.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+
+</head>
+
+<body>
+
+    <!-- 创建一个根元素 -->
+    <div class="home" id="home">
+
+        <!-- 搜索框 -->
+        <div class="search" style="display: flex; align-items: center; flex-wrap: wrap;">
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="searchParams.orderNumber" placeholder="请输入订单号查询"></el-input>
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.openid"
+                placeholder="请输入用户openid查询"></el-input>
+            <div style="display: flex; align-items: center; margin-right: 10px;">
+                <p style="font-size: 12px; margin-right: 10px; color: #6d6f73;">订单状态:</p>
+                <el-select size="mini" style="width: 150px; font-size:13px;" v-model="searchParams.orderStatus"
+                    placeholder="订单状态">
+                    <el-option value="" label="全部"></el-option>
+                    <el-option value="待支付" label="待支付"></el-option>
+                    <el-option value="已支付" label="已支付"></el-option>
+                    <el-option value="待发货" label="待发货"></el-option>
+                    <el-option value="已发货" label="已发货"></el-option>
+                    <el-option value="待签收" label="待签收"></el-option>
+                    <el-option value="已完成" label="已完成"></el-option>
+                    <el-option value="已取消" label="已取消"></el-option>
+                    <el-option value="已退款" label="已退款"></el-option>
+                </el-select>
+            </div>
+            <el-button size="mini" type="info" style="margin-right:10px;" @click="searchOrders" plain>查询</el-button>
+            <el-button size="mini" type="warning" @click="resetSearch" plain>重置</el-button>
+        </div>
+
+        <!-- 添加-删除 -->
+        <div class="search" style="margin-top: 10px;">
+            <el-button size="mini" type="danger" @click="batchDelete()" :disabled="!isAdmin" :title="isAdmin ? '批量删除选中的订单' : '无权限操作，请联系管理员'" plain>批量删除</el-button>
+        </div>
+
+        <!-- 表格 -->
+        <div class="search" style="margin-top: 10px; font-size:12px;">
+            <el-table ref="multipleTable" :data="orderList" tooltip-effect="dark" style="width: 100%"
+                @selection-change="handleSelectionChange">
+                <el-table-column type="selection" width="55" align="center"></el-table-column>
+                <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+                <el-table-column prop="orderNumber" label="订单号" width="220" align="center"
+                    show-overflow-tooltip></el-table-column>
+                <el-table-column prop="openid" label="用户openid" width="280" align="center"
+                    show-overflow-tooltip></el-table-column>
+                <el-table-column prop="name" label="姓名" width="120" align="center"></el-table-column>
+                <el-table-column prop="phoneNumber" label="电话号码" width="120" align="center"></el-table-column>
+
+                <el-table-column label="申请时间" width="180" align="center">
+                    <template slot-scope="scope">
+                        {{formatDateTime(scope.row.applyTime)}}
+                    </template>
+                </el-table-column>
+                <el-table-column prop="actualPayment" label="实付款金额" width="120" align="center"></el-table-column>
+                <el-table-column prop="orderStatus" label="订单状态" width="100" align="center">
+                    <template slot-scope="scope">
+                        <el-tag :type="getStateType(scope.row.orderStatus)" size="mini">{{scope.row.orderStatus}}</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column width="200" label="操作" align="center" fixed="right">
+                    <template slot-scope="scope">
+                        <el-button size="mini" type="warning" @click="editOrderStatus(scope.row)" :disabled="!isAdmin" :title="isAdmin ? '编辑该订单状态' : '无权限操作，请联系管理员'" plain>编辑</el-button>
+                        <el-button size="mini" type="primary" @click="showOrderDetail(scope.row)" plain>详情</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+
+        <!-- 分页 -->
+        <div style="margin-top:10px; float: right">
+            <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange"
+                :current-page="currentPage" :page-sizes="[10, 20, 30]" :page-size="pageSize"
+                layout="total, sizes, prev, pager, next, jumper" :total="total">
+            </el-pagination>
+        </div>
+
+        <!-- 订单详情弹窗 -->
+        <el-dialog title="购桩订单详情" :visible.sync="showModal" width="80%" :close-on-click-modal="false">
+            <div class="modal-body">
+                <el-descriptions :column="2" border>
+                    <el-descriptions-item label="订单号">{{currentOrder.orderNumber}}</el-descriptions-item>
+                    <el-descriptions-item label="用户openid">{{currentOrder.openid}}</el-descriptions-item>
+                    <el-descriptions-item label="姓名">{{currentOrder.name}}</el-descriptions-item>
+                    <el-descriptions-item label="身份证号码">{{currentOrder.idNumber || '无'}}</el-descriptions-item>
+                    <el-descriptions-item label="选购套餐">{{currentOrder.selectedPackage || '无'}}</el-descriptions-item>
+                    <el-descriptions-item label="选购颜色">{{currentOrder.selectedColor || '无'}}</el-descriptions-item>
+                    <el-descriptions-item label="安装距离">{{currentOrder.installationDistance || 0}} 米</el-descriptions-item>
+                    <el-descriptions-item label="安装时间">{{currentOrder.installationTime || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="使用场景">{{currentOrder.usageScenario || '无'}}</el-descriptions-item>
+                    <el-descriptions-item label="安装地址">{{currentOrder.installationAddress || '无'}}</el-descriptions-item>
+                    <el-descriptions-item label="详细地址">{{currentOrder.detailedAddress || '无'}}</el-descriptions-item>
+                    <el-descriptions-item label="电话号码">{{currentOrder.phoneNumber || '无'}}</el-descriptions-item>
+                    <el-descriptions-item label="订单状态">
+                        <el-tag :type="getStateType(currentOrder.orderStatus)" size="mini">{{currentOrder.orderStatus}}</el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="实付款金额">{{currentOrder.actualPayment || 0}} 元</el-descriptions-item>
+                    <el-descriptions-item label="申请时间">{{formatDateTime(currentOrder.applyTime)}}</el-descriptions-item>
+                    <el-descriptions-item label="支付时间">{{formatDateTime(currentOrder.payTime) || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="微信交易号">{{currentOrder.transactionId || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="退款原因">{{currentOrder.refundReason || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="退款时间">{{formatDateTime(currentOrder.refundTime) || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="账户类型">
+                        {{currentOrder.paymentAccount || '无'}}
+                        <el-button v-if="currentOrder.paymentAccount && (currentOrder.paymentAccount.includes('对私') || currentOrder.paymentAccount.includes('对公'))" 
+                                  type="text" size="mini" @click="showAccountDetail">查看详情</el-button>
+                    </el-descriptions-item>
+                </el-descriptions>
+            </div>
+            <span slot="footer" class="dialog-footer">
+                <el-button @click="closeModal" size="mini">关闭</el-button>
+            </span>
+        </el-dialog>
+
+        <!-- 账户详情弹窗 -->
+        <el-dialog :title="accountDetailTitle" :visible.sync="showAccountModal" width="600px" :close-on-click-modal="false">
+            <div class="modal-body">
+                <!-- 对私账户详情 -->
+                <el-descriptions :column="1" border size="small" v-if="accountDetail && accountDetailTitle === '对私账户详情'">
+                    <el-descriptions-item label="收款人">{{accountDetail.payeeName || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="收款银行卡账号">{{accountDetail.bankAccount || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="开户银行">{{accountDetail.bankName || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="开户预留手机号">{{accountDetail.bankPhone || '-'}}</el-descriptions-item>
+                </el-descriptions>
+                
+                <!-- 对公账户详情 -->
+                <el-descriptions :column="1" border size="small" v-else-if="accountDetail && accountDetailTitle === '对公账户详情'">
+                    <el-descriptions-item label="收款单位">{{accountDetail.payeeCompany || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="收款账户">{{accountDetail.companyAccount || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="法人姓名">{{accountDetail.legalPerson || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="法人手机号">{{accountDetail.legalPhone || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="法人证件类型">{{accountDetail.legalIdType || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="法人身份证号码">{{accountDetail.legalIdNo || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="开户银行">{{accountDetail.bankName || '-'}}</el-descriptions-item>
+                </el-descriptions>
+                
+                <div v-else class="no-data">
+                    <p>暂无账户详情信息</p>
+                </div>
+            </div>
+            <span slot="footer" class="dialog-footer">
+                <el-button @click="showAccountModal = false" size="mini">关闭</el-button>
+            </span>
+        </el-dialog>
+
+        <!-- 编辑订单状态弹窗 -->
+        <el-dialog title="编辑订单状态" :visible.sync="showEditModal" width="400px" :close-on-click-modal="false">
+            <div class="modal-body">
+                <el-form label-width="100px">
+                    <el-form-item label="订单号：">
+                        <span>{{editOrder.orderNumber}}</span>
+                    </el-form-item>
+                    <el-form-item label="当前状态：">
+                        <el-tag :type="getStateType(editOrder.orderStatus)" size="mini">{{editOrder.orderStatus}}</el-tag>
+                    </el-form-item>
+                    <el-form-item label="新状态：">
+                        <el-select v-model="newOrderStatus" placeholder="请选择新状态" style="width: 100%;">
+<!--                            <el-option value="待支付" label="待支付"></el-option>-->
+                            <el-option value="已支付" label="已支付"></el-option>
+                            <el-option value="已发货" label="已发货"></el-option>
+                            <el-option value="待签收" label="待签收"></el-option>
+                            <el-option value="已完成" label="已完成"></el-option>
+                            <el-option value="已取消" label="已取消"></el-option>
+                            <el-option value="已退款" label="已退款"></el-option>
+                        </el-select>
+                    </el-form-item>
+                </el-form>
+            </div>
+            <span slot="footer" class="dialog-footer">
+                <el-button @click="showEditModal = false" size="mini">取消</el-button>
+                <el-button type="primary" @click="saveOrderStatus" size="mini">保存</el-button>
+            </span>
+        </el-dialog>
+
+    </div>
+
+    <script>
+        // 将vue挂载到id为home的根元素上
+        let vm = new Vue({
+            el: "#home",
+            data() {
+            return {
+                isAdmin: false,
+                orderList: [],
+                tableData: [],
+                total: 0,
+                pageSize: 10,
+                currentPage: 1,
+                searchParams: {
+                    orderNumber: '',
+                    openid: '',
+                    orderStatus: ''
+                },
+                showModal: false,
+                currentOrder: {},
+                showEditModal: false,
+                editOrder: {},
+                newOrderStatus: '',
+                selectedOrders: [],
+                // 账户详情相关数据
+                showAccountModal: false,
+                accountDetailTitle: '',
+                accountDetail: null,
+                orderStatusOptions: [
+                    { value: '', label: '全部' },
+                    { value: '待支付', label: '待支付' },
+                    { value: '已支付', label: '已支付' },
+                    { value: '待发货', label: '待发货' },
+                    { value: '已发货', label: '已发货' },
+                    { value: '待签收', label: '待签收' },
+                    { value: '已完成', label: '已完成' },
+                    { value: '已取消', label: '已取消' },
+                    { value: '已退款', label: '已退款' }
+                ]
+            };
+            },
+            // 钩子函数 -- 初始化
+            created() {
+                this.checkAdminStatus();
+                this.loadData();
+            },
+            mounted() {
+                // 添加键盘事件监听器，Enter键触发查询
+                document.addEventListener('keydown', this.handleKeyDown);
+            },
+            beforeDestroy() {
+                // 移除键盘事件监听器
+                document.removeEventListener('keydown', this.handleKeyDown);
+            },
+            methods: {
+                // 处理键盘按下事件
+                handleKeyDown(event) {
+                    // 如果按下的是Enter键，并且弹窗没有打开
+                    if ((event.keyCode === 13 || event.key === 'Enter') && !this.showModal && !this.showEditModal && !this.showAccountModal) {
+                        this.searchOrders();
+                    }
+                },
+                // 检查管理员状态
+                checkAdminStatus() {
+                    // 从Cookie中获取用户信息
+                    let username = this.getCookie('username');
+                    if (username) {
+                        // 发送请求检查管理员状态
+                        axios.get('/system/checkAdmin', {
+                            params: {
+                                account: username
+                            }
+                        }).then(response => {
+                            if (response.data.code === 200) {
+                                this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                            } else {
+                                this.isAdmin = false;
+                                console.error('获取管理员状态失败:', response.data.msg);
+                            }
+                        }).catch(error => {
+                            this.isAdmin = false;
+                            console.error('检查管理员状态出错:', error);
+                        });
+                    } else {
+                        this.isAdmin = false;
+                        console.warn('未找到用户信息，默认非管理员状态');
+                    }
+                },
+
+                // 从Cookie获取值
+                getCookie(name) {
+                    let value = '; ' + document.cookie;
+                    let parts = value.split('; ' + name + '=');
+                    if (parts.length === 2) {
+                        return parts.pop().split(';').shift();
+                    }
+                    return null;
+                },
+                
+                loadData() {
+                    const loading = this.$loading({
+                        lock: true,
+                        text: '数据加载中...',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    // 更新页面数据
+                    this.searchOrders();
+
+                    loading.close(); // 关闭加载提示
+                },
+
+                searchOrders() {
+                    const params = {
+                        pageNum: this.currentPage,
+                        pageSize: this.pageSize,
+                        orderNumber: this.searchParams.orderNumber,
+                        openid: this.searchParams.openid,
+                        orderStatus: this.searchParams.orderStatus
+                    };
+
+                    // 调用后端购桩管理API
+                    axios.get('/system/purchasePoleManage/list', { params })
+                        .then(res => {
+                            
+                            // 这里暂不知道是什么问题，接口返回的格式不一样，先这样处理
+                            const data = res.data ? res.data.data : res;
+                            
+                            if (data) {
+                                // 处理订单状态，将"退款中"识别为"已退款"
+                                const processedList = data.list.map(order => {
+                                    if (order.orderStatus === '退款中') {
+                                        order.orderStatus = '已退款';
+                                    }
+                                    return {
+                                        orderNumber: order.orderNumber,
+                                        openid: order.openid,
+                                        name: order.name,
+                                        phoneNumber: order.phoneNumber,
+                                        installationAddress: order.installationAddress,
+                                        applyTime: order.applyTime,
+                                        actualPayment: order.actualPayment,
+                                        orderStatus: order.orderStatus,
+                                        remark: order.remark
+                                    };
+                                });
+                                
+                                this.orderList = processedList;
+                                this.total = data.total;
+                            } else {
+                                console.log('API响应异常:', res); // 添加调试日志
+                                const errorMsg = res && res.data && res.data.msg ? res.data.msg : '获取购桩订单列表失败';
+                                this.$message.error(errorMsg);
+                                this.orderList = [];
+                                this.total = 0;
+                            }
+                        })
+                        .catch(err => {
+                            console.error('获取购桩订单列表失败:', err);
+                            this.$message.error('获取购桩订单列表失败');
+                            this.orderList = [];
+                            this.total = 0;
+                        });
+                },
+
+
+
+                resetSearch() {
+                    this.searchParams = {
+                        orderNumber: '',
+                        openid: '',
+                        orderStatus: ''
+                    };
+                    this.currentPage = 1;
+                    this.searchOrders();
+                },
+
+                handleSizeChange(pageSize) {
+                    this.pageSize = pageSize;
+                    this.searchOrders();
+                },
+
+                handleCurrentChange(pageNum) {
+                    this.currentPage = pageNum;
+                    this.searchOrders();
+                },
+
+                showOrderDetail(order) {
+                    this.currentOrder = { ...order };
+                    
+                    // 调用后端API获取完整订单详情 - 使用新的detail接口
+                    axios.get('/system/purchasePoleManage/detail?orderNumber=' + order.orderNumber)
+                    .then(res => {
+                        console.log('API响应:', res); // 添加调试日志
+                        
+                        // 这里暂不知道是什么问题，接口返回的格式不一样，先这样处理
+                        const data = res.data ? res.data.data : res;
+                        
+                        if (data) {
+                            this.currentOrder = data;
+                        } else {
+                            console.log('API响应异常:', res); // 添加调试日志
+                            const errorMsg = res && res.data && res.data.msg ? res.data.msg : '获取订单详情失败';
+                            this.$message.error(errorMsg);
+                            // 如果API调用失败，使用当前行数据作为备选
+                            this.currentOrder = { ...order };
+                        }
+                    })
+                    .catch(err => {
+                        console.error('获取订单详情失败:', err);
+                        const errorMsg = err && err.response && err.response.data && err.response.data.msg ? err.response.data.msg : '获取订单详情失败';
+                        this.$message.error(errorMsg);
+                        // 如果API调用失败，使用当前行数据作为备选
+                        this.currentOrder = { ...order };
+                    });
+                    
+                    this.showModal = true;
+                },
+
+                // 编辑订单状态
+        editOrderStatus(row) {
+            this.editOrder = { ...row };
+            this.newOrderStatus = row.orderStatus;
+            this.showEditModal = true;
+        },
+
+        // 保存订单状态
+        saveOrderStatus() {
+            if (!this.newOrderStatus) {
+                this.$message.warning('请选择新的订单状态');
+                return;
+            }
+
+            if (this.newOrderStatus === this.editOrder.orderStatus) {
+                this.$message.warning('订单状态未发生变化');
+                return;
+            }
+
+            // 调用后端API更新订单状态
+            const params = new URLSearchParams();
+            params.append('orderNumber', this.editOrder.orderNumber);
+            params.append('orderStatus', this.newOrderStatus);
+            
+            axios.post('/system/purchasePoleManage/updateStatus', params, {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            }).then(res => {
+                console.log('更新订单状态API响应:', res); // 添加调试日志
+                
+                // 这里暂不知道是什么问题，接口返回的格式不一样，先这样处理
+                const data = res.data ? res.data.data : res;
+                
+                if (data) {
+                    console.log('订单状态更新成功:', data); // 添加调试日志
+                    this.$message.success('订单状态更新成功');
+                    this.showEditModal = false;
+                    // 刷新订单列表
+                    this.searchOrders();
+                } else {
+                    console.log('API响应异常:', res); // 添加调试日志
+                    const errorMsg = res && res.data && res.data.msg ? res.data.msg : '订单状态更新失败';
+                    this.$message.error(errorMsg);
+                }
+            }).catch(error => {
+                console.error('更新订单状态失败:', error);
+                const errorMsg = error && error.response && error.response.data && error.response.data.msg ? error.response.data.msg : '更新订单状态失败';
+                this.$message.error(errorMsg);
+            });
+        },
+
+                closeModal() {
+                    this.showModal = false;
+                },
+
+                // 显示账户详情
+                showAccountDetail() {
+                    if (!this.currentOrder.paymentAccount || !this.currentOrder.orderNumber) {
+                        this.$message.warning('无法获取账户信息');
+                        return;
+                    }
+
+                    // 根据账户类型确定调用哪个接口
+                    let apiUrl = '';
+                    if (this.currentOrder.paymentAccount.includes('对私')) {
+                        this.accountDetailTitle = '对私账户详情';
+                        apiUrl = `/account/private/getByOrderId/${this.currentOrder.orderNumber}`;
+                    } else if (this.currentOrder.paymentAccount.includes('对公')) {
+                        this.accountDetailTitle = '对公账户详情';
+                        apiUrl = `/account/public/getByOrderId/${this.currentOrder.orderNumber}`;
+                    } else {
+                        this.$message.warning('未知的账户类型');
+                        return;
+                    }
+
+                    // 调用API获取账户详情
+                    axios.get(apiUrl)
+                        .then(res => {
+                            console.log('账户详情API响应:', res);
+                            
+                            // 处理API响应格式
+                            const data = res.data ? res.data.data : res;
+                            
+                            if (data) {
+                                this.accountDetail = data;
+                                this.showAccountModal = true;
+                            } else {
+                                console.log('API响应异常:', res);
+                                const errorMsg = res && res.data && res.data.msg ? res.data.msg : '获取账户详情失败';
+                                this.$message.error(errorMsg);
+                                this.accountDetail = null;
+                            }
+                        })
+                        .catch(err => {
+                            console.error('获取账户详情失败:', err);
+                            const errorMsg = err && err.response && err.response.data && err.response.data.msg ? 
+                                err.response.data.msg : '获取账户详情失败';
+                            this.$message.error(errorMsg);
+                            this.accountDetail = null;
+                        });
+                },
+
+                handleSelectionChange(val) {
+                    this.multipleSelection = val;
+                },
+
+                batchDelete() {
+                    if (this.multipleSelection.length === 0) {
+                        this.$message.warning('请选择要删除的订单');
+                        return;
+                    }
+
+                    this.$confirm('确定要删除选中的订单吗？', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        const orderNumbers = this.multipleSelection.map(order => order.orderNumber);
+                        
+                        axios.post('/system/purchasePoleManage/batchDelete', orderNumbers).then(res => {
+                            console.log('批量删除API响应:', res); // 添加调试日志
+                            
+                            // 这里暂不知道是什么问题，接口返回的格式不一样，先这样处理
+                            const data = res.data ? res.data.data : res;
+                            
+                            if (data) {
+                                console.log('批量删除成功:', data); // 添加调试日志
+                                this.$message.success('批量删除成功');
+                                this.searchOrders();
+                                this.multipleSelection = [];
+                            } else {
+                                console.log('API响应异常:', res); // 添加调试日志
+                                const errorMsg = res && res.data && res.data.msg ? res.data.msg : '批量删除失败';
+                                this.$message.error(errorMsg);
+                            }
+                        }).catch(error => {
+                            console.error('批量删除失败:', error);
+                            const errorMsg = error && error.response && error.response.data && error.response.data.msg ? error.response.data.msg : '批量删除失败';
+                            this.$message.error(errorMsg);
+                        });
+                    }).catch(() => {
+                        this.$message.info('已取消删除');
+                    });
+                },
+
+                formatDateTime(dateTime) {
+                    if (!dateTime) return '';
+                    const date = new Date(dateTime);
+                    const year = date.getFullYear();
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    const day = date.getDate().toString().padStart(2, '0');
+                    const hours = date.getHours().toString().padStart(2, '0');
+                    const minutes = date.getMinutes().toString().padStart(2, '0');
+                    const seconds = date.getSeconds().toString().padStart(2, '0');
+                    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+                },
+
+                formatDate(date, isStart) {
+                    if (!date) return '';
+                    const d = new Date(date);
+                    if (isStart) {
+                        d.setHours(0, 0, 0, 0);
+                    } else {
+                        d.setHours(23, 59, 59, 999);
+                    }
+                    return d.toISOString();
+                },
+
+                getStateType(state) {
+                    switch (state) {
+                        case '待支付':
+                            return 'warning';
+                        case '已支付':
+                            return 'success';
+                        case '已发货':
+                            return 'info';
+                        case '待签收':
+                            return 'warning';
+                        case '已完成':
+                            return 'success';
+                        case '已取消':
+                            return 'info';
+                        case '已退款':
+                            return 'danger';
+                        default:
+                            return '';
+                    }
+                }
+            }
+        });
+    </script>
+
+</body>
+
+</html>

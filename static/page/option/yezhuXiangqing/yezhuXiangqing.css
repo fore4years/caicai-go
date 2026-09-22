@@ -1,0 +1,62 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #f5f7fa;
+  font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+}
+
+.home {
+  padding: 20px;
+}
+
+.box-card {
+  margin-bottom: 20px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header span {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.image-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+
+.button-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+  padding-bottom: 20px;
+}
+
+.button-container .el-button {
+  min-width: 120px;
+  margin: 0 15px;
+}
+
+/* 响应式布局调整 */
+@media screen and (max-width: 1200px) {
+  .el-form-item {
+    margin-bottom: 18px;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .image-container {
+    justify-content: center;
+  }
+} 

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>网关信息</title>
+    <link rel="stylesheet" href="LoRa_from.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入Element UI样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入Element UI组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+<body>
+    <div id="home" class="home">
+        <el-card class="box-card">
+            <div slot="header" class="card-header">
+                <el-button icon="el-icon-arrow-left" type="text" @click="goBack">返回</el-button>
+                <span>网关信息{{ isEdit ? '修改' : '新增' }}</span>
+            </div>
+            
+            <div v-if="loading" class="loading-container">
+                <el-alert
+                    title="正在加载数据..."
+                    type="info"
+                    :closable="false">
+                </el-alert>
+            </div>
+            
+            <div v-else>
+                <!-- 搜索和筛选区域 -->
+                <div v-if="!isEdit" class="search-section">
+                    <el-row :gutter="20">
+                        <el-col :span="16">
+                            <el-input
+                                size="small"
+                                placeholder="请输入关键字查询"
+                                v-model="searchParams.keyword"
+                                clearable
+                                prefix-icon="el-icon-search"
+                                style="width: 300px; margin-right: 15px;">
+                            </el-input>
+                            <el-button size="small" type="info" @click="searchGateways" plain>查询</el-button>
+                            <el-button size="small" type="warning" @click="resetSearch" plain>重置</el-button>
+                        </el-col>
+                    </el-row>
+                    
+                    <!-- 搜索结果列表 -->
+                    <div v-if="searchResults.length > 0" class="search-results">
+                        <el-divider content-position="left">搜索结果</el-divider>
+                        <el-table
+                            :data="searchResults"
+                            stripe
+                            border
+                            style="width: 100%"
+                            size="small">
+                            <el-table-column type="index" width="50" label="序号"></el-table-column>
+                            <el-table-column prop="name" label="名称" width="150"></el-table-column>
+                            <el-table-column prop="id" label="ID" width="100"></el-table-column>
+                            <el-table-column prop="mac" label="MAC地址" width="180"></el-table-column>
+                            <el-table-column prop="iccid" label="ICCID" width="180"></el-table-column>
+                            <el-table-column prop="installPlace" label="安装位置"></el-table-column>
+                            <el-table-column label="操作" width="120">
+                                <template slot-scope="scope">
+                                    <el-button 
+                                        type="text" 
+                                        size="small" 
+                                        @click="selectGateway(scope.row)">
+                                        选择此网关
+                                    </el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                    </div>
+                </div>
+                
+                <el-divider content-position="left">{{ isEdit ? '编辑网关' : '创建新网关' }}</el-divider>
+                
+                <el-form :model="formData" :rules="rules" ref="gatewayForm" label-width="100px" class="gateway-form">
+                    <el-form-item label="网关名称" prop="name">
+                        <el-input v-model="formData.name" placeholder="请输入网关名称"></el-input>
+                    </el-form-item>
+                    
+                    <el-form-item label="网关ID" prop="id">
+                        <el-input v-model="formData.id" placeholder="请输入网关ID" :disabled="isEdit"></el-input>
+                    </el-form-item>
+                    
+                    <el-form-item label="网关MAC" prop="mac">
+                        <el-input v-model="formData.mac" placeholder="请输入网关MAC地址"></el-input>
+                    </el-form-item>
+
+                    <el-form-item label="4G卡ICCID" prop="iccid">
+                        <el-input v-model="formData.iccid" placeholder="请输入4G卡ICCID"></el-input>
+                    </el-form-item>
+
+                    <el-form-item label="网关位置" prop="installPlace">
+                        <el-input v-model="formData.installPlace" placeholder="请输入网关安装位置"></el-input>
+                    </el-form-item>
+
+                    <el-form-item>
+                        <el-button type="primary" @click="submitForm('gatewayForm')">保存</el-button>
+                        <el-button @click="resetForm('gatewayForm')">重置</el-button>
+                        <el-button @click="goBack">取消</el-button>
+                    </el-form-item>
+                </el-form>
+                
+                <el-divider content-position="left">网关信息预览</el-divider>
+                
+                <el-descriptions :column="2" border v-if="showPreview">
+                    <el-descriptions-item label="网关名称">
+                        <el-tag type="primary">{{ formData.name }}</el-tag>
+                    </el-descriptions-item>
+                    
+                    <el-descriptions-item label="网关ID">
+                        {{ formData.id }}
+                    </el-descriptions-item>
+
+                    <el-descriptions-item label="网关MAC">
+                        {{ formData.mac }}
+                    </el-descriptions-item>
+
+                    <el-descriptions-item label="4G卡ICCID">
+                        {{ formData.iccid }}
+                    </el-descriptions-item>
+                    
+                    <el-descriptions-item label="网关位置">
+                        {{ formData.installPlace }}
+                    </el-descriptions-item>
+                </el-descriptions>
+                
+                <div class="empty-data" v-if="!showPreview">
+                    <el-empty description="暂无网关信息"></el-empty>
+                </div>
+            </div>
+        </el-card>
+    </div>
+</body>
+<script>
+    var app = new Vue({
+        el:'#home',
+        data: {
+            formData: {
+                name: '',
+                id: '',
+                mac: '',
+                iccid: '',
+                installPlace: '',
+                status: '正常'
+            },
+            originalData: null,
+            rules: {
+                name: [
+                    { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+                ],
+                id: [
+                    { required: true, message: '请输入网关ID', trigger: 'blur' }
+                ],
+                mac: [
+                    { required: true, message: '请输入网关MAC地址', trigger: 'blur' }
+                ],
+                iccid: [
+                    { required: false, message: '请输入4G卡ICCID', trigger: 'blur' }
+                ],
+                installPlace: [
+                    { required: true, message: '请输入网关安装位置', trigger: 'blur' }
+                ]
+            },
+            showPreview: false,
+            loading: true,
+            isEdit: false,
+            // 搜索和筛选相关
+            searchParams: {
+                keyword: '',
+                status: ''
+            },
+            searchResults: []
+        },
+        created() {
+            this.initPage();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                if ((event.keyCode === 13 || event.key === 'Enter')) {
+                    this.searchGateways();
+                }
+            },
+            initPage() {
+                // 从URL获取网关ID参数
+                const urlParams = new URLSearchParams(window.location.search);
+                const gatewayId = urlParams.get('id');
+                
+                if (gatewayId) {
+                    this.isEdit = true;
+                    this.loadGatewayData(gatewayId);
+                } else {
+                    this.loading = false;
+                    this.isEdit = false;
+                }
+            },
+            loadGatewayData(gatewayId) {
+                // 模拟从服务器获取网关数据
+                // 实际应用中应该使用axios调用后端接口
+                axios.get('/system/getGatewayById', {
+                    params: { id: gatewayId }
+                }).then(response => {
+                    console.log('网关数据', response)
+                    if (response.data) {
+                        this.formData = response.data;
+                        this.originalData = JSON.parse(JSON.stringify(response.data));
+                        this.showPreview = true;
+                    } else {
+                        this.$message.error('未找到该网关信息');
+                    }
+                }).catch(error => {
+                    console.error('加载网关数据失败', error);
+                    this.$message.error('加载网关数据失败');
+                    
+                    // 仅用于演示，实际应该删除这段代码
+                    this.formData = {
+                        name: '网关' + gatewayId,
+                        id: gatewayId,
+                        mac: 'MAC' + gatewayId,
+                        iccid: 'ICCID' + gatewayId,
+                        installPlace: '位置' + gatewayId,
+                        status: '正常'
+                    };
+                    this.originalData = JSON.parse(JSON.stringify(this.formData));
+                    this.showPreview = true;
+                }).finally(() => {
+                    this.loading = false;
+                });
+            },
+            getStatusType(status) {
+                switch(status) {
+                    case '正常': return 'success';
+                    case '异常': return 'danger';
+                    case '维护中': return 'warning';
+                    default: return 'info';
+                }
+            },
+            // 按关键字搜索网关
+            searchGateways() {
+                if (!this.searchParams.keyword.trim()) {
+                    this.$message.warning('请输入搜索关键字');
+                    return;
+                }
+                
+                this.loading = true;
+                
+                axios.get('/system/searchByMac', {
+                    params: {
+                        mac: this.searchParams.keyword,
+                        page: 1,
+                        length: 10
+                    }
+                }).then(res => {
+                    if (!res.data || !res.data.list || res.data.list.length === 0) {
+                        this.$message.warning('未搜索到符合条件的网关');
+                        this.searchResults = [];
+                    } else {
+                        this.searchResults = res.data.list;
+                        this.$message.success(`为您找到${this.searchResults.length}个网关`);
+                    }
+                }).catch(error => {
+                    console.error('搜索网关失败', error);
+                    this.$message.error('搜索失败，请重试');
+                    
+                    // 仅用于演示，实际应删除此代码
+                    this.searchResults = [
+                        {
+                            id: '1001',
+                            name: '测试网关1',
+                            mac: 'AA:BB:CC:DD:EE:01',
+                            iccid: '89860123456789012345',
+                            installPlace: '北京市海淀区',
+                            status: '正常'
+                        },
+                        {
+                            id: '1002',
+                            name: '测试网关2',
+                            mac: 'AA:BB:CC:DD:EE:02',
+                            iccid: '89860123456789012346',
+                            installPlace: '上海市浦东新区',
+                            status: '正常'
+                        }
+                    ];
+                }).finally(() => {
+                    this.loading = false;
+                });
+            },
+            // 按状态筛选网关
+            filterByStatus() {
+                if (!this.searchParams.status) {
+                    this.searchResults = [];
+                    return;
+                }
+                
+                this.loading = true;
+                
+                axios.get('/system/raChange', {
+                    params: {
+                        tiaojian: this.searchParams.status,
+                        page: 1,
+                        length: 10
+                    }
+                }).then(res => {
+                    if (!res.data || !res.data.list || res.data.list.length === 0) {
+                        this.$message.warning(`未找到状态为"${this.searchParams.status}"的网关`);
+                        this.searchResults = [];
+                    } else {
+                        this.searchResults = res.data.list;
+                        this.$message.success(`为您找到${this.searchResults.length}个状态为"${this.searchParams.status}"的网关`);
+                    }
+                }).catch(error => {
+                    console.error('筛选网关失败', error);
+                    this.$message.error('筛选失败，请重试');
+                    
+                    // 仅用于演示，实际应删除此代码
+                    this.searchResults = [
+                        {
+                            id: '1003',
+                            name: '测试网关3',
+                            mac: 'AA:BB:CC:DD:EE:03',
+                            iccid: '89860123456789012347',
+                            installPlace: '广州市天河区',
+                            status: this.searchParams.status
+                        }
+                    ];
+                }).finally(() => {
+                    this.loading = false;
+                });
+            },
+            // 重置搜索条件
+            resetSearch() {
+                this.searchParams = {
+                    keyword: '',
+                    status: ''
+                };
+                this.searchResults = [];
+            },
+            // 选择搜索结果中的网关
+            selectGateway(gateway) {
+                this.formData = { ...gateway };
+                this.showPreview = true;
+                this.$message.success('已选择网关信息');
+                
+                // 滚动到表单区域
+                setTimeout(() => {
+                    const formElement = this.$refs.gatewayForm.$el;
+                    formElement.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            },
+            submitForm(formName) {
+                this.$refs[formName].validate((valid) => {
+                    if (valid) {
+                        this.loading = true;
+                        
+                        // 判断是新增还是修改
+                        const apiUrl = this.isEdit ? '/system/updateGateway' : '/system/addGateway';
+                        
+                        // 这里应该替换为实际的API调用
+                        axios.post(apiUrl, this.formData)
+                            .then(response => {
+                                this.$message.success(this.isEdit ? '修改成功' : '添加成功');
+                                this.showPreview = true;
+                                
+                                if (this.isEdit) {
+                                    // 更新原始数据，用于下次比较
+                                    this.originalData = JSON.parse(JSON.stringify(this.formData));
+                                    
+                                    // 如果是从列表页进入的，可以选择返回列表页
+                                    setTimeout(() => {
+                                        this.goBack();
+                                    }, 1500);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('保存数据失败', error);
+                                this.$message.error('保存失败，请重试');
+                                
+                                // 仅用于演示，实际应该删除这段代码
+                                this.showPreview = true;
+                                if (this.isEdit) {
+                                    this.originalData = JSON.parse(JSON.stringify(this.formData));
+                                    setTimeout(() => {
+                                        this.$message.success(this.isEdit ? '修改成功' : '添加成功');
+                                        this.goBack();
+                                    }, 1000);
+                                } else {
+                                    this.$message.success('添加成功');
+                                }
+                            })
+                            .finally(() => {
+                                this.loading = false;
+                            });
+                    } else {
+                        this.$message.warning('请完善表单信息');
+                        return false;
+                    }
+                });
+            },
+            resetForm(formName) {
+                if (this.isEdit && this.originalData) {
+                    // 如果是编辑模式，重置为原始数据
+                    this.formData = JSON.parse(JSON.stringify(this.originalData));
+                    this.$message.info('已恢复原始数据');
+                } else {
+                    // 如果是新增模式，清空表单
+                    this.$refs[formName].resetFields();
+                    this.formData.status = '正常';
+                    this.showPreview = false;
+                    this.$message.info('表单已重置');
+                }
+            },
+            goBack() {
+                // 返回上一页
+                window.location.href = "../LoRa/LoRa.html";
+            }
+        }
+    });
+</script>
+</html>

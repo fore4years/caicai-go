@@ -1,9 +1,10 @@
-// Package service 业务基础设施。当前提供锁控制（开锁/关锁），
-// 下发通道为 MQTT（对齐 Java 中 DirectiveService -> Session -> Channel 的职责）。
+// Package service 业务基础设施。当前提供设备通信（MQTT）与锁控制。
+// 硬件通信按 MQTT 调用资料_增强版.docx：下行发布到 device/{IMEI}/cmd，上行订阅 device/+/report|event|alarm|heartbeat。
 package service
 
 import (
 	"context"
+	"encoding/hex"
 	"strconv"
 	"time"
 
@@ -22,18 +23,38 @@ var (
 	rdb        *redis.Client
 )
 
-// InitLockControl 初始化锁控制依赖的 MQTT 与 Redis 客户端。
-// 需在 main 中、数据库初始化之后调用。
-func InitLockControl(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
-	// MQTT
+// deviceTopicPrefix 设备主题前缀。
+const deviceTopicPrefix = "device/"
+
+// InitDevice 初始化设备通信依赖的 MQTT 与 Redis 客户端。
+// 连接 broker，并订阅所有设备的上行主题（report/event/alarm/heartbeat）。
+func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 	opts := mqtt.NewClientOptions().
 		AddBroker("tcp://" + mqcfg.Broker + ":" + strconv.Itoa(int(mqcfg.Port)))
-	opts.SetClientID("caicai-go-lock")
+	opts.SetClientID("caicai-go-device")
+	opts.SetKeepAlive(60 * time.Second)
+	if mqcfg.Username != "" {
+		opts.SetUsername(mqcfg.Username)
+	}
+	if mqcfg.Password != "" {
+		opts.SetPassword(mqcfg.Password)
+	}
+
 	mqttClient = mqtt.NewClient(opts)
 	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
 		logger.Mylog.Err(token.Error()).Msg("MQTT 连接失败")
 	} else {
 		logger.Mylog.Info().Msg("MQTT 连接成功")
+	}
+
+	// 订阅所有设备的上行主题
+	for _, sub := range []string{"report", "event", "alarm", "heartbeat"} {
+		topic := deviceTopicPrefix + "+/" + sub
+		if token := mqttClient.Subscribe(topic, byte(mqcfg.Qos), onDeviceMessage); token.Wait() && token.Error() != nil {
+			logger.Mylog.Err(token.Error()).Msgf("订阅主题失败: %s", topic)
+		} else {
+			logger.Mylog.Info().Msgf("已订阅主题: %s", topic)
+		}
 	}
 
 	// Redis
@@ -44,6 +65,63 @@ func InitLockControl(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 	})
 }
 
+// onDeviceMessage 处理上行设备数据：解析帧并按 cmd 缓存到 Redis（供查询用）。
+func onDeviceMessage(client mqtt.Client, msg mqtt.Message) {
+	deviceID, ctl, cmd, data, err := protocol.Decode(msg.Payload())
+	if err != nil {
+		logger.Mylog.Warn().Msgf("设备帧解析失败, topic: %s, err: %v", msg.Topic(), err)
+		return
+	}
+	_ = ctl
+
+	if rdb != nil {
+		key := "device:" + deviceID + ":" + strconv.Itoa(int(cmd))
+		rdb.Set(context.Background(), key, data, 10*time.Minute)
+	}
+	logger.Mylog.Info().Msgf("收到设备数据, topic: %s, device: %s, cmd: 0x%02X, data: %q", msg.Topic(), deviceID, cmd, data)
+}
+
+// publish 发布原始 payload 到指定 topic。
+func publish(topic string, payload []byte) bool {
+	if mqttClient == nil || !mqttClient.IsConnected() {
+		logger.Mylog.Warn().Msg("MQTT 未连接，无法下发指令")
+		return false
+	}
+	if token := mqttClient.Publish(topic, byte(conf.Cfg.Mqtt.Qos), false, payload); token.Wait() && token.Error() != nil {
+		logger.Mylog.Err(token.Error()).Msgf("下发失败, topic: %s", topic)
+		return false
+	}
+	return true
+}
+
+// SendCommand 下发指令到指定设备（topic = device/{imei}/cmd）。
+func SendCommand(imei string, cmd, ctl byte, data []byte) bool {
+	topic := deviceTopicPrefix + imei + "/cmd"
+	if !publish(topic, protocol.EncodeCmd(cmd, ctl, data)) {
+		return false
+	}
+	logger.Mylog.Info().Msgf("已下发指令, topic: %s, cmd: 0x%02X", topic, cmd)
+	return true
+}
+
+// SendHex 下发原始 hex 指令到指定设备（不经过 EncodeCmd，直接发原始字节）。
+func SendHex(imei, hexStr string) bool {
+	data, err := hex.DecodeString(hexStr)
+	if err != nil {
+		logger.Mylog.Err(err).Msgf("hex 解析失败: %s", hexStr)
+		return false
+	}
+	return publish(deviceTopicPrefix+imei+"/cmd", data)
+}
+
+// SetRedisValue 设置 Redis 键值（对齐 Java DirectiveController.setRedisValue 测试接口）。
+func SetRedisValue(key, value string) {
+	if rdb == nil {
+		return
+	}
+	rdb.Set(context.Background(), key, value, 0)
+}
+
 // lockGateway 锁及其关联的产品/网关信息。
 type lockGateway struct {
 	lock    model.LockTbl
@@ -51,26 +129,12 @@ type lockGateway struct {
 	gateway model.TabGateway
 }
 
-// nid 返回下发指令用的设备标识：4G 用 IMEI（8 字节），LoRa 用 NID（4 字节）。
-func (lg *lockGateway) nid() string {
-	if len(lg.gateway.Mac) > 12 {
+// deviceID 返回主题用设备标识：优先 4G IMEI，否则 LoRa NID。
+func (lg *lockGateway) deviceID() string {
+	if lg.product.Imei != "" {
 		return lg.product.Imei
 	}
 	return lg.product.Nid
-}
-
-// topic 返回 MQTT 下发主题，格式 /caicai/{SCC|SCL}/{Imei}。
-// 型号前缀取 product.pid 前三位（SCC/SCL），4G 用 IMEI，LoRa 回退 NID。
-func (lg *lockGateway) topic() string {
-	prefix := "SCC"
-	if len(lg.product.Pid) >= 3 {
-		prefix = lg.product.Pid[:3]
-	}
-	id := lg.product.Imei
-	if id == "" {
-		id = lg.product.Nid
-	}
-	return "/caicai/" + prefix + "/" + id
 }
 
 // getLockByOrder 根据订单查询锁及其产品/网关信息（对应 Java LockService.getByOrder + product + gateway）。
@@ -126,7 +190,6 @@ func StopLock(orderID string) bool {
 		}
 	}
 
-	// 单探头只看车位锁距离；双探头任一检测到遮挡则不能关锁
 	hasObstacle := (distance < 1600 && distance != 0) ||
 		(chargingPileDistance != nil && *chargingPileDistance < 3000 && *chargingPileDistance != 0)
 	if hasObstacle {
@@ -134,22 +197,18 @@ func StopLock(orderID string) bool {
 		return false
 	}
 
-	// 下发关锁指令
-	payload := protocol.Encode(lg.nid(), protocol.OpClosePlaceLock, protocol.DirectionDefault, nil)
-	mqttClient.Publish(lg.topic(), byte(conf.Cfg.Mqtt.Qos), false, payload)
-	logger.Mylog.Info().Msgf("已下发关锁指令, topic: %s, nid: %s", lg.topic(), lg.nid())
+	SendCommand(lg.deviceID(), protocol.OpClosePlaceLock, protocol.DirectionDefault, nil)
+	logger.Mylog.Info().Msgf("已下发关锁指令, orderId: %s", orderID)
 	return true
 }
 
 // StartLock 开启车位锁（对应 Java OrderServiceImpl.startLock）。
-// 注意：Java 通过 futureSendMessage 同步等待设备应答，MQTT 下暂简化为异步下发。
 func StartLock(orderID string) bool {
 	lg, err := getLockByOrder(orderID)
 	if err != nil || lg == nil {
 		return false
 	}
 
-	// 占用检查：该锁是否已有其他进行中的订单
 	var count int64
 	conf.Db.Model(&model.OrderTbl{}).
 		Where("lockid = ? AND orderid <> ? AND state IN ('使用中','进行中')", lg.lock.Lockid, orderID).
@@ -158,11 +217,8 @@ func StartLock(orderID string) bool {
 		return false
 	}
 
-	// 下发开锁指令
-	payload := protocol.Encode(lg.nid(), protocol.OpOpenPlaceLock, protocol.DirectionDefault, nil)
-	mqttClient.Publish(lg.topic(), byte(conf.Cfg.Mqtt.Qos), false, payload)
+	SendCommand(lg.deviceID(), protocol.OpOpenPlaceLock, protocol.DirectionDefault, nil)
 
-	// 更新车位与订单状态
 	now := time.Now()
 	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", lg.lock.Placeid).Update("state", "使用中")
 	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{

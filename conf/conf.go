@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
@@ -56,21 +55,6 @@ func init() {
 		logger.Mylog.Info().Msg("配置更新成功")
 	})
 
-}
-
-func MqttConnection(mqcfg MqttConf) {
-	option := mqtt.NewClientOptions().AddBroker(mqcfg.Broker)
-	client := mqtt.NewClient(option)
-
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		logger.Mylog.Fatal().Err(token.Error()).Msg("MQTT连接异常")
-	}
-
-	topic := "xxxtopicxxx"
-	message := "xxxxxx"
-
-	token := client.Publish(topic, byte(mqcfg.Qos), false, message)
-	token.Wait()
 }
 
 func Dbconnection(dbconf MysqlConf) error {

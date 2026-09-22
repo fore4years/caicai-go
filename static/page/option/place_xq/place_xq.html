@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>车位详情</title>
+    <link rel="stylesheet" href="place_xq.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入Element UI样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入Element UI组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+<body>
+
+<div id="home" class="home">
+    <el-card class="box-card">
+        <div slot="header" class="card-header">
+            <el-button icon="el-icon-arrow-left" type="text" @click="fanhui">返回</el-button>
+            <span>车位详情</span>
+        </div>
+
+        <div v-if="loading" class="loading-container">
+            <el-alert
+                title="正在加载数据..."
+                type="info"
+                :closable="false">
+            </el-alert>
+        </div>
+
+        <div v-if="!loading">
+            <el-divider content-position="left">基本信息</el-divider>
+            
+            <el-descriptions :column="2" border>
+                <el-descriptions-item label="车位编号">
+                    <el-tag size="medium">{{place.placeid}}</el-tag>
+                </el-descriptions-item>
+                
+                <el-descriptions-item label="安装时间">
+                    <span v-if="LockBean.fixDate!=null">{{LockBean.fixDate}}</span>
+                    <el-tag v-else type="info" size="small">未安装</el-tag>
+                </el-descriptions-item>
+                
+                <el-descriptions-item label="车位地址">
+                    {{place.province}}{{place.city}}{{place.district}}{{place.streer}}
+                </el-descriptions-item>
+                
+                <el-descriptions-item label="收费费率">
+                    <span v-if="LockBean.lockid!=null">
+                        <el-tag type="success">{{place.rate}}元/30min</el-tag>
+                    </span>
+                    <el-tag v-else type="info" size="small">未安装</el-tag>
+                </el-descriptions-item>
+                
+                <el-descriptions-item label="共享时间">
+                    <span v-if="LockBean.lockid!=null">{{place.openTime}}</span>
+                    <el-tag v-else type="info" size="small">未安装</el-tag>
+                </el-descriptions-item>
+            </el-descriptions>
+            
+            <el-divider content-position="left">硬件信息</el-divider>
+            
+            <el-descriptions :column="2" border>
+                <el-descriptions-item label="车位锁编号">
+                    <span v-if="LockBean.lockid!=null">
+                        <el-tag type="primary">{{LockBean.lockid}}</el-tag>
+                    </span>
+                    <el-tag v-else type="info" size="small">未安装</el-tag>
+                </el-descriptions-item>
+                
+                <el-descriptions-item label="充电桩编号">
+                    <span v-if="charge.chargeid!=null">
+                        <el-tag type="warning">{{charge.chargeid}}</el-tag>
+                    </span>
+                    <el-tag v-else type="info" size="small">未安装</el-tag>
+                </el-descriptions-item>
+                
+                <el-descriptions-item label="经度">
+                    <span v-if="LockBean.lockid!=null">{{place.longitude}}</span>
+                    <el-tag v-else type="info" size="small">未安装</el-tag>
+                </el-descriptions-item>
+                
+                <el-descriptions-item label="纬度">
+                    <span v-if="LockBean.lockid!=null">{{place.latitude}}</span>
+                    <el-tag v-else type="info" size="small">未安装</el-tag>
+                </el-descriptions-item>
+            </el-descriptions>
+            
+            <div class="button-container">
+                <el-button type="primary" @click="fanhui">返回列表</el-button>
+            </div>
+        </div>
+    </el-card>
+</div>
+
+<script>
+
+    window.onload = function () {
+        let placeid = location.search.split('placeid=')[1];
+        all.loadData(placeid);
+    }
+
+    var all = new Vue({
+        el: '#home',
+        data: {
+            place: {},
+            LockBean: {},
+            charge: {},
+            loading: true
+        },
+        methods: {
+            loadData(placeid) {
+                this.loading = true;
+                
+                Promise.all([
+                    axios.get('/system/placeGet', {
+                        params: { placeid: placeid }
+                    }),
+                    axios.get('/system/lockGet', {
+                        params: { placeid: placeid }
+                    }),
+                    axios.get('/system/chargeGet', {
+                        params: { placeid: placeid }
+                    })
+                ]).then(([placeRes, lockRes, chargeRes]) => {
+                    this.place = placeRes.data;
+                    this.LockBean = lockRes.data;
+                    this.charge = chargeRes.data;
+                    this.loading = false;
+                }).catch(error => {
+                    console.error('加载数据失败', error);
+                    this.loading = false;
+                });
+            },
+            fanhui() {
+                window.location.href = "../place_list/place_list.html";
+            }
+        }
+    });
+
+</script>
+
+</body>
+</html>

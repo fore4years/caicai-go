@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>充电桩列表</title>
+    <link rel="stylesheet" href="charging_station_list.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+
+<body>
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search">
+        <el-input
+                size="mini"
+                style="width: 200px; margin-right :10px; font-size:13px; "
+                v-model="params.pid"
+                placeholder="请输入充电站pid查询"
+        ></el-input>
+        <el-button size="mini" type="info" @click="getStationByPid()" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="reset()" plain>重置</el-button>
+    </div>
+
+    <!--    <div class="search" style="margin-top: 10px;">-->
+    <!--        <el-button size="mini" type="primary" @click="add()" plain>新增</el-button>-->
+    <!--        <el-button size="mini" type="danger" @click="BatchDelete()" plain>批量删除</el-button>-->
+    <!--    </div>-->
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table
+                ref="multipleTable"
+                :data="tableData"
+                tooltip-effect="dark"
+                style="width: 100%"
+                @selection-change="handleSelectionChange"
+        >
+            <el-table-column type="selection" width="55"></el-table-column>
+            <el-table-column type="index" label="序号" width="60"></el-table-column>
+            <el-table-column prop="place" label="地址" width="350"></el-table-column>
+            <el-table-column prop="name" label="名称" width="300"></el-table-column>
+            <el-table-column prop="chargingGun.product.pid" label="充电桩编号" width="160"></el-table-column>
+            <el-table-column prop="district" label="所属区域" width="120"></el-table-column>
+            <el-table-column prop="spacesCode" label="车位编号" width="160"></el-table-column>
+            <el-table-column prop="openTime" label="开始时间" width="120"></el-table-column>
+            <el-table-column prop="closeTime" label="关闭时间" width="120"></el-table-column>
+            <el-table-column prop="chargingGun.product.productionTime" label="安装时间" width="200"></el-table-column>
+            <el-table-column width="200px" label="操作" fixed="right">
+                <template slot-scope="scope">
+                    <!--                    <el-button size="mini" type="success" @click="handleView(scope.$index, scope.row)">查看</el-button>-->
+                    <el-button size="mini" 
+                               :disabled="!isAdmin" 
+                               :title="isAdmin ? '编辑该充电站' : '无权限操作，请联系管理员'"
+                               @click="handleEdit(scope.$index, scope.row)">编辑</el-button>
+                    <el-button size="mini" type="danger" 
+                               :disabled="!isAdmin" 
+                               :title="isAdmin ? '删除该充电站' : '无权限操作，请联系管理员'"
+                               @click="handleDelete(scope.$index, scope.row)">删除</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <!--  新增表单  -->
+    <el-dialog title="新增" :visible.sync="dialogFormVisible">
+        <el-form :model="form" status-icon ref="ruleForm" label-width="100px" class="demo-ruleForm">
+            <el-form-item label="充电站名称" prop="name">
+                <el-input v-model="form.name" autocomplete="off"></el-input>
+            </el-form-item>
+            <el-form-item label="位置" prop="place">
+                <el-input v-model="form.place" autocomplete="off"></el-input>
+            </el-form-item>
+            <el-form-item label="产品id" prop="pid">
+                <el-input v-model="form.pid" autocomplete="off"></el-input>
+            </el-form-item>
+        </el-form>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="dialogFormVisible = false">取 消</el-button>
+            <el-button type="primary" @click="insertStation">确 定</el-button>
+        </div>
+    </el-dialog>
+
+    <!--  编辑表单  -->
+    <el-dialog title="编辑" :visible.sync="dialogFormVisibleUpdate">
+        <el-form :model="updateForm" status-icon ref="ruleForm" label-width="100px"
+                 class="demo-ruleForm">
+            <el-form-item label="车位锁编号" prop="lockId">
+                <el-input :value="updateForm.lockId || '未绑定'" autocomplete="off" :disabled="true"></el-input>
+            </el-form-item>
+            <el-form-item label="充电站名称" prop="name">
+                <el-input v-model="updateForm.name" autocomplete="off"></el-input>
+            </el-form-item>
+            <el-form-item label="位置" prop="place">
+                <el-input v-model="updateForm.place" autocomplete="off"></el-input>
+            </el-form-item>
+        </el-form>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="dialogFormVisibleUpdate = false">取 消</el-button>
+            <el-button type="primary" @click="updateStation">确 定</el-button>
+        </div>
+    </el-dialog>
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="params.pageNum"
+                :page-sizes="[10, 20, 30]"
+                :page-size="params.pageSize"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total"
+        ></el-pagination>
+    </div>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                form: {},//新增表单
+                dialogFormVisible: false, //新增表单，默认不显示
+                formLabelWidth: '100px', //表单内每行的宽度
+                updateForm: {}, //编辑表单
+                dialogFormVisibleUpdate: false, //编辑表单，默认不显示
+                ruleForm: {},
+                //表单校验
+                params: {
+                    pid: "",
+                    pageNum: 1,
+                    pageSize: 10
+                },
+                total: 0,
+                tableData: [],
+                multipleSelection: [], //批量删除
+                isAdmin: false, // 管理员状态
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.checkAdminStatus();
+            this.loadData();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                // 如果按下的是Enter键，并且弹窗没有打开
+                if ((event.keyCode === 13 || event.key === 'Enter') && !this.dialogFormVisible && !this.dialogFormVisibleUpdate) {
+                    this.getStationByPid();
+                }
+            },
+            // 检查管理员状态
+            checkAdminStatus() {
+                // 从Cookie中获取用户信息
+                let username = this.getCookie('username');
+                if (username) {
+                    // 发送请求检查管理员状态
+                    axios.get('/system/checkAdmin', {
+                        params: {
+                            account: username
+                        }
+                    }).then(response => {
+                        if (response.data.code === 200) {
+                            this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                        } else {
+                            this.isAdmin = false;
+                            console.error('获取管理员状态失败:', response.data.msg);
+                        }
+                    }).catch(error => {
+                        this.isAdmin = false;
+                        console.error('检查管理员状态出错:', error);
+                    });
+                } else {
+                    this.isAdmin = false;
+                    console.warn('未找到用户信息，默认非管理员状态');
+                }
+            },
+
+            // 从Cookie获取值
+            getCookie(name) {
+                let value = '; ' + document.cookie;
+                let parts = value.split('; ' + name + '=');
+                if (parts.length === 2) {
+                    return parts.pop().split(';').shift();
+                }
+                return null;
+            },
+
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.init();
+
+                loading.close(); // 关闭加载提示
+            },
+
+            // 获取数据
+            init() {
+                axios.get('/system/chargeStationFour/getStationListByPage', {
+                    params: {
+                        current: this.params.pageNum,
+                        size: this.params.pageSize,
+                    }
+                }).then(res => {
+                    console.log("init 方法 :" , res)
+                    console.log("init 方法 :" , res.data)
+
+                    // 这里暂不知道是什么问题，接口返回的格式不一样，先这样处理
+                    const  data = res.data ? res.data.data : res;
+
+                    console.log("init 方法 data :", data)
+
+                    this.tableData = data.list;
+                    this.total = data.total;
+                })
+            },
+
+            // 根据pid查询
+            getStationByPid() {
+                this.params.pid = this.params.pid.trim();
+                console.log("this.params.pid :", this.params.pid)
+                if (this.params.pid === "") {
+                    // this.init();
+                } else {
+                    axios.get('/system/chargeStation/getStationByPid', {
+                        params: {
+                            pid: this.params.pid
+                        }
+                    }).then(res => {
+                        console.log(res)
+                        this.tableData = res;
+                        this.total = 1;
+                        console.log("this.tableData :", this.tableData)
+                    })
+                }
+            },
+
+            // 新增按钮
+            add() {
+                // 弹出新增表单
+                this.dialogFormVisible = true;
+            },
+
+            // 新增表单提交
+            insertStation() {
+                console.log("insertStation 方法执行 :" , this.form)
+                axios.post('/system/chargeStation/add', this.form).then(res => {
+                    console.log(res)
+                    if (res) {
+                        this.$message({
+                            message: '新增成功!',
+                            type:'success'
+                        });
+                        this.dialogFormVisible = false;
+                        this.init();
+                    } else {
+                        this.$message({
+                            message: '新增失败!',
+                            type: 'error'
+                        });
+                    }
+                }).catch(res => {
+                    console.log(res)
+                    this.$message({
+                        message: '新增失败,请检查pid是否为空或重复!',
+                        type: 'error'
+                    });
+                })
+            },
+
+            // 编辑表单提交
+            updateStation() {
+                console.log("updateStation 方法执行 :" , this.updateForm)
+                axios.post('/system/chargeStationFour/updateById', this.updateForm).then(res => {
+                    console.log(res)
+                    if (res) {
+                        this.$message({
+                            message: '修改成功!',
+                            type: 'success'
+                        });
+                        this.dialogFormVisibleUpdate = false;
+                        this.init();
+                    } else {
+                        this.$message({
+                            message: '修改失败!',
+                            type: 'error'
+                        });
+                    }
+                })
+            },
+
+            // 查看按钮
+            handleView(index, row) {
+                console.log(index, row.id)
+
+                window.location.href = "../charge_detail/charge_detail.html?pid=" + row.pid;
+            },
+
+            // 编辑按钮
+            handleEdit(index, row) {
+                this.dialogFormVisibleUpdate = true;
+                console.log(index, row)
+                axios.get('/system/chargeStationFour/getStationById', {
+                    params: {
+                        id: row.id
+                    }
+                }).then(res => {
+                    console.log(res)
+                    this.updateForm = res;
+                })
+            },
+
+            // 删除按钮
+            handleDelete(index, row) {
+                console.log(row.id)
+                // 提示是否删除
+                this.$confirm("此操作将永久删除此充电站, 是否继续?", "提示", {
+                    confirmButtonText: "确定",
+                    cancelButtonText: "取消",
+                    type: "warning"
+                })
+                    .then(() => {
+                        axios.delete(`/system/chargeStation/deleteById/${row.id}`).then(res => {
+                            if (res) {
+                                this.$message({
+                                    message: "删除成功!",
+                                    type: "success"
+                                });
+                                this.init();
+                            } else {
+                                this.$message({
+                                    message: "删除失败!",
+                                    type: "error"
+                                });
+                            }
+                        })
+                    }).catch(() => {
+                    this.$message({
+                        type: "info",
+                        message: "已取消删除"
+                    });
+                });
+            },
+
+            // 批量删除请求
+            BatchDelete() {
+                console.log(this.multipleSelection)
+                // 提示是否删除
+                this.$confirm("确定批量删除吗?", "提示", {
+                    confirmButtonText: "确定",
+                    cancelButtonText: "取消",
+                    type: "warning"
+                })
+                    .then(() => {
+                        console.log("批量删除")
+                    })
+                    .catch(() => {
+                        this.$message({
+                            type: "info",
+                            message: "已取消批量删除"
+                        });
+                    });
+            },
+
+            // 存放选中的数据，要批量删除的数据
+            handleSelectionChange(val) {
+                this.multipleSelection = val;
+                console.log(this.multipleSelection)
+            },
+
+            // 重置
+            reset() {
+                this.params.pid = "";
+                console.log("reset 方法 执行 :")
+                this.init();
+            },
+
+            // 分页
+            handleSizeChange(pageSize) {
+                this.params.pageSize = pageSize;
+                this.init();
+            },
+
+            handleCurrentChange(pageNum) {
+                this.params.pageNum = pageNum;
+                this.init();
+            },
+
+        },
+    });
+
+</script>
+
+
+</body>
+
+</html>

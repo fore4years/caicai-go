@@ -1,0 +1,353 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+body {
+  background: #f8f8f8;
+}
+.all {
+  width: 100%;
+  height: 100%;
+}
+.all .fanhui {
+  display: flex;
+  align-items: center;
+  margin-top: 1.21vh;
+  margin-left: 1.24vw;
+  font-size: 1.11vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #333333;
+}
+.all .fanhui .icon {
+  width: 0.5vw;
+  height: 1vw;
+  background-image: url("../../../img/page/money_show_xq/fanhui.png");
+  background-size: 100% 100%;
+  margin-right: 0.68vw;
+}
+.all .money_xq {
+  display: flex;
+  margin-top: 5.39vh;
+}
+.all .money_xq .money_all {
+  width: 24.07vw;
+  height: 22.02vh;
+  background: #FFFFFF;
+  box-shadow: 0px 6px 9px 1px rgba(164, 164, 164, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.all .money_xq .money_all .placeid {
+  display: flex;
+  align-items: center;
+  margin-left: 1.24vw;
+  margin-top: 2.2vh;
+}
+.all .money_xq .money_all .placeid .lvdian {
+  width: 6px;
+  height: 3px;
+  background: #35CE25;
+  border-radius: 2px;
+}
+.all .money_xq .money_all .placeid .text {
+  font-size: 0.99vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #666666;
+  margin-left: 0.5vw;
+}
+.all .money_xq .money_all .money_time {
+  display: flex;
+  align-items: center;
+  margin-left: 1.24vw;
+  margin-top: 2.75vh;
+}
+.all .money_xq .money_all .money_time .lvdian {
+  width: 6px;
+  height: 3px;
+  background: #35CE25;
+  border-radius: 2px;
+}
+.all .money_xq .money_all .money_time .text {
+  font-size: 0.99vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #999999;
+  margin-left: 0.5vw;
+}
+.all .money_xq .money_all .money {
+  margin-top: 0.297vh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  font-size: 3.72vw;
+  font-family: OPPOSans;
+  font-weight: 800;
+  color: #333333;
+}
+.all .money_xq .money_all .qiandiazi {
+  width: 5.58vw;
+  height: 12.88vh;
+  margin-left: 19.6vw;
+  margin-top: -6.28vh;
+  background-image: url("../../../img/page/money_show_xq/huangdaizi.png");
+  background-repeat: no-repeat;
+}
+.all .money_xq .money_today {
+  width: 24.07vw;
+  height: 22.02vh;
+  background: #FFFFFF;
+  box-shadow: 0px 6px 9px 1px rgba(164, 164, 164, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-left: 1.86vw;
+  display: flex;
+  flex-direction: column;
+}
+.all .money_xq .money_today .placeid {
+  display: flex;
+  align-items: center;
+  margin-left: 1.24vw;
+  margin-top: 2.2vh;
+}
+.all .money_xq .money_today .placeid .lvdian {
+  width: 6px;
+  height: 3px;
+  background: #35CE25;
+  border-radius: 2px;
+}
+.all .money_xq .money_today .placeid .text {
+  font-size: 0.99vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #666666;
+  margin-left: 0.5vw;
+}
+.all .money_xq .money_today .money_time {
+  display: flex;
+  align-items: center;
+  margin-left: 1.24vw;
+  margin-top: 2.75vh;
+}
+.all .money_xq .money_today .money_time .lvdian {
+  width: 6px;
+  height: 3px;
+  background: #35CE25;
+  border-radius: 2px;
+}
+.all .money_xq .money_today .money_time .text {
+  font-size: 0.99vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #999999;
+  margin-left: 0.5vw;
+}
+.all .money_xq .money_today .money {
+  margin-top: 0.297vh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  font-size: 3.72vw;
+  font-family: OPPOSans;
+  font-weight: 800;
+  color: #333333;
+}
+.all .money_xq .money_today .qiandiazi {
+  width: 5.58vw;
+  height: 12.88vh;
+  margin-left: 19.6vw;
+  margin-top: -6.28vh;
+  background-image: url("../../../img/page/money_show_xq/lvdaizi.png");
+  background-repeat: no-repeat;
+}
+.all .money_xq .money_time_range {
+  width: 24.07vw;
+  min-height: 22.02vh;
+  background: #FFFFFF;
+  box-shadow: 0px 6px 9px 1px rgba(164, 164, 164, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-left: 1.86vw;
+  display: flex;
+  flex-direction: column;
+  padding: 2vh 1.24vw;
+}
+.all .money_xq .money_time_range .time_selector {
+  width: 100%;
+  margin-bottom: 2vh;
+}
+.all .money_xq .money_time_range .time_stats {
+  width: 100%;
+}
+.all .money_xq .money_time_range .time_stats .stats_row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1.5vh;
+}
+.all .money_xq .money_time_range .time_stats .stats_row:last-child {
+  margin-bottom: 0;
+}
+.all .money_xq .money_time_range .time_stats .stats_item {
+  flex: 1;
+  text-align: center;
+}
+.all .money_xq .money_time_range .time_stats .stats_item .stats_label {
+  font-size: 0.85vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #999999;
+  margin-bottom: 0.8vh;
+}
+.all .money_xq .money_time_range .time_stats .stats_item .stats_value {
+  font-size: 1.8vw;
+  font-family: OPPOSans;
+  font-weight: 700;
+  color: #333333;
+}
+.all .money_jilu {
+  width: 100%;
+  background: #FFFFFF;
+  box-shadow: 0px 6px 9px 1px rgba(164, 164, 164, 0.08);
+  border-radius: 8px;
+  margin-top: 2.64vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 2.2vh;
+}
+.all .money_jilu .text {
+  font-size: 1.11vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #666666;
+  margin-left: 1.24vw;
+  margin-top: 2.2vh;
+}
+.all .money_jilu .jilu_header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.all .money_jilu .jilu_header .export_btn {
+  margin-top: 2.2vh;
+  margin-right: 1.24vw;
+  padding: 0 1.2vw;
+  height: 3.4vh;
+  line-height: 3.4vh;
+  background: #35CE25;
+  color: #FFFFFF;
+  border-radius: 4px;
+  font-size: 0.99vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.all .money_jilu .neirong {
+  width: 97.58vw;
+  margin: 2.2vh auto 0;
+}
+.all .money_jilu .neirong .title {
+  width: 100%;
+  height: 6.16vh;
+  display: flex;
+  background: #EEEEEE;
+  border-radius: 8px 8px 0 0;
+  font-size: 0.99vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #666666;
+}
+.all .money_jilu .neirong .title .jz {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.all .money_jilu .neirong .title .orderid {
+  width: 17vw;
+}
+.all .money_jilu .neirong .title .beginTime {
+  width: 15vw;
+}
+.all .money_jilu .neirong .title .sort-icon {
+  cursor: pointer;
+  margin-left: 5px;
+  color: #999;
+  font-size: 12px;
+}
+.all .money_jilu .neirong .title .sort-icon:hover {
+  color: #333;
+}
+.all .money_jilu .neirong .title .overTime {
+  width: 15vw;
+}
+.all .money_jilu .neirong .title .user {
+  width: 35vw;
+}
+.all .money_jilu .neirong .title .shouru {
+  width: 15vw;
+}
+.all .money_jilu .neirong .title .do {
+  width: 13.59vw;
+}
+.all .money_jilu .neirong .order {
+  width: 100%;
+  height: 6.16vh;
+  display: flex;
+  border-bottom: 1px solid #EEEEEE;
+  border-left: 1px solid #EEEEEE;
+  border-right: 1px solid #EEEEEE;
+  font-size: 0.99vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #666666;
+}
+.all .money_jilu .neirong .order .jz {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.all .money_jilu .neirong .order .orderid {
+  width: 17vw;
+}
+.all .money_jilu .neirong .order .beginTime {
+  width: 15vw;
+}
+.all .money_jilu .neirong .order .overTime {
+  width: 15vw;
+}
+.all .money_jilu .neirong .order .user {
+  width: 35vw;
+}
+.all .money_jilu .neirong .order .shouru {
+  width: 15vw;
+}
+.all .money_jilu .neirong .order .do {
+  width: 13.59vw;
+}
+.all .money_jilu .neirong .order .do .btn {
+  width: 62px;
+  height: 30px;
+  background: rgba(255, 135, 69, 0.05);
+  border: 1px solid #FF8745;
+  border-radius: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.868vw;
+  font-family: Source Han Sans CN;
+  font-weight: 400;
+  color: #FF8745;
+}
+.all .money_jilu .fenye {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-right: 1.24vw;
+}
+/*# sourceMappingURL=money_show_xq.css.map */

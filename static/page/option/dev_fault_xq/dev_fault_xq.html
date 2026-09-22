@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>上报详情</title>
+    <link rel="stylesheet" href="dev_fault_xq.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入Element UI样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入Element UI组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+<body>
+
+    <div id="home" class="home">
+        <el-card class="box-card">
+            <div slot="header" class="card-header">
+                <el-button icon="el-icon-arrow-left" type="text" @click="goBack">返回</el-button>
+                <span>上报详情</span>
+            </div>
+
+            <div v-if="loading" class="loading-container">
+                <el-alert
+                    title="正在加载数据..."
+                    type="info"
+                    :closable="false">
+                </el-alert>
+            </div>
+
+            <div v-if="!loading">
+                <el-divider content-position="left">基本信息</el-divider>
+                
+                <el-descriptions :column="2" border>
+                    <el-descriptions-item label="上报时间">
+                        {{fault.putTime}}
+                    </el-descriptions-item>
+                    
+                    <el-descriptions-item label="状态">
+                        <el-tag :type="getStatusType(fault.state)">{{fault.state}}</el-tag>
+                    </el-descriptions-item>
+                    
+                    <el-descriptions-item label="上报地址">
+                        {{fault.openid}}
+                    </el-descriptions-item>
+                    
+                    <el-descriptions-item label="车位锁编号">
+                        <el-tag type="primary">{{fault.lockmac}}</el-tag>
+                    </el-descriptions-item>
+                </el-descriptions>
+
+                <el-divider content-position="left">故障详情</el-divider>
+                
+                <div class="image-section">
+                    <h4 class="section-title">故障图片</h4>
+                    <div class="image-container">
+                        <el-image 
+                            v-if="fault.image"
+                            :src="fault.image" 
+                            :preview-src-list="[fault.image]"
+                            fit="cover"
+                            class="fault-image">
+                        </el-image>
+                        <div v-else class="no-image">暂无图片</div>
+                    </div>
+                </div>
+                
+                <div class="description-section">
+                    <h4 class="section-title">故障描述</h4>
+                    <el-card class="description-card">
+                        <div class="fault-description">{{fault.error || '无描述'}}</div>
+                    </el-card>
+                </div>
+                
+                <div class="action-buttons">
+                    <el-button type="danger" @click="updateState('待处理')">未处理</el-button>
+                    <el-button type="primary" @click="updateState('已处理')">已处理</el-button>
+                </div>
+            </div>
+        </el-card>
+    </div>
+
+<script>
+
+    window.onload=function(){
+        app.init();
+    }
+
+    let app = new Vue({
+        el:'#home',
+        data:{
+            fault:{},
+            loading: true
+        },
+        methods:{
+            init() {
+                const faultid = location.search.split('faultid=')[1];
+                if (!faultid) {
+                    this.$message.error('缺少故障ID参数');
+                    return;
+                }
+                
+                this.loading = true;
+                
+                axios.get('/system/getFaultById', {
+                    params: {
+                        faultid: faultid,
+                    }
+                }).then(response => {
+                    if (!response.data) {
+                        this.$message.error('未找到故障信息');
+                        this.loading = false;
+                        return;
+                    }
+                    
+                    axios.get('/wx/saoma', {
+                        params: {
+                            lockid: response.data.lockmac,
+                        }
+                    }).then(res => {
+                        if (res.data) {
+                            response.data.openid = res.data.province + res.data.city + res.data.district + res.data.streer;
+                        }
+                        this.fault = response.data;
+                        this.loading = false;
+                    }).catch(error => {
+                        console.error('获取地址信息失败', error);
+                        this.fault = response.data;
+                        this.loading = false;
+                    });
+                }).catch(error => {
+                    console.error('获取故障信息失败', error);
+                    this.$message.error('获取数据失败，请重试');
+                    this.loading = false;
+                });
+            },
+            getStatusType(status) {
+                switch(status) {
+                    case '待处理': return 'warning';
+                    case '已处理': return 'success';
+                    default: return 'info';
+                }
+            },
+            updateState(state){
+                this.$confirm(`确定将状态更改为"${state}"吗?`, '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    axios.get('/system/updateState', {
+                        params: {
+                            faultid: this.fault.faultid,
+                            state: state,
+                        }
+                    }).then(res => {
+                        this.$message.success(res.data);
+                        setTimeout(() => {
+                            this.goBack();
+                        }, 1000);
+                    }).catch(error => {
+                        console.error('更新状态失败', error);
+                        this.$message.error('更新状态失败，请重试');
+                    });
+                }).catch(() => {
+                    this.$message.info('已取消操作');
+                });
+            },
+            goBack() {
+                window.location.href = "../dev_fault/dev_fault.html";
+            }
+        }
+    });
+
+</script>
+
+</body>
+</html>

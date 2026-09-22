@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>分账管理</title>
+    <link rel="stylesheet" href="profit_sharing_config.css">
+    <script src="../../../js/system.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+
+<body>
+
+    <div class="home" id="home">
+
+        <div class="search" style="display: flex; align-items: center; flex-wrap: wrap;">
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="searchParams.spacesId" placeholder="请输入车位号查询"></el-input>
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="searchParams.receiverMchId" placeholder="请输入接收商户号查询"></el-input>
+            <el-button size="mini" type="info" style="margin-right:10px;" @click="searchList" plain>查询</el-button>
+            <el-button size="mini" type="warning" @click="resetSearch" plain>重置</el-button>
+        </div>
+
+        <div class="search" style="margin-top: 10px;">
+            <el-button size="mini" type="danger" @click="batchDelete()" plain>批量删除</el-button>
+            <el-button size="mini" type="primary" @click="showAddDialog()" plain>添加</el-button>
+        </div>
+
+        <div class="search" style="margin-top: 10px; font-size:12px;">
+            <el-table ref="multipleTable" :data="dataList" tooltip-effect="dark" style="width: 100%"
+                @selection-change="handleSelectionChange">
+                <el-table-column type="selection" width="55" align="center"></el-table-column>
+                <el-table-column prop="id" label="序号" width="80" align="center"></el-table-column>
+                <el-table-column prop="spacesId" label="车位号" width="100" align="center"></el-table-column>
+                <el-table-column prop="receiverMchId" label="接收商户号" width="180" align="center"
+                    show-overflow-tooltip></el-table-column>
+                <el-table-column prop="receiverName" label="接收方名称" width="150" align="center"
+                    show-overflow-tooltip></el-table-column>
+                <el-table-column prop="sharingRatio" label="分账比例(%)" width="120" align="center"></el-table-column>
+                <el-table-column prop="description" label="分账描述" width="200" align="center"
+                    show-overflow-tooltip></el-table-column>
+                <el-table-column prop="enabled" label="是否启用" width="100" align="center">
+                    <template slot-scope="scope">
+                        <el-tag :type="scope.row.enabled ? 'success' : 'danger'" size="mini">
+                            {{scope.row.enabled ? '启用' : '禁用'}}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="mode" label="分账金额" width="140" align="center">
+                    <template slot-scope="scope">
+                        {{getModeText(scope.row.mode)}}
+                    </template>
+                </el-table-column>
+                <el-table-column label="创建时间" width="180" align="center">
+                    <template slot-scope="scope">
+                        {{formatDateTime(scope.row.createTime)}}
+                    </template>
+                </el-table-column>
+                <el-table-column label="更新时间" width="180" align="center">
+                    <template slot-scope="scope">
+                        {{formatDateTime(scope.row.updateTime)}}
+                    </template>
+                </el-table-column>
+                <el-table-column width="150" label="操作" align="center" fixed="right">
+                    <template slot-scope="scope">
+                        <el-button size="mini" type="danger" @click="deleteItem(scope.row)" plain>删除</el-button>
+                        <el-button size="mini" type="primary" @click="showEditDialog(scope.row)" plain>修改</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+
+        <div style="margin-top:10px; float: right">
+            <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange"
+                :current-page="currentPage" :page-sizes="[10, 20, 30]" :page-size="pageSize"
+                layout="total, sizes, prev, pager, next, jumper" :total="total">
+            </el-pagination>
+        </div>
+
+        <el-dialog :title="dialogTitle" :visible.sync="showModal" width="600px" :close-on-click-modal="false">
+            <el-form :model="formData" :rules="rules" ref="formRef" label-width="120px">
+                <el-form-item label="车位号" prop="spacesId">
+                    <el-input v-model.number="formData.spacesId" placeholder="请输入车位号"></el-input>
+                </el-form-item>
+                <el-form-item label="接收商户号" prop="receiverMchId">
+                    <el-input v-model="formData.receiverMchId" placeholder="请输入接收商户号"></el-input>
+                </el-form-item>
+                <el-form-item label="接收方名称" prop="receiverName">
+                    <el-input v-model="formData.receiverName" placeholder="请输入接收方名称"></el-input>
+                </el-form-item>
+                <el-form-item label="分账比例(%)" prop="sharingRatio">
+                    <el-input-number v-model="formData.sharingRatio" :min="0" :max="100"
+                        placeholder="请输入分账比例"></el-input-number>
+                </el-form-item>
+                <el-form-item label="分账描述" prop="description">
+                    <el-input type="textarea" v-model="formData.description" placeholder="请输入分账描述"
+                        :rows="3"></el-input>
+                </el-form-item>
+                <el-form-item label="是否启用" prop="enabled">
+                    <el-switch v-model="formData.enabled"></el-switch>
+                </el-form-item>
+                <el-form-item label="分账金额" prop="mode">
+                    <el-radio-group v-model="formData.mode">
+                        <el-radio :label="1">服务费</el-radio>
+                        <el-radio :label="2">服务费+占位费</el-radio>
+                    </el-radio-group>
+                </el-form-item>
+            </el-form>
+            <span slot="footer" class="dialog-footer">
+                <el-button @click="closeModal" size="mini">取消</el-button>
+                <el-button type="primary" @click="submitForm" size="mini">确定</el-button>
+            </span>
+        </el-dialog>
+
+    </div>
+
+    <script>
+        let vm = new Vue({
+            el: "#home",
+            data() {
+                return {
+                    searchParams: {
+                        spacesId: '',
+                        receiverMchId: ''
+                    },
+                    dataList: [],
+                    currentPage: 1,
+                    pageSize: 10,
+                    total: 0,
+                    showModal: false,
+                    dialogTitle: '添加分账配置',
+                    isEdit: false,
+                    multipleSelection: [],
+                    formData: {
+                        id: null,
+                        spacesId: null,
+                        receiverMchId: '',
+                        receiverName: '',
+                        sharingRatio: 0,
+                        description: '',
+                        enabled: true,
+                        mode: 1
+                    },
+                    rules: {
+                        spacesId: [
+                            { required: true, message: '请输入车位号', trigger: 'blur' },
+                            { type: 'number', message: '车位号必须为数字', trigger: 'blur' }
+                        ],
+                        receiverMchId: [
+                            { required: true, message: '请输入接收商户号', trigger: 'blur' }
+                        ],
+                        receiverName: [
+                            { required: true, message: '请输入接收方名称', trigger: 'blur' }
+                        ],
+                        sharingRatio: [
+                            { required: true, message: '请输入分账比例', trigger: 'blur' }
+                        ]
+                    }
+                };
+            },
+            created() {
+                this.loadData();
+            },
+            mounted() {
+                // 添加键盘事件监听器，Enter键触发查询
+                document.addEventListener('keydown', this.handleKeyDown);
+            },
+            beforeDestroy() {
+                // 移除键盘事件监听器
+                document.removeEventListener('keydown', this.handleKeyDown);
+            },
+            methods: {
+                // 处理键盘按下事件
+                handleKeyDown(event) {
+                    // 如果按下的是Enter键，并且弹窗没有打开
+                    if ((event.keyCode === 13 || event.key === 'Enter') && !this.showModal) {
+                        this.searchList();
+                    }
+                },
+                loadData() {
+                    const loading = this.$loading({
+                        lock: true,
+                        text: '数据加载中...',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    this.searchList();
+                    loading.close();
+                },
+
+                searchList() {
+                    const params = {
+                        spacesId: this.searchParams.spacesId,
+                        receiverMchId: this.searchParams.receiverMchId,
+                        current: this.currentPage,
+                        size: this.pageSize
+                    };
+
+                    axios.get('/system/profitSharingConfig/list', { params })
+                        .then(res => {
+                            const data = res.data ? res.data.data : res;
+                            this.dataList = data.list;
+                            this.total = data.total;
+                        })
+                        .catch(err => {
+                            console.error('获取分账配置列表失败:', err);
+                            this.$message.error('获取分账配置列表失败');
+                        });
+                },
+
+                resetSearch() {
+                    this.searchParams = {
+                        spacesId: '',
+                        receiverMchId: ''
+                    };
+                    this.currentPage = 1;
+                    this.searchList();
+                },
+
+                handleSizeChange(pageSize) {
+                    this.pageSize = pageSize;
+                    this.searchList();
+                },
+
+                handleCurrentChange(pageNum) {
+                    this.currentPage = pageNum;
+                    this.searchList();
+                },
+
+                handleSelectionChange(val) {
+                    this.multipleSelection = val;
+                },
+
+                formatDateTime(dateTime) {
+                    if (!dateTime) return '-';
+                    return dateTime.replace('T', ' ').substring(0, 19);
+                },
+
+                getModeText(mode) {
+                    if (mode == 1 || mode === '1') return '服务费';
+                    if (mode == 2 || mode === '2') return '服务费+占位费';
+                    return '-';
+                },
+
+                showAddDialog() {
+                    this.dialogTitle = '添加分账配置';
+                    this.isEdit = false;
+                    this.formData = {
+                        id: null,
+                        spacesId: null,
+                        receiverMchId: '',
+                        receiverName: '',
+                        sharingRatio: 0,
+                        description: '',
+                        enabled: true,
+                        mode: 1
+                    };
+                    this.showModal = true;
+                    if (this.$refs.formRef) {
+                        this.$refs.formRef.clearValidate();
+                    }
+                },
+
+                showEditDialog(row) {
+                    this.dialogTitle = '修改分账配置';
+                    this.isEdit = true;
+                    this.formData = Object.assign({
+                        id: null,
+                        spacesId: null,
+                        receiverMchId: '',
+                        receiverName: '',
+                        sharingRatio: 0,
+                        description: '',
+                        enabled: true,
+                        mode: 1
+                    }, row);
+                    this.showModal = true;
+                    if (this.$refs.formRef) {
+                        this.$refs.formRef.clearValidate();
+                    }
+                },
+
+                closeModal() {
+                    this.showModal = false;
+                },
+
+                submitForm() {
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            if (this.isEdit) {
+                                this.updateItem();
+                            } else {
+                                this.addItem();
+                            }
+                        }
+                    });
+                },
+
+                addItem() {
+                    axios.post('/system/profitSharingConfig/add', this.formData)
+                        .then(res => {
+                            this.$message.success('添加成功');
+                            this.closeModal();
+                            this.searchList();
+                        })
+                        .catch(err => {
+                            console.error('添加失败:', err);
+                            this.$message.error('添加失败');
+                        });
+                },
+
+                updateItem() {
+                    axios.put('/system/profitSharingConfig/update', this.formData)
+                        .then(res => {
+                            this.$message.success('修改成功');
+                            this.closeModal();
+                            this.searchList();
+                        })
+                        .catch(err => {
+                            console.error('修改失败:', err);
+                            this.$message.error('修改失败');
+                        });
+                },
+
+                deleteItem(row) {
+                    this.$confirm('确定删除该分账配置吗?', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        axios.delete('/system/profitSharingConfig/delete/' + row.id)
+                            .then(res => {
+                                this.$message.success('删除成功');
+                                this.searchList();
+                            })
+                            .catch(err => {
+                                console.error('删除失败:', err);
+                                this.$message.error('删除失败');
+                            });
+                    }).catch(() => {
+                        this.$message({
+                            type: 'info',
+                            message: '已取消删除'
+                        });
+                    });
+                },
+
+                batchDelete() {
+                    if (this.multipleSelection.length === 0) {
+                        this.$message({
+                            message: '未选中任何数据！',
+                            type: 'warning'
+                        });
+                        return;
+                    }
+
+                    this.$confirm('确定批量删除这些分账配置吗?', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        const ids = this.multipleSelection.map(item => item.id);
+                        axios.delete('/system/profitSharingConfig/batchDelete', {
+                            data: ids
+                        }).then(res => {
+                            this.$message.success('批量删除成功');
+                            this.searchList();
+                            this.$refs.multipleTable.clearSelection();
+                        }).catch(err => {
+                            console.error('批量删除失败:', err);
+                            this.$message.error('批量删除失败');
+                        });
+                    }).catch(() => {
+                        this.$message({
+                            type: 'info',
+                            message: '已取消删除'
+                        });
+                    });
+                }
+            }
+        });
+    </script>
+
+</body>
+
+</html>

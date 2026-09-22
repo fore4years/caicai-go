@@ -1,9 +1,11 @@
 package conf
 
 type MqttConf struct {
-	Broker string
-	Port   int16
-	Qos    int8
+	Broker   string
+	Port     int16
+	Qos      int8
+	Username string
+	Password string
 }
 
 type RedisConf struct {

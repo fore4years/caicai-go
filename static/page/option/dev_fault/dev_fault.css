@@ -1,0 +1,12 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.search {
+  width: 100%;
+  box-shadow: 1px 0 6px rgba(0, 21, 41, 0.25);
+  border-radius: 5px;
+  padding: 12px 0 12px 10px;
+}

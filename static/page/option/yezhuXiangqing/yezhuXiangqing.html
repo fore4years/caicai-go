@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>业主详情</title>
+    <link rel="stylesheet" href="yezhuXiangqing.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入Element UI样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入Element UI组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+<body>
+
+<!-- 创建一个根元素 -->
+<div id="home" class="home">
+    <el-card class="box-card">
+        <div slot="header" class="card-header">
+            <el-button icon="el-icon-arrow-left" type="text" @click="goBack">返回</el-button>
+            <span>用户详情</span>
+        </div>
+
+        <div v-if="loading" class="loading-container">
+            <el-alert
+                    title="正在加载数据..."
+                    type="info"
+                    :closable="false">
+            </el-alert>
+        </div>
+
+        <div v-if="error" class="error-container">
+            <el-alert
+                    :title="errorMessage"
+                    type="error"
+                    @close="goBack">
+            </el-alert>
+            <div class="button-container" style="margin-top: 20px;">
+                <el-button type="primary" @click="goBack">返回列表</el-button>
+            </div>
+        </div>
+
+        <div v-if="!loading && !error">
+            <el-divider content-position="left">基本信息</el-divider>
+
+            <el-form label-width="120px" size="small">
+                <el-row :gutter="20">
+                    <el-col :span="8">
+                        <el-form-item label="姓名">
+                            <el-input v-model="placeApply.user.name" disabled></el-input>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                        <el-form-item label="身份证号">
+                            <el-input v-model="placeApply.user.idNumber" disabled></el-input>
+                        </el-form-item>
+                    </el-col>
+                </el-row>
+
+                <el-row :gutter="20">
+                    <el-col :span="8">
+                        <el-form-item label="街道">
+                            <el-input v-model="placeApply.streer" disabled></el-input>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                        <el-form-item label="小区/停车场">
+                            <el-input v-model="placeApply.relatedBuilding" disabled></el-input>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                        <el-form-item label="行政区">
+                            <el-input v-model="placeApply.district" disabled></el-input>
+                        </el-form-item>
+                    </el-col>
+                </el-row>
+            </el-form>
+
+            <el-divider content-position="left">审核材料</el-divider>
+
+            <el-row :gutter="20">
+                <el-col :span="12">
+                    <el-card shadow="hover">
+                        <div slot="header">
+                            <span>身份证</span>
+                        </div>
+                        <div class="image-container">
+                            <el-image
+                                    :src="cardEmblem"
+                                    fit="cover"
+                                    style="width: 300px; height: 200px; margin-right: 20px;"
+                                    :preview-src-list="[cardEmblem]">
+                            </el-image>
+                            <el-image
+                                    :src="cardAvatar"
+                                    fit="cover"
+                                    style="width: 300px; height: 200px;"
+                                    :preview-src-list="[cardAvatar]">
+                            </el-image>
+                        </div>
+                    </el-card>
+                </el-col>
+                <el-col :span="12">
+                    <el-card shadow="hover">
+                        <div slot="header">
+                            <span>车位产权证明</span>
+                        </div>
+                        <div class="image-container">
+                            <el-image
+                                    :src="certificateUrl"
+                                    fit="cover"
+                                    style="width: 300px; height: 200px;"
+                                    :preview-src-list="[certificateUrl]">
+                            </el-image>
+                        </div>
+                    </el-card>
+                </el-col>
+            </el-row>
+
+            <div class="button-container">
+                <el-button type="danger" plain @click="setEnableONid(false)">拒绝通过</el-button>
+                <el-button type="primary" @click="setEnableONid(true)">通过</el-button>
+            </div>
+        </div>
+    </el-card>
+</div>
+
+<script>
+    // 确保DOM完全加载后再初始化Vue
+    document.addEventListener('DOMContentLoaded', function () {
+        new Vue({
+            el: '#home',
+            data: {
+                placeApply: {},
+                cardEmblem: '',
+                cardAvatar: '',
+                certificateUrl: '',
+                loading: true,
+                error: false,
+                errorMessage: '',
+                placeId: null,
+                userName: '',
+                userIdNumber: ''
+            },
+            computed: {
+                // 计算属性确保数据安全访问
+                userInfo: function () {
+                    return this.placeApply.user || {};
+                }
+            },
+            watch: {
+                // 监听placeApply数据变化，更新用户信息
+                'placeApply': {
+                    handler: function (newVal) {
+                        if (newVal && newVal.user) {
+                            // 打印图片ID信息，便于调试
+                            console.log('用户信息:', newVal.user);
+                            console.log('身份证国徽面ID:', newVal.user.idCardEmblem);
+                            console.log('身份证头像面ID:', newVal.user.idCardAvatar);
+                            console.log('车位产权证明ID:', newVal.certificate);
+                            
+                            this.userName = newVal.user.name || '';
+                            this.userIdNumber = newVal.user.idNumber || '';
+                            
+                            // 加载身份证正面照片（国徽面）
+                            if (newVal.user.idCardEmblem) {
+                                this.loadImage(newVal.user.idCardEmblem, 'cardEmblem');
+                            }
+                            
+                            // 加载身份证反面照片（头像面）
+                            if (newVal.user.idCardAvatar) {
+                                this.loadImage(newVal.user.idCardAvatar, 'cardAvatar');
+                            }
+                            
+                            // 加载车位产权证明照片
+                            if (newVal.certificate) {
+                                this.loadImage(newVal.certificate, 'certificateUrl');
+                            }
+                        } else {
+                            this.userName = '';
+                            this.userIdNumber = '';
+                        }
+                    },
+                    deep: true,
+                    immediate: true
+                }
+            },
+            methods: {
+                // 根据图片ID加载图片
+                loadImage(imageId, targetProperty) {
+                    if (!imageId) {
+                        console.warn(`图片ID为空，无法加载 - 目标: ${targetProperty}`);
+                        return;
+                    }
+
+                    // 设置一个默认的加载中图片
+                    this[targetProperty] = '../../../img/loading.gif';
+                    
+                    // 构建图片URL，使用image/getById接口
+                    const imageUrl = `/image/getById?id=${imageId}`;
+                    
+                    // 验证图片是否可访问
+                    const img = new Image();
+                    img.onload = () => {
+                        // 图片加载成功，更新URL
+                        this[targetProperty] = imageUrl;
+                    };
+                    img.onerror = () => {
+                        // 图片加载失败，设置默认图片
+                        this[targetProperty] = '../../../img/image-not-found.png';
+                    };
+                    img.src = imageUrl;
+                },
+                
+                openImg(url) {
+                    window.open(url, "_blank");
+                },
+
+                goBack() {
+                    const from = this.getUrlParams().from;
+                    if (from === 'place_list') {
+                        window.location.href = "../place_list/place_list.html";
+                    } else {
+                        window.location.href = "../yezhu/yezhu.html";
+                    }
+                },
+
+                getUrlParams() {
+                    // 获取URL中的所有参数
+                    const params = {};
+                    const queryString = window.location.search.substring(1);
+                    const pairs = queryString.split('&');
+
+                    for (let i = 0; i < pairs.length; i++) {
+                        const pair = pairs[i].split('=');
+                        params[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+                    }
+
+                    console.log("URL参数:", params);
+                    return params;
+                },
+
+                loadData() {
+                    const params = this.getUrlParams();
+                    const placeid = params.placeid;
+
+                    console.log("URL中的placeid参数:", placeid);
+
+                    if (!placeid || placeid === 'undefined' || placeid === 'null') {
+                        this.loading = false;
+                        this.error = true;
+                        this.errorMessage = "缺少有效的placeid参数，无法加载数据";
+                        console.error("placeid参数无效:", placeid);
+                        return;
+                    }
+
+                    this.placeId = placeid; // 保存placeid用于后续操作
+                    
+                    console.log("开始获取车位信息...");
+                    axios.get('/system/getByPlaceId', {
+                        params: {
+                            placeid: placeid
+                        }
+                    }).then(response => {
+                        this.loading = false;
+                        const data = response.data || response;
+                        console.log("获取车位返回数据:", data);
+                        
+                        // 确保data是正确的格式
+                        if (data && data.data) {
+                            console.log("使用data.data作为placeApply");
+                            this.placeApply = data.data;
+                        } else {
+                            console.log("直接使用data作为placeApply");
+                            this.placeApply = data;
+                        }
+                        
+                        // 验证placeApply数据
+                        console.log("最终的placeApply数据:", this.placeApply);
+                        if (this.placeApply && this.placeApply.user) {
+                            console.log("用户数据:", this.placeApply.user);
+                        } else {
+                            console.error("用户数据不存在或格式不正确");
+                        }
+                    }).catch(error => {
+                        this.loading = false;
+                        this.error = true;
+                        this.errorMessage = "获取数据失败";
+                        console.error("获取数据失败:", error);
+                    });
+                },
+                
+                // 设置用户启用状态
+                setEnableONid(enable) {
+                    if (!this.placeId) {
+                        this.$message.error('缺少placeid参数');
+                        return;
+                    }
+                    
+                    // 这里需要根据您的接口实现调用后端API
+                    const message = enable ? '确认通过审核？' : '确认拒绝通过？';
+                    const successMsg = enable ? '审核通过成功' : '已拒绝通过';
+                    
+                    this.$confirm(message, '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: enable ? 'success' : 'warning'
+                    }).then(() => {
+                        // 调用后端API
+                        axios.post('/system/updatePlaceStatus', {
+                            placeid: this.placeId,
+                            enable: enable
+                        }).then(response => {
+                            this.$message.success(successMsg);
+                            this.goBack(); // 返回列表页
+                        }).catch(error => {
+                            this.$message.error('操作失败');
+                            console.error('操作失败:', error);
+                        });
+                    }).catch(() => {
+                        this.$message.info('已取消操作');
+                    });
+                }
+            },
+            mounted() {
+                // 在Vue实例挂载后获取数据
+                this.loadData();
+            }
+        });
+    });
+</script>
+
+<style>
+.card-header {
+    display: flex;
+    align-items: center;
+}
+.card-header span {
+    margin-left: 10px;
+}
+</style>
+
+</body>
+</html>

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>运维审核</title>
+    <link rel="stylesheet" href="om_enable.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+
+<body>
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search">
+        <el-input
+                size="mini"
+                style="width: 200px; margin-right :10px; font-size:13px; "
+                v-model="params.phone"
+                placeholder="请输入手机号查询"
+        ></el-input>
+        <el-button size="mini" type="info" @click="getOmUserByPhone()" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="reset()" plain>重置</el-button>
+    </div>
+
+    <!-- 添加-删除 -->
+    <div class="search" style="margin-top: 10px;">
+        <el-button size="mini" type="danger" @click="BatchDelete()" plain :disabled="!isAdmin" :title="isAdmin ? '批量删除选中的运维用户信息' : '无权限操作，请联系管理员'">批量删除</el-button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table
+                ref="multipleTable"
+                :data="tableData"
+                tooltip-effect="dark"
+                style="width: 100%"
+                @selection-change="handleSelectionChange"
+        >
+            <el-table-column type="selection" width="55"></el-table-column>
+            <el-table-column type="index" label="序号" width="80"></el-table-column>
+            <el-table-column prop="name" label="用户姓名" width="250"></el-table-column>
+            <el-table-column prop="idNumber" label="身份证号" width="300"></el-table-column>
+            <el-table-column prop="phone" label="手机号" width="180"></el-table-column>
+            <el-table-column prop="omEnable" label="状态" width="120">
+                <template slot-scope="scope">
+                    <span :style="{ color: getStatusColor(scope.row.omEnable) }">
+                    {{ formatStatus(scope.row.omEnable) }}
+                    </span>
+                </template>
+            </el-table-column>
+            <el-table-column width="250px" label="操作">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="success" @click="handlePass(scope.$index, scope.row)" :disabled="!isAdmin" :title="isAdmin ? '通过该运维用户审核' : '无权限操作，请联系管理员'">通过</el-button>
+                    <el-button size="mini" type="danger" @click="handleRefuse(scope.$index, scope.row)" :disabled="!isAdmin" :title="isAdmin ? '拒绝该运维用户审核' : '无权限操作，请联系管理员'">拒绝</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="params.pageNum"
+                :page-sizes="[10, 20, 30]"
+                :page-size="params.pageSize"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total"
+        ></el-pagination>
+    </div>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                formLabelWidth: '100px', //表单内每行的宽度
+                isAdmin: false, // 管理员权限状态
+                //表单校验
+                params: {
+                    phone: "",
+                    pageNum: 1,
+                    pageSize: 10
+                },
+                total: 0,
+                tableData: [],
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.checkAdminStatus();
+            this.loadData();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                if ((event.keyCode === 13 || event.key === 'Enter')) {
+                    this.getOmUserByPhone();
+                }
+            },
+            // 检查管理员权限状态
+            checkAdminStatus() {
+                // 从Cookie中获取用户信息
+                let username = this.getCookie('username');
+                if (username) {
+                    // 发送请求检查管理员状态
+                    axios.get('/system/checkAdmin', {
+                        params: {
+                            account: username
+                        }
+                    }).then(response => {
+                        if (response.data.code === 200) {
+                            this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                        } else {
+                            this.isAdmin = false;
+                            console.error('获取管理员状态失败:', response.data.msg);
+                        }
+                    }).catch(error => {
+                        this.isAdmin = false;
+                        console.error('检查管理员状态出错:', error);
+                    });
+                } else {
+                    this.isAdmin = false;
+                    console.warn('未找到用户信息，默认非管理员状态');
+                }
+            },
+
+            // 获取Cookie中的用户信息
+            getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+            },
+
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.init();
+
+                loading.close(); // 关闭加载提示
+            },
+
+            // 获取数据
+            init() {
+                axios.get('/system/user/getOmUserInfoAll', {
+                    params: {
+                        current: this.params.pageNum,
+                        size: this.params.pageSize,
+                    }
+                }).then(res => {
+                    console.log("init 方法 :", res)
+                    console.log("init 方法 :", res.data)
+
+                    // 这里暂不知道是什么问题，接口返回的格式不一样，先这样处理
+                    const data = res.data ? res.data.data : res;
+
+                    console.log("init 方法 data :", data)
+
+                    this.tableData = data.list;
+                    this.total = data.total;
+                })
+            },
+
+            formatStatus(status) {
+                console.log("formatStatus 方法 :", status)
+                switch (status) {
+                    case "1":
+                        return '已通过';
+                    case "-1":
+                        return '未通过';
+                    case "0":
+                        return '待审核';
+                    default:
+                        return '未知状态';
+                }
+            },
+            getStatusColor(status) {
+                switch (status) {
+                    case "1":
+                        return 'green';
+                    case "-1":
+                        return 'red';
+                    case "0":
+                        return 'orange';
+                    default:
+                        return 'black';
+                }
+            },
+
+            // 根据phone查询
+            getOmUserByPhone() {
+                this.params.phone = this.params.phone.trim();
+                console.log("this.params.phone :", this.params.phone)
+                if (this.params.phone === "") {
+                    this.init();
+                } else {
+                    axios.get('/system/user/getOmUserByPhone', {
+                        params: {
+                            phone: this.params.phone,
+                            current: this.params.pageNum,
+                            size: this.params.pageSize
+                        }
+                    }).then(res => {
+                        console.log(res)
+                        this.tableData = res.list;
+                        this.total = res.total;
+                        console.log("this.tableData :", this.tableData)
+                    })
+                }
+            },
+
+            // 通过按钮
+            handlePass(index, row) {
+                console.log(index, row.omid)
+                axios.get('/system/user/updateOmEnable', {
+                    params: {
+                        enable: 1,
+                        openId: row.omid
+                    }
+                }).then(res => {
+                    console.log(res)
+                    if (res) {
+                        this.$message({
+                            message: "操作成功!",
+                            type: "success"
+                        });
+                        this.init();
+                    } else {
+                        this.$message({
+                            message: "操作失败!",
+                            type: "error"
+                        });
+                    }
+                })
+            },
+
+            // 拒绝按钮
+            handleRefuse(index, row) {
+                axios.get('/system/user/updateOmEnable', {
+                    params: {
+                        enable: -1,
+                        openId: row.omid
+                    }
+                }).then(res => {
+                    console.log(res)
+                    if (res) {
+                        this.$message({
+                            message: "操作成功!",
+                            type: "success"
+                        });
+                        this.init();
+                    } else {
+                        this.$message({
+                            message: "操作失败!",
+                            type: "error"
+                        });
+                    }
+                })
+            },
+
+            // 删除按钮
+            handleDelete(index, row) {
+                console.log(row.id)
+                // 提示是否删除
+                this.$confirm("此操作将永久删除此充电站, 是否继续?", "提示", {
+                    confirmButtonText: "确定",
+                    cancelButtonText: "取消",
+                    type: "warning"
+                })
+                    .then(() => {
+                        axios.delete(`/system/chargeStation/deleteById/${row.id}`).then(res => {
+                            if (res) {
+                                this.$message({
+                                    message: "删除成功!",
+                                    type: "success"
+                                });
+                                this.init();
+                            } else {
+                                this.$message({
+                                    message: "删除失败!",
+                                    type: "error"
+                                });
+                            }
+                        })
+                    }).catch(() => {
+                    this.$message({
+                        type: "info",
+                        message: "已取消删除"
+                    });
+                });
+            },
+
+            // 批量删除请求
+            BatchDelete() {
+                console.log(this.multipleSelection)
+                // 提示是否删除
+                this.$confirm("确定批量删除吗?", "提示", {
+                    confirmButtonText: "确定",
+                    cancelButtonText: "取消",
+                    type: "warning"
+                })
+                    .then(() => {
+                        console.log("批量删除")
+                    })
+                    .catch(() => {
+                        this.$message({
+                            type: "info",
+                            message: "已取消批量删除"
+                        });
+                    });
+            },
+
+            // 存放选中的数据，要批量删除的数据
+            handleSelectionChange(val) {
+                this.multipleSelection = val;
+                console.log(this.multipleSelection)
+            },
+
+            // 重置
+            reset() {
+                this.params.phone = "";
+                console.log("reset 方法 执行 :")
+                this.init();
+            },
+
+            // 分页
+            handleSizeChange(pageSize) {
+                this.params.pageSize = pageSize;
+                this.init();
+            },
+
+            handleCurrentChange(pageNum) {
+                this.params.pageNum = pageNum;
+                this.init();
+            },
+
+        },
+    });
+
+</script>
+
+
+</body>
+
+</html>

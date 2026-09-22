@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>订单管理</title>
+    <link rel="stylesheet" href="orderManage.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+
+<body>
+
+    <!-- 创建一个根元素 -->
+    <div class="home" id="home">
+
+        <!-- 搜索框 -->
+        <div class="search" style="display: flex; align-items: center; flex-wrap: wrap;">
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="searchParams.orderid" placeholder="请输入订单ID查询"></el-input>
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.openid"
+                placeholder="请输入用户openid查询"></el-input>
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.phone"
+                placeholder="请输入手机号查询"></el-input>
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.address"
+                      placeholder="请输入地址查询"></el-input>
+            <el-date-picker size="mini"
+                style="width: 150px; margin-right:10px; font-size:13px; display: flex; align-items: center;"
+                v-model="searchParams.startDate" type="date" placeholder="开始日期">
+            </el-date-picker>
+            <el-date-picker size="mini"
+                style="width: 150px; margin-right:10px; font-size:13px; display: flex; align-items: center;"
+                v-model="searchParams.endDate" type="date" placeholder="结束日期">
+            </el-date-picker>
+            <!-- 订单类型搜索框，根据条件显示或隐藏 -->
+            <div style="display: flex; align-items: center; margin-right: 10px;" v-if="!hideTypeFilter">
+                <p style="font-size: 12px; margin-right: 10px; color: #6d6f73;">订单类型:</p>
+                <el-select size="mini" style="width: 150px; font-size:13px;" v-model="searchParams.consumptionType"
+                    placeholder="订单类型">
+                    <el-option value="" label="全部"></el-option>
+                    <el-option value="驿享充电" label="驿享充电"></el-option>
+                    <el-option value="邻享充电" label="邻享充电"></el-option>
+                    <el-option value="踩踩停车" label="逸泊停车"></el-option>
+                    <el-option value="二轮车充电" label="二轮车充电"></el-option>
+                </el-select>
+            </div>
+            <div style="display: flex; align-items: center; margin-right: 10px;">
+                <p style="font-size: 12px; margin-right: 10px; color: #6d6f73;">订单状态:</p>
+                <el-select size="mini" style="width: 150px; font-size:13px;" v-model="searchParams.state"
+                    placeholder="订单状态">
+                    <el-option value="" label="全部"></el-option>
+                    <el-option value="已完成" label="已完成"></el-option>
+                    <el-option value="使用中" label="使用中"></el-option>
+                    <el-option value="已预约" label="已预约"></el-option>
+                    <el-option value="预约中" label="预约中"></el-option>
+                    <el-option value="进行中" label="进行中"></el-option>
+                    <el-option value="已取消" label="已取消"></el-option>
+                </el-select>
+            </div>
+            <el-button size="mini" type="info" style="margin-right:10px;" @click="searchOrders" plain>查询</el-button>
+            <el-button size="mini" type="warning" @click="resetSearch" plain>重置</el-button>
+        </div>
+
+        <!-- 添加-删除 -->
+        <div class="search" style="margin-top: 10px;">
+            <el-button size="mini" type="danger" @click="batchDelete()" 
+                :disabled="!isAdmin" 
+                :title="isAdmin ? '批量删除选中的订单' : '非管理员无权限删除订单'"
+                plain>批量删除</el-button>
+        </div>
+
+
+        <!-- 表格 -->
+        <div class="search" style="margin-top: 10px; font-size:12px;">
+            <el-table ref="multipleTable" :data="orderList" tooltip-effect="dark" style="width: 100%"
+                @selection-change="handleSelectionChange">
+                <el-table-column type="selection" width="55" align="center"></el-table-column>
+                <el-table-column type="index" label="序号" width="50" align="center"></el-table-column>
+                <el-table-column prop="orderid" label="订单ID" width="200" align="center"
+                    show-overflow-tooltip></el-table-column>
+<!--                <el-table-column prop="openid" label="用户openid" width="280" align="center"-->
+<!--                    show-overflow-tooltip></el-table-column>-->
+                <el-table-column label="开始(解锁/落锁)时间" width="180" align="center">
+                    <template slot-scope="scope">
+                        {{formatDateTime(scope.row.beginTime)}}
+                    </template>
+                </el-table-column>
+                <el-table-column label="结束(还枪)时间" width="180" align="center">
+                    <template slot-scope="scope">
+                        {{formatDateTime(scope.row.overTime)}}
+                    </template>
+                </el-table-column>
+                <el-table-column prop="chargingTime" label="充电时长" width="100" align="center"></el-table-column>
+                <el-table-column prop="chargingDegree" label="充电电量(度)" width="120" align="center"></el-table-column>
+                <el-table-column prop="basicConsumption" label="消费金额(元)" width="120" align="center"></el-table-column>
+                <el-table-column prop="state" label="订单状态" width="100" align="center">
+                    <template slot-scope="scope">
+                        <el-tag :type="getStateType(scope.row.state)" size="mini">{{scope.row.state}}</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column width="150" label="操作" align="center" fixed="right">
+                    <template slot-scope="scope">
+                        <el-button size="mini" type="primary" @click="showOrderDetail(scope.row)" plain>详情</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+
+        <!-- 分页 -->
+        <div style="margin-top:10px; float: right">
+            <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange"
+                :current-page="currentPage" :page-sizes="[10, 20, 30]" :page-size="pageSize"
+                layout="total, sizes, prev, pager, next, jumper" :total="total">
+            </el-pagination>
+        </div>
+
+        <!-- 订单详情弹窗 -->
+        <el-dialog title="订单详情" :visible.sync="showModal" width="80%" :close-on-click-modal="false">
+            <div class="modal-body">
+                <!-- 二轮车充电订单详情 -->
+                <el-descriptions :column="3" border v-if="currentOrder.consumptionType == '二轮车充电'">
+                    <el-descriptions-item label="订单ID">{{currentOrder.orderid}}</el-descriptions-item>
+                    <el-descriptions-item label="用户openid">{{currentOrder.openid}}</el-descriptions-item>
+                    <el-descriptions-item label="用户手机号">{{currentOrder.phone || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="充电桩主机箱编号">{{currentOrder.pid || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="插座编号">{{currentOrder.lockid || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="充电模式">{{currentOrder.twiceChargeTime || '充满自停'}}</el-descriptions-item>
+                    <el-descriptions-item label="下单时间">{{formatDateTime(currentOrder.reserveTime)}}</el-descriptions-item>
+                    <el-descriptions-item label="开始时间">{{formatDateTime(currentOrder.beginTime)}}</el-descriptions-item>
+                    <el-descriptions-item label="结束时间">{{formatDateTime(currentOrder.overTime)}}</el-descriptions-item>
+                    <el-descriptions-item label="充电时长">{{currentOrder.chargingTime}}</el-descriptions-item>
+                    <el-descriptions-item label="充电电量">{{currentOrder.chargingDegree == null ? '0' : currentOrder.chargingDegree}} 度</el-descriptions-item>
+                    <el-descriptions-item label="充电最大功率">{{currentOrder.maxPower || 0}} W</el-descriptions-item>
+                    <el-descriptions-item label="消费类型">{{currentOrder.consumptionType}}</el-descriptions-item>
+                    <el-descriptions-item label="消费位置">{{currentOrder.consumptionLocation}}</el-descriptions-item>
+                    <el-descriptions-item label="本次消费总金额">{{currentOrder.basicConsumption}} 元</el-descriptions-item>
+                    <el-descriptions-item label="本次消费电费">{{currentOrder.powerRate || 0}} 元</el-descriptions-item>
+                    <el-descriptions-item label="本次消费服务费">{{currentOrder.serviceRate || 0}} 元</el-descriptions-item>
+                    <el-descriptions-item label="订单状态">
+                        <el-tag :type="getStateType(currentOrder.state)" size="mini">{{currentOrder.state}}</el-tag>
+                    </el-descriptions-item>
+                </el-descriptions>
+
+                <!-- 其他类型订单详情 -->
+                <el-descriptions :column="3" border v-else>
+                    <el-descriptions-item label="订单ID">{{currentOrder.orderid}}</el-descriptions-item>
+                    <el-descriptions-item label="用户openid">{{currentOrder.openid}}</el-descriptions-item>
+                    <el-descriptions-item label="用户手机号">{{currentOrder.phone || '-'}}</el-descriptions-item>
+                    <el-descriptions-item label="车牌号" v-if="currentOrder.consumptionType == '踩踩停车'">
+                        {{currentOrder.plateNum}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="车位ID" v-if="currentOrder.consumptionType !== '踩踩停车'">
+                        {{currentOrder.spacesId}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="车位锁ID" v-if="currentOrder.consumptionType == '踩踩停车'">
+                        {{currentOrder.lockid}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="下单(预约)时间">{{formatDateTime(currentOrder.reserveTime)}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="开始(解锁/落锁)时间">{{formatDateTime(currentOrder.beginTime)}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="结束(还枪)时间">{{formatDateTime(currentOrder.overTime)}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="订单关闭时间">{{formatDateTime(currentOrder.closeTime)}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="预约开始充电时间" v-if="currentOrder.consumptionType == '驿享充电'">
+                        {{formatDateTime(currentOrder.bookingStartTime)}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="预约结束充电时间" v-if="currentOrder.consumptionType == '驿享充电'">
+                        {{formatDateTime(currentOrder.bookingEndTime)}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="充满时间"
+                        v-if="currentOrder.consumptionType == '驿享充电' || currentOrder.consumptionType == '邻享充电'">
+                        {{formatDateTime(currentOrder.fullTime)}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="车辆驶离时间" v-if="currentOrder.consumptionType == '驿享充电'">
+                        {{formatDateTime(currentOrder.leaveTime)}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="充电时长(开始时间-结束时间)">{{currentOrder.chargingTime}}</el-descriptions-item>
+                    <el-descriptions-item label="充电电量">{{currentOrder.chargingDegree == null ? '0' :
+                        currentOrder.chargingDegree}} 度
+                    </el-descriptions-item>
+                    <el-descriptions-item label="消费类型">{{currentOrder.consumptionType === '踩踩停车' ? '逸泊停车' : currentOrder.consumptionType}}</el-descriptions-item>
+                    <el-descriptions-item label="消费位置">{{currentOrder.consumptionLocation}}</el-descriptions-item>
+                    <el-descriptions-item label="本次消费总金额">{{currentOrder.basicConsumption}} 元</el-descriptions-item>
+                    <el-descriptions-item label="本次消费电费">{{currentOrder.powerRate || 0}} 元</el-descriptions-item>
+                    <el-descriptions-item label="本次消费服务费">{{currentOrder.serviceRate || 0}} 元</el-descriptions-item>
+                    <el-descriptions-item label="本次消费超时停车费" v-if="currentOrder.consumptionType == '驿享充电'">{{currentOrder.timeoutCar || 0}} 元</el-descriptions-item>
+                    <el-descriptions-item label="本次消费超时停车费" v-if="currentOrder.consumptionType == '邻享充电'">{{currentOrder.timeoutCar || 0}} 元</el-descriptions-item>
+                    <el-descriptions-item label="本次预约充电位定金" v-if="currentOrder.consumptionType == '驿享充电' && currentOrder.state == '已取消' && currentOrder.basicConsumption == 0 && currentOrder.decideAmount != null">{{currentOrder.decideAmount}} 元</el-descriptions-item>
+                    <el-descriptions-item label="充电枪是否拔下" v-if="currentOrder.consumptionType !== '踩踩停车'">
+                        {{currentOrder.chargeGunPull == 1 ? '是' : '否'}}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="订单状态">
+                        <el-tag :type="getStateType(currentOrder.state)" size="mini">{{currentOrder.state}}</el-tag>
+                    </el-descriptions-item>
+                </el-descriptions>
+            </div>
+            <span slot="footer" class="dialog-footer">
+                <el-button @click="closeModal" size="mini">关闭</el-button>
+            </span>
+        </el-dialog>
+
+    </div>
+
+    <script>
+        // 将vue挂载到id为home的根元素上
+        let vm = new Vue({
+            el: "#home",
+            data() {
+                return {
+                    searchParams: {
+                        orderid: '',
+                        openid: '',
+                        phone: '',
+                        startDate: '',
+                        endDate: '',
+                        state: '',
+                        consumptionType: '',
+                        address: ''
+                    },
+                    orderList: [],
+                    currentPage: 1,
+                    pageSize: 10,
+                    total: 0,
+                    showModal: false,
+                    currentOrder: {},
+                    multipleSelection: [],
+                    isAdmin: false, // 管理员状态，默认为false
+                    hideTypeFilter: false // 是否隐藏订单类型搜索框
+                };
+            },
+            // 钩子函数 -- 初始化
+            created() {
+                // 获取URL参数中的订单类型
+                this.getOrderTypeFromUrl();
+                this.checkAdminStatus();
+                this.loadData();
+            },
+            mounted() {
+                // 添加键盘事件监听器，Enter键触发查询
+                document.addEventListener('keydown', this.handleKeyDown);
+            },
+            beforeDestroy() {
+                // 移除键盘事件监听器
+                document.removeEventListener('keydown', this.handleKeyDown);
+            },
+            methods: {
+                // 处理键盘按下事件
+                handleKeyDown(event) {
+                    // 如果按下的是Enter键，并且弹窗没有打开
+                    if ((event.keyCode === 13 || event.key === 'Enter') && !this.showModal) {
+                        this.searchOrders();
+                    }
+                },
+                // 从URL参数获取订单类型
+                getOrderTypeFromUrl() {
+                    // 获取URL中的查询参数
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const type = urlParams.get('type');
+                    if (type) {
+                        // 如果有type参数，设置订单类型并隐藏订单类型搜索框
+                        this.searchParams.consumptionType = type;
+                        this.hideTypeFilter = true;
+                    }
+                },
+
+                // 检查管理员状态
+                checkAdminStatus() {
+                    // 从Cookie中获取用户信息
+                    let username = this.getCookie('username');
+                    if (username) {
+                        // 发送请求检查管理员状态
+                        axios.get('/system/checkAdmin', {
+                            params: {
+                                account: username
+                            }
+                        }).then(response => {
+                            if (response.data.code === 200) {
+                                this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                            } else {
+                                this.isAdmin = false;
+                                console.error('获取管理员状态失败:', response.data.msg);
+                            }
+                        }).catch(error => {
+                            this.isAdmin = false;
+                            console.error('检查管理员状态出错:', error);
+                        });
+                    } else {
+                        this.isAdmin = false;
+                        console.warn('未找到用户信息，默认非管理员状态');
+                    }
+                },
+                
+                // 从Cookie获取值
+                getCookie(name) {
+                    let value = '; ' + document.cookie;
+                    let parts = value.split('; ' + name + '=');
+                    if (parts.length === 2) {
+                        return parts.pop().split(';').shift();
+                    }
+                    return null;
+                },
+
+                loadData() {
+                    const loading = this.$loading({
+                        lock: true,
+                        text: '数据加载中...',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    // 更新页面数据
+                    this.searchOrders();
+
+                    loading.close(); // 关闭加载提示
+                },
+
+                searchOrders() {
+                    // 将日期转换为所需的格式
+                    const startDate = this.formatDate(this.searchParams.startDate, true);
+                    const endDate = this.formatDate(this.searchParams.endDate);
+
+                    const params = {
+                        orderid: this.searchParams.orderid,
+                        openid: this.searchParams.openid,
+                        phone: this.searchParams.phone,
+                        startDate: startDate,
+                        endDate: endDate,
+                        state: this.searchParams.state,
+                        consumptionType: this.searchParams.consumptionType,
+                        address: this.searchParams.address,
+                        current: this.currentPage,
+                        size: this.pageSize
+                    };
+
+                    axios.get('/system/orderManage/list', { params })
+                        .then(res => {
+                            console.log(res)
+
+                            // 这里暂不知道是什么问题，接口返回的格式不一样，先这样处理
+                            const data = res.data ? res.data.data : res;
+
+                            this.orderList = data.list;
+                            this.total = data.total;
+                        })
+                        .catch(err => {
+                            console.error('获取订单列表失败:', err);
+                            this.$message.error('获取订单列表失败');
+                        });
+                },
+
+                resetSearch() {
+                    this.searchParams = {
+                        orderid: '',
+                        openid: '',
+                        phone: '',
+                        startDate: '',
+                        endDate: '',
+                        state: '',
+                        consumptionType: '',
+                        address: ''
+                    };
+                    this.currentPage = 1;
+                    this.searchOrders();
+                },
+
+                handleSizeChange(pageSize) {
+                    this.pageSize = pageSize;
+                    this.searchOrders();
+                },
+
+                handleCurrentChange(pageNum) {
+                    this.currentPage = pageNum;
+                    this.searchOrders();
+                },
+
+                /**
+                 * 根据openid获取用户手机号
+                 * @param openid 用户openid
+                 */
+                async getUserPhone(openid) {
+                    if (!openid) {
+                        console.warn('openid为空，无法获取用户手机号');
+                        this.$set(this.currentOrder, 'phone', '未获取');
+                        return;
+                    }
+
+                    try {
+                        console.log('获取用户手机号，openid:', openid);
+                        const res = await axios.get(`/user/getUserInfoByOpenId/${openid}`);
+                        console.log('获取用户信息返回:', res);
+                        console.log('res对象类型:', typeof res);
+                        console.log('res对象键名:', Object.keys(res));
+                        
+                        // 根据日志，res本身就是用户数据对象，直接使用
+                        if (res && res.phone !== undefined) {
+                            console.log('手机号字段值:', res.phone);
+                            this.$set(this.currentOrder, 'phone', res.phone ? res.phone : '未获取');
+                        } else {
+                            console.log('用户数据中phone字段不存在或为undefined');
+                            this.$set(this.currentOrder, 'phone', '未获取');
+                        }
+                    } catch (error) {
+                        console.error('获取用户手机号失败:', error);
+                        // 更详细的错误日志
+                        if (error) {
+                            console.error('错误对象:', error);
+                            console.error('错误消息:', error.message);
+                            console.error('错误堆栈:', error.stack);
+                            if (error.response) {
+                                console.error('HTTP状态码:', error.response.status);
+                                console.error('响应数据:', error.response.data);
+                            }
+                        } else {
+                            console.error('错误对象为undefined，可能是网络问题或接口不存在');
+                        }
+                        this.$set(this.currentOrder, 'phone', '获取失败');
+                    }
+                },
+
+                async showOrderDetail(order) {
+                    // 使用Vue.set或Object.assign来确保响应式更新
+                    this.currentOrder = Object.assign({}, order, {
+                        powerRate: 0,
+                        serviceRate: 0,
+                        timeoutCar: 0,
+                        maxPower: 0,
+                        phone: ''
+                    });
+                    this.showModal = true;
+
+                    // 获取用户手机号
+                    await this.getUserPhone(order.openid);
+                    // 计算订单费用详情
+                    this.calculateOrderFees(order);
+                },
+
+                closeModal() {
+                    this.showModal = false;
+                },
+
+                /**
+                 * 计算订单费用详情
+                 * @param order 订单对象
+                 */
+                async calculateOrderFees(order) {
+                    console.log('calculateOrderFees', order);
+
+                    try {
+                        let powerRate = 0;
+                        let serviceRate = 0;
+                        let timeoutCar = 0;
+                        
+                        // 根据订单类型获取费用信息
+                        if (order.consumptionType === '二轮车充电') {
+                            // 二轮车充电订单
+                            try {
+                                console.log('调用二轮车充电接口，订单ID:', order.orderid);
+                                const res = await axios.get(`/orderTwice/getByOpenid/${order.orderid}`);
+                                console.log('二轮车充电接口返回:', res);
+                                if (res) {
+                                    powerRate = res.totalFee || 0;
+                                    serviceRate = res.serviceFee || 0;
+                                    const maxPower = res.maxPower || 0;
+                                    this.$set(this.currentOrder, 'maxPower', maxPower);
+                                }
+                            } catch (error) {
+                                console.error('获取二轮车充电订单费用失败:', error);
+                                if (error && error.response) {
+                                    console.error('错误详情:', error.response);
+                                }
+                            }
+                        } else if (order.consumptionType === '邻享充电') {
+                            // 邻享充电订单
+                            try {
+                                console.log('调用邻享充电接口，订单ID:', order.orderid);
+                                const res = await axios.get('/orderElectronic/getElectronicByPrivateOrderidAndPrivateUser', { 
+                                    params: { orderid: order.orderid } 
+                                });
+                                console.log('获取邻享充电订单费用：', res);
+                                if (res) {
+                                    powerRate = res.totalFee || 0;
+                                    serviceRate = res.serviceFee || 0;
+                                    
+                                    // 查询当前订单是否是桩主所充，是桩主则设置服务费为0
+                                    try {
+                                        console.log('查询桩主信息，订单ID:', order.orderid);
+                                        const privateRes = await axios.get(`/privatePlace/getByOrder/${order.orderid}`);
+                                        console.log('查询当前订单是否是桩主所充：', privateRes);
+                                        
+                                        if (privateRes) {
+                                            serviceRate = 0;
+                                        }
+                                    } catch (privateError) {
+                                        console.warn('查询邻享订单桩主信息失败:', privateError);
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('获取邻享充电订单费用失败:', error);
+                                if (error && error.response) {
+                                    console.error('错误详情:', error.response);
+                                    console.error('请求URL:', '/orderElectronic/getElectronicByPrivateOrderidAndPrivateUser');
+                                    console.error('请求参数:', { orderid: order.orderid });
+                                }
+                            }
+                        } else {
+                            // 驿享充电等其他类型订单
+                            try {
+                                console.log('调用驿享充电接口，订单ID:', order.orderid);
+                                const res = await axios.get('/orderElectronic/getElectronicByOrderid', { 
+                                    params: { orderid: order.orderid } 
+                                });
+                                console.log('驿享充电接口返回:', res);
+                                if (res) {
+                                    powerRate = res.totalFee || 0;
+                                    serviceRate = res.serviceFee || 0;
+                                }
+                            } catch (error) {
+                                console.error('获取订单费用失败:', error);
+                                if (error && error.response) {
+                                    console.error('错误详情:', error.response);
+                                }
+                            }
+                        }
+
+                        // 使用Vue.set确保响应式更新，或者使用$forceUpdate强制更新视图
+                        this.$set(this.currentOrder, 'powerRate', powerRate);
+                        this.$set(this.currentOrder, 'serviceRate', serviceRate);
+                        
+                        // 计算超时停车费：总消费 - 服务费 - 电费
+                        const basicConsumption = order.basicConsumption || 0;
+                        let calculatedTimeoutCar = basicConsumption - serviceRate - powerRate;
+                        
+                        // 对于驿享充电和邻享充电订单，如果超时停车费低于0.1元则设置为0
+                        if ((order.consumptionType === '驿享充电' || order.consumptionType === '邻享充电') && calculatedTimeoutCar < 0.1) {
+                            timeoutCar = 0;
+                        } else {
+                            timeoutCar = calculatedTimeoutCar.toFixed(2);
+                        }
+                        
+                        this.$set(this.currentOrder, 'timeoutCar', timeoutCar);
+                        
+                        // 强制更新视图以确保显示最新数据
+                        this.$forceUpdate();
+                        
+                        console.log('费用计算完成:', {
+                            powerRate,
+                            serviceRate,
+                            timeoutCar,
+                            basicConsumption
+                        });
+                        
+                    } catch (error) {
+                        console.error('计算订单费用失败:', error);
+                        if (error && error.response) {
+                            console.error('外层错误详情:', error.response);
+                        }
+                        // 设置默认值
+                        this.currentOrder.powerRate = 0;
+                        this.currentOrder.serviceRate = 0;
+                        this.currentOrder.timeoutCar = 0;
+                    }
+                },
+
+                formatDateTime(dateTime) {
+                    if (!dateTime) return '-';
+                    return dateTime.replace('T', ' ').substring(0, 19);
+                },
+
+                // 日期格式化函数
+                formatDate(date, isEndDate = false) {
+                    if (!date) return '';
+
+                    const d = new Date(date);
+                    const year = d.getFullYear();
+                    const month = this.padZero(d.getMonth() + 1); // 月份从0开始
+                    const day = this.padZero(d.getDate());
+
+                    // 对于结束日期，需要将时间设置为00:00:00
+                    let time = '';
+                    if (isEndDate) {
+                        time = ' 00:00:00.000';
+                    } else {
+                        time = ' 23:59:59.999'; // 如果是开始日期，设置为前一天的23:59:59
+                    }
+
+                    return `${year}-${month}-${day}${time}`;
+                },
+
+                // 补零函数
+                padZero(num) {
+                    return num < 10 ? `0${num}` : num;
+                },
+
+                // 存放选中的数据
+                handleSelectionChange(val) {
+                    this.multipleSelection = val;
+                },
+
+                // 获取订单状态对应的标签类型
+                getStateType(state) {
+                    switch (state) {
+                        case '已完成':
+                            return 'success';
+                        case '进行中':
+                            return 'warning';
+                        case '已取消':
+                            return 'info';
+                        default:
+                            return '';
+                    }
+                },
+
+                // 批量删除
+                batchDelete() {
+                    if (this.multipleSelection.length === 0) {
+                        this.$message({
+                            message: '未选中任何订单！',
+                            type: 'warning'
+                        });
+                        return;
+                    }
+
+                    this.$confirm('确定批量删除这些订单信息吗?', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        const ids = this.multipleSelection.map(item => item.orderid);
+                        // 发送删除请求
+                        axios.delete('/system/orderManage/batchDelete', {
+                            data: ids
+                        }).then(response => {
+                            console.log(response)
+                            if (response) {
+                                this.$message({
+                                    type: 'success',
+                                    message: '批量删除成功'
+                                });
+                                // 刷新列表
+                                this.searchOrders();
+                                // 清空选中状态
+                                this.$refs.multipleTable.clearSelection();
+                            } else {
+                                this.$message.error(response.data.msg || '批量删除失败');
+                            }
+                        }).catch(error => {
+                            console.error('批量删除请求失败:', error);
+                            this.$message.error('批量删除失败：' + (error.response?.data?.msg || '服务器错误'));
+                        });
+                    }).catch(() => {
+                        this.$message({
+                            type: 'info',
+                            message: '已取消删除'
+                        });
+                    });
+                },
+
+                // 导出订单
+                exportOrders() {
+                    // 这里需要后端接口支持，暂时只做前端展示
+                    this.$message({
+                        message: '订单导出功能开发中',
+                        type: 'info'
+                    });
+                }
+            }
+        });
+    </script>
+
+</body>
+
+</html>

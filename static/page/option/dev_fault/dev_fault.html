@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>故障上报</title>
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <link rel="stylesheet" href="dev_fault.css">
+</head>
+<body>
+
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search">
+        <el-input
+                size="mini"
+                style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="params.tiaojian"
+                placeholder="请输入车位锁编号查询"
+        ></el-input>
+        <el-button size="mini" type="info" @click="sousuoanniu(1)" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="reset()" plain>重置</el-button>
+    </div>
+
+    <!-- 添加-删除 -->
+    <div class="search" style="margin-top: 10px;">
+        <el-button size="mini" type="danger" 
+                   :disabled="!isAdmin" 
+                   :title="isAdmin ? '批量删除选中的故障记录' : '无权限操作，请联系管理员'"
+                   @click="delmush()" plain>批量删除</el-button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table
+                ref="multipleTable"
+                :data="tableData"
+                tooltip-effect="dark"
+                style="width: 100%"
+                @selection-change="handleSelectionChange"
+                :row-class-name="tableRowClassName"
+        >
+            <el-table-column type="selection" width="55"></el-table-column>
+            <el-table-column type="index" label="序号" width="80"></el-table-column>
+            <el-table-column prop="putTime" label="上报时间" width="180"></el-table-column>
+            <el-table-column prop="image" label="地址" width="350"></el-table-column>
+            <el-table-column prop="lockmac" label="车位锁编号" width="160"></el-table-column>
+            <el-table-column prop="error" label="故障原因" width="180"></el-table-column>
+            <el-table-column prop="state" label="状态" width="120">
+                <template slot-scope="scope">
+                    <span :style="{ color: getStatusColor(scope.row.state) }">
+                        {{ scope.row.state }}
+                    </span>
+                </template>
+            </el-table-column>
+            <el-table-column width="120px" label="操作">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="primary" @click="goxq(scope.row.faultid)">查看详情</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="params.current"
+                :page-sizes="[10, 20, 30]"
+                :page-size="params.size"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total">
+        </el-pagination>
+    </div>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                formLabelWidth: '100px', //表单内每行的宽度
+                //表单校验
+                params: {
+                    tiaojian: "",
+                    current: 1,
+                    size: 10
+                },
+                total: 0,
+                tableData: [],
+                multipleSelection: [],
+                yisousuo: false,
+                isAdmin: false // 管理员状态
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.checkAdminStatus();
+            this.loadData();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                if ((event.keyCode === 13 || event.key === 'Enter')) {
+                    this.sousuoanniu(1);
+                }
+            },
+            // 检查管理员状态
+            checkAdminStatus() {
+                // 从Cookie中获取用户信息
+                let username = this.getCookie('username');
+                if (username) {
+                    // 发送请求检查管理员状态
+                    axios.get('/system/checkAdmin', {
+                        params: {
+                            account: username
+                        }
+                    }).then(response => {
+                        if (response.data.code === 200) {
+                            this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                        } else {
+                            this.isAdmin = false;
+                            console.error('获取管理员状态失败:', response.data.msg);
+                        }
+                    }).catch(error => {
+                        this.isAdmin = false;
+                        console.error('检查管理员状态出错:', error);
+                    });
+                } else {
+                    this.isAdmin = false;
+                    console.warn('未找到用户信息，默认非管理员状态');
+                }
+            },
+
+            // 从Cookie获取值
+            getCookie(name) {
+                let value = '; ' + document.cookie;
+                let parts = value.split('; ' + name + '=');
+                if (parts.length === 2) {
+                    return parts.pop().split(';').shift();
+                }
+                return null;
+            },
+
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.getFault(1);
+
+                loading.close(); // 关闭加载提示
+            },
+
+            // 获取故障列表
+            getFault(page) {
+                this.params.current = page;
+                this.yisousuo = false;
+
+                axios.get('/system/getFault', {
+                    params: {
+                        page: this.params.current,
+                        length: this.params.size,
+                    }
+                }).then(res => {
+                    this.total = res.data.max;
+
+                    const faults = res.data.list;
+                    const promises = faults.map(item => {
+                        // 截断过长的故障原因
+                        if(item.error.length > 4) {
+                            item.error = item.error.substring(0, 4) + '...';
+                        }
+
+                        // 获取地址信息
+                        return axios.get('/wx/saoma', {
+                            params: {
+                                lockid: item.lockmac
+                            }
+                        }).then(addressRes => {
+                            item.image = '' + addressRes.data.province + addressRes.data.city +
+                                addressRes.data.district + addressRes.data.streer;
+                            return item;
+                        });
+                    });
+
+                    Promise.all(promises).then(updatedList => {
+                        this.tableData = updatedList;
+                    });
+                });
+            },
+
+            // 根据状态获取颜色
+            getStatusColor(status) {
+                if (status === '已处理') return 'green';
+                else return 'red';
+            },
+
+            // 表格行样式
+            tableRowClassName({row}) {
+                if (row.state === '已处理') {
+                    return 'success-row';
+                } else {
+                    return 'danger-row';
+                }
+            },
+
+            // 搜索按钮
+            sousuoanniu(page) {
+                this.params.current = page;
+                this.yisousuo = false;
+
+                axios.get('/system/fault/sousuo', {
+                    params: {
+                        tiaojian: this.params.tiaojian,
+                        page: this.params.current,
+                        length: this.params.size
+                    }
+                }).then(res => {
+                    if (!res.data) {
+                        this.$message({
+                            message: '未搜索到数据',
+                            type: 'warning'
+                        });
+                        this.total = 0;
+                        this.tableData = [];
+                    } else {
+                        this.total = res.data.max;
+
+                        const faults = res.data.list;
+                        const promises = faults.map(item => {
+                            // 截断过长的故障原因
+                            if(item.error.length > 4) {
+                                item.error = item.error.substring(0, 4) + '...';
+                            }
+
+                            // 获取地址信息
+                            return axios.get('/wx/saoma', {
+                                params: {
+                                    lockid: item.lockmac
+                                }
+                            }).then(addressRes => {
+                                item.image = '' + addressRes.data.province + addressRes.data.city +
+                                    addressRes.data.district + addressRes.data.streer;
+                                return item;
+                            });
+                        });
+
+                        Promise.all(promises).then(updatedList => {
+                            this.tableData = updatedList;
+
+                            if (!this.yisousuo) {
+                                this.yisousuo = true;
+                                this.$message({
+                                    message: `为您搜索到${res.data.max}条数据！`,
+                                    type: 'success'
+                                });
+                            }
+                        });
+                    }
+                });
+            },
+
+            // 批量删除
+            delmush() {
+                if (this.multipleSelection.length === 0) {
+                    this.$message({
+                        message: '未选中任何选项！',
+                        type: 'warning'
+                    });
+                    return;
+                }
+
+                this.$confirm('确定批量删除这些故障记录吗?', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    const ids = this.multipleSelection.map(item => item.faultid);
+                    axios.post('/system/faultMushDel', {
+                        xuanzhong: ids
+                    }).then(res => {
+                        this.$message({
+                            message: res.data,
+                            type: 'success'
+                        });
+                        this.getFault(1);
+                    });
+                }).catch(() => {
+                    this.$message({
+                        type: 'info',
+                        message: '已取消删除'
+                    });
+                });
+            },
+
+            // 查看详情
+            goxq(faultid) {
+                window.location.href = "../dev_fault_xq/dev_fault_xq.html?faultid=" + faultid;
+            },
+
+            // 存放选中的数据
+            handleSelectionChange(val) {
+                this.multipleSelection = val;
+            },
+
+            // 重置
+            reset() {
+                this.params.tiaojian = "";
+                this.yisousuo = false;
+                this.getFault(1);
+            },
+
+            // 分页
+            handleSizeChange(pageSize) {
+                this.params.size = pageSize;
+                this.getFault(this.params.current);
+            },
+
+            handleCurrentChange(pageNum) {
+                this.params.current = pageNum;
+                this.getFault(pageNum);
+            }
+        }
+    });
+</script>
+
+</body>
+</html>

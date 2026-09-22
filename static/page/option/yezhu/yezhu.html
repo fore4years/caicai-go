@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>车位审核</title>
+    <link rel="stylesheet" href="yezhu.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+<body>
+
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search">
+        <el-input
+                size="mini"
+                style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="params.tiaojian"
+                placeholder="请输入关键字查询"
+        ></el-input>
+        <el-button size="mini" type="info" @click="sousuoanniu(1)" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="reset()" plain>重置</el-button>
+    </div>
+
+    <!-- 添加-删除 -->
+    <div class="search" style="margin-top: 10px;">
+        <el-button size="mini" type="danger" @click="mushDel()" :disabled="!isAdmin" :title="isAdmin ? '批量删除选中的车位信息' : '无权限操作，请联系管理员'" plain>批量删除</el-button>
+        
+        <!-- 添加筛选功能 -->
+        <el-radio-group v-model="params.radio" style="margin-left: 20px;" @change="opChange(1)">
+            <el-radio label="已通过">已通过</el-radio>
+            <el-radio label="待审核">待审核</el-radio>
+            <el-radio label="未通过">未通过</el-radio>
+        </el-radio-group>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table
+                ref="multipleTable"
+                :data="tableData"
+                tooltip-effect="dark"
+                style="width: 100%"
+                @selection-change="handleSelectionChange"
+                :row-class-name="tableRowClassName"
+        >
+            <el-table-column type="selection" width="55"></el-table-column>
+            <el-table-column type="index" label="序号" width="80"></el-table-column>
+            <el-table-column prop="province" label="车位地址" width="300">
+                <template slot-scope="scope">
+                    {{scope.row.province + scope.row.city + scope.row.district + scope.row.relatedBuilding}}
+                </template>
+            </el-table-column>
+            <el-table-column prop="city" label="车位城市" width="180"></el-table-column>
+            <el-table-column prop="state" label="状态" width="150">
+                <template slot-scope="scope">
+                    <span :style="{ color: getStatusColor(scope.row.state) }">
+                    {{ formatStatus(scope.row.state) }}
+                    </span>
+                </template>
+            </el-table-column>
+            <el-table-column width="280px" label="操作">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="primary" @click="openAbout(scope.row.placeid)">查看详情</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="params.current"
+                :page-sizes="[10, 20, 30]"
+                :page-size="params.size"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total">
+        </el-pagination>
+    </div>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                formLabelWidth: '100px', //表单内每行的宽度
+                //表单校验
+                params: {
+                    tiaojian: "",
+                    current: 1,
+                    size: 10,
+                    radio: ''
+                },
+                total: 0,
+                tableData: [],
+                multipleSelection: [],
+                isAdmin: false // 管理员状态，默认为false
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.checkAdminStatus();
+            this.loadData();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                if ((event.keyCode === 13 || event.key === 'Enter')) {
+                    this.sousuoanniu(1);
+                }
+            },
+            // 检查管理员状态
+            checkAdminStatus() {
+                // 从Cookie中获取用户信息
+                let username = this.getCookie('username');
+                if (username) {
+                    // 发送请求检查管理员状态
+                    axios.get('/system/checkAdmin', {
+                        params: {
+                            account: username
+                        }
+                    }).then(response => {
+                        if (response.data.code === 200) {
+                            this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                        } else {
+                            this.isAdmin = false;
+                            console.error('获取管理员状态失败:', response.data.msg);
+                        }
+                    }).catch(error => {
+                        this.isAdmin = false;
+                        console.error('检查管理员状态出错:', error);
+                    });
+                } else {
+                    this.isAdmin = false;
+                    console.warn('未找到用户信息，默认非管理员状态');
+                }
+            },
+            
+            // 从Cookie获取值
+            getCookie(name) {
+                let value = '; ' + document.cookie;
+                let parts = value.split('; ' + name + '=');
+                if (parts.length === 2) {
+                    return parts.pop().split(';').shift();
+                }
+                return null;
+            },
+
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.init();
+
+                loading.close(); // 关闭加载提示
+            },
+
+            // 获取数据
+            init() {
+                axios.get('/system/allPlace', {
+                    params: {
+                        current: this.params.current,
+                        size: this.params.size,
+                    }
+                }).then(res => {
+                    console.log("/system/allPlace", res);
+                    this.tableData = res.data.list;
+                    this.total = res.data.max;
+                });
+            },
+
+            formatStatus(status) {
+                if (status === '可使用') return '已通过';
+                else if (status === '未通过') return '未通过';
+                else return '待审核';
+            },
+            
+            getStatusColor(status) {
+                if (status === '可使用') return 'green';
+                else if (status === '未通过') return 'red';
+                else return 'orange';
+            },
+
+            // 行样式
+            tableRowClassName({row}) {
+                if (row.state === '可使用') {
+                    return 'success-row';
+                } else if (row.state === '未通过') {
+                    return 'danger-row';
+                } else {
+                    return 'warning-row';
+                }
+            },
+
+            // 搜索按钮
+            sousuoanniu(page) {
+                this.params.current = page;
+                if (this.params.tiaojian === "") {
+                    this.init();
+                } else {
+                    axios.get('/spaces/searchAll', {
+                        params: {
+                            current: this.params.current,
+                            size: this.params.size,
+                            key: this.params.tiaojian
+                        }
+                    }).then(res => {
+                        this.tableData = res.data.data.list;
+                        this.total = res.data.data.total;
+                    });
+                }
+            },
+
+            // 筛选功能
+            opChange(page) {
+                this.params.current = page;
+                const params = {
+                    current: this.params.current,
+                    size: this.params.size
+                };
+                
+                switch (this.params.radio) {
+                    case '待审核':
+                    default:
+                        break;
+                    case '已通过':
+                        params['enable'] = true;
+                        break;
+                    case '未通过':
+                        params['enable'] = false;
+                        break;
+                }
+                
+                axios.get("/spaces/getByEnable", {
+                    params: params,
+                }).then((res) => {
+                    console.log("分类返回", res.data);
+                    this.tableData = res.data.data.list;
+                    this.total = res.data.data.total;
+                });
+            },
+
+            // 批量删除
+            mushDel() {
+                if (this.multipleSelection.length === 0) {
+                    this.$message({
+                        message: '未选中任何选项！',
+                        type: 'warning'
+                    });
+                    return;
+                }
+                
+                this.$confirm("确定批量删除吗?", "提示", {
+                    confirmButtonText: "确定",
+                    cancelButtonText: "取消",
+                    type: "warning"
+                }).then(() => {
+                    const ids = this.multipleSelection.map(item => item.id);
+                    axios.post('/system/mushDel', {
+                        xuanzhong: ids
+                    }).then(res => {
+                        this.$message({
+                            message: res.data,
+                            type: 'success'
+                        });
+                        this.init();
+                    });
+                }).catch(() => {
+                    this.$message({
+                        type: "info",
+                        message: "已取消批量删除"
+                    });
+                });
+            },
+
+            // 查看详情
+            openAbout(placeid) {
+                console.log("查看详情ID: ", placeid);
+                if (!placeid) {
+                    this.$message.error("无法查看详情：placeid不存在");
+                    return;
+                }
+                window.location.href = "../yezhuXiangqing/yezhuXiangqing.html?placeid=" + placeid;
+            },
+
+            // 存放选中的数据，要批量删除的数据
+            handleSelectionChange(val) {
+                this.multipleSelection = val;
+            },
+
+            // 重置
+            reset() {
+                this.params.tiaojian = "";
+                this.params.radio = "";
+                this.init();
+            },
+
+            // 通过按钮
+            handlePass(index, row) {
+                axios.get('/spaces/updateEnable', {
+                    params: {
+                        enable: true,
+                        id: row.id
+                    }
+                }).then(res => {
+                    if (res.data.code === 200) {
+                        this.$message({
+                            message: "操作成功!",
+                            type: "success"
+                        });
+                        this.init();
+                    } else {
+                        this.$message({
+                            message: "操作失败!",
+                            type: "error"
+                        });
+                    }
+                });
+            },
+
+            // 拒绝按钮
+            handleRefuse(index, row) {
+                axios.get('/spaces/updateEnable', {
+                    params: {
+                        enable: false,
+                        id: row.id
+                    }
+                }).then(res => {
+                    if (res.data.code === 200) {
+                        this.$message({
+                            message: "操作成功!",
+                            type: "success"
+                        });
+                        this.init();
+                    } else {
+                        this.$message({
+                            message: "操作失败!",
+                            type: "error"
+                        });
+                    }
+                });
+            },
+
+            // 分页
+            handleSizeChange(pageSize) {
+                this.params.size = pageSize;
+                this.init();
+            },
+
+            handleCurrentChange(pageNum) {
+                this.params.current = pageNum;
+                this.init();
+            },
+        },
+    });
+</script>
+
+</body>
+</html>

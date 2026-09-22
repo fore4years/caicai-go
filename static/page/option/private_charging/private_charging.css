@@ -1,0 +1,65 @@
+/* 私桩管理样式 */
+.home {
+    margin: 10px;
+    font-family: 'Arial', sans-serif;
+}
+
+.search {
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: #f5f7fa;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.search input {
+    margin-right: 10px;
+}
+
+.search button {
+    margin-right: 10px;
+}
+
+.modal-body {
+    padding: 15px;
+}
+
+.no-data {
+    text-align: center;
+    padding: 20px;
+    color: #909399;
+}
+
+.el-table {
+    background-color: #fff;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.el-table__header-wrapper th {
+    background-color: #f5f7fa;
+    font-weight: bold;
+    color: #606266;
+}
+
+.el-pagination {
+    margin-top: 20px;
+}
+
+/* 响应式设计 */
+@media screen and (max-width: 768px) {
+    .search {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .search input, .search button {
+        margin-right: 0;
+        margin-bottom: 10px;
+        width: 100%;
+    }
+    
+    .el-dialog {
+        width: 90% !important;
+    }
+}

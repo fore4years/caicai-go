@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>充电桩实时状态</title>
+    <link rel="stylesheet" href="charge_state.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+
+<body>
+
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search" style="display: flex; align-items: center; flex-wrap: wrap;">
+        <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.productId"
+                  placeholder="请输入产品ID查询"></el-input>
+        <el-button size="mini" type="info" style="margin-right:10px;" @click="searchStates" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="resetSearch" plain>重置</el-button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table ref="multipleTable" :data="stateList" tooltip-effect="dark" style="width: 100%"
+                  @selection-change="handleSelectionChange">
+            <el-table-column type="selection" width="55" align="center"></el-table-column>
+            <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+            <el-table-column prop="productId" label="产品ID" width="180" align="center"
+                             show-overflow-tooltip></el-table-column>
+            <el-table-column prop="direction" label="设备方向" width="150" align="center" show-overflow-tooltip>
+                <template slot-scope="scope">
+                    <span v-if="scope.row.direction === 'L'">左</span>
+                    <span v-else-if="scope.row.direction === 'R'">右</span>
+                    <span v-else-if="scope.row.direction === 'D'">私桩（不分左右）</span>
+                    <span v-else>{{ scope.row.direction }}</span>
+                </template>
+            </el-table-column>
+            <el-table-column prop="emergencyButtonState" label="应急按钮状态" width="120" align="center">
+                <template slot-scope="scope">
+                    <span v-if="scope.row.emergencyButtonState === 'Pressed'">打开</span>
+                    <span v-else>{{ scope.row.emergencyButtonState }}</span>
+                </template>
+            </el-table-column>
+            <el-table-column prop="model" label="设备型号" width="120" align="center">
+                <template slot-scope="scope">
+                    <span>{{ scope.row.model }}V</span>
+                </template>
+            </el-table-column>
+            <el-table-column prop="area" label="区域" width="120" align="center"></el-table-column>
+            <el-table-column prop="address" label="安装位置" width="260" align="center"></el-table-column>
+            <el-table-column prop="createTime" label="创建时间" width="180" align="center"></el-table-column>
+            <el-table-column prop="updateTime" label="更新时间" width="180" align="center"></el-table-column>
+            <el-table-column width="150" label="操作" align="center" fixed="right">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="primary" @click="showStateDetail(scope.row)" plain>详情</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange"
+                       :current-page="currentPage" :page-sizes="[10, 20, 30]" :page-size="pageSize"
+                       layout="total, sizes, prev, pager, next, jumper" :total="total">
+        </el-pagination>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <el-dialog title="信息详情" :visible.sync="showModal" width="50%" :close-on-click-modal="false">
+        <div class="modal-body">
+            <el-descriptions :column="2" border>
+                <el-descriptions-item label="产品ID">{{currentState.productId}}</el-descriptions-item>
+                <el-descriptions-item label="设备方向" v-if="currentState.direction != 'D'">{{currentState.direction == 'L' ? '左' : '右'}}</el-descriptions-item>
+                <el-descriptions-item label="设备方向" v-else>私桩（不分左右）</el-descriptions-item>
+                <el-descriptions-item label="应急按钮状态">{{currentState.emergencyButtonState == 'Pressed' ? '打开' : currentState.emergencyButtonState}}</el-descriptions-item>
+                <el-descriptions-item label="设备型号">{{currentState.model}}V</el-descriptions-item>
+                <el-descriptions-item label="安装位置">{{currentState.address}}</el-descriptions-item>
+                <el-descriptions-item label="安装区域">{{currentState.area}}</el-descriptions-item>
+                <el-descriptions-item label="片区运维负责人">{{currentState.areaOmName}}</el-descriptions-item>
+                <el-descriptions-item label="负责人联系电话">{{currentState.areaOmPhone}}</el-descriptions-item>
+                <el-descriptions-item label="设备产权人">{{currentState.productOwnership}}</el-descriptions-item>
+                <el-descriptions-item label="联系电话">{{currentState.phone}}</el-descriptions-item>
+                <el-descriptions-item label="创建时间">{{currentState.createTime}}</el-descriptions-item>
+                <el-descriptions-item label="更新时间">{{currentState.updateTime}}
+                </el-descriptions-item>
+            </el-descriptions>
+        </div>
+        <span slot="footer" class="dialog-footer">
+                <el-button @click="closeModal" size="mini">关闭</el-button>
+        </span>
+    </el-dialog>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                searchParams: {
+                    productId: ''
+                },
+                stateList: [],
+                currentPage: 1,
+                pageSize: 10,
+                total: 0,
+                showModal: false,
+                currentState: {},
+                multipleSelection: []
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.loadData();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                // 如果按下的是Enter键，并且弹窗没有打开
+                if ((event.keyCode === 13 || event.key === 'Enter') && !this.showModal) {
+                    this.searchStates();
+                }
+            },
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.searchStates();
+
+                loading.close(); // 关闭加载提示
+            },
+
+            searchStates() {
+                const params = {
+                    productId: this.searchParams.productId,
+                    current: this.currentPage,
+                    size: this.pageSize
+                };
+
+                axios.get('/system/chargeState/list', {params})
+                    .then(res => {
+                        console.log(res)
+
+                        // 这里暂不知道是什么问题，接口返回的格式不一样，先这样处理
+                        const data = res.data ? res.data.data : res;
+
+                        this.stateList = data.list;
+                        this.total = data.total;
+                    })
+                    .catch(err => {
+                        console.error('获取状态列表失败:', err);
+                        this.$message.error('获取状态列表失败');
+                    });
+            },
+
+            resetSearch() {
+                this.searchParams = {
+                    productId: '',
+                };
+                this.currentPage = 1;
+                this.searchStates();
+            },
+
+            handleSizeChange(pageSize) {
+                this.pageSize = pageSize;
+                this.searchStates();
+            },
+
+            handleCurrentChange(pageNum) {
+                this.currentPage = pageNum;
+                this.searchStates();
+            },
+
+            showStateDetail(state) {
+                this.currentState = state;
+                this.showModal = true;
+            },
+
+            // 关闭详情
+            closeModal() {
+                this.showModal = false;
+            },
+
+            // 存放选中的数据
+            handleSelectionChange(val) {
+                console.log(val)
+                this.multipleSelection = val;
+            },
+
+        }
+    });
+</script>
+
+</body>
+
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>用户管理</title>
+    <link rel="stylesheet" href="user_manage.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+<body>
+
+<div id="app" v-cloak>
+    <div class="container">
+        <div class="header">
+            <h2>用户管理</h2>
+            <div class="loading" v-if="loading">
+                <span>正在加载用户数据...</span>
+            </div>
+        </div>
+
+        <div class="user-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>序号</th>
+                        <th>账号</th>
+                        <th>密码</th>
+                        <th>是否为管理员</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="user in users" :key="user.id">
+                        <td>{{ user.id }}</td>
+                        <td>{{ user.account }}</td>
+                        <td>{{ user.password ? '******' : '无密码' }}</td>
+                        <td>
+                            <span :class="['status', user.isAdmin ? 'admin' : 'user']">
+                                {{ user.isAdmin ? '是' : '否' }}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="edit-btn" @click="editUserAdminStatus(user)">编辑</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="no-data" v-if="!loading && users.length === 0">
+            <p>暂无用户数据</p>
+        </div>
+        
+        <!-- 编辑用户管理员状态对话框 -->
+        <div id="edit-dialog" class="dialog-overlay" v-if="showEditDialog">
+            <div class="dialog-content">
+                <div class="dialog-header">
+                    <h3>修改用户权限</h3>
+                    <span class="close-btn" @click="closeEditDialog">&times;</span>
+                </div>
+                <div class="dialog-body">
+                    <div class="form-group">
+                        <label>用户账号：</label>
+                        <div class="form-group-content">
+                            <span class="user-account">{{ editingUser.account }}</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>当前身份：</label>
+                        <div class="form-group-content">
+                            <span class="current-status">{{ editingUser.isAdmin ? '管理员' : '普通用户' }}</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>设置为管理员：</label>
+                        <div class="form-group-content">
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" v-model="editingUser.isAdmin" :value="true">
+                                    <span class="radio-label">是</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" v-model="editingUser.isAdmin" :value="false">
+                                    <span class="radio-label">否</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" @click="closeEditDialog">取消</button>
+                    <button class="btn-confirm" @click="saveUserAdminStatus">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 等待所有资源加载完成后再创建Vue实例
+    window.onload = function() {
+        new Vue({
+            el: '#app',
+            data: function() {
+                return {
+                    users: [],
+                    loading: true,
+                    showEditDialog: false,
+                    editingUser: {
+                        id: null,
+                        account: '',
+                        isAdmin: false
+                    }
+                };
+            },
+            mounted: function() {
+                this.loadUsers();
+            },
+            methods: {
+                loadUsers: function() {
+                    var self = this;
+                    // 调用后端接口获取真实用户数据
+                    axios.get('/system/getAllUsers')
+                        .then(function(response) {
+                            // 检查响应数据结构
+                            var responseData = response.data;
+                            var allUsers = [];
+                            
+                            // 如果是标准响应格式，检查code
+                            if (responseData && typeof responseData === 'object' && responseData.code === 200) {
+                                allUsers = responseData.data || [];
+                            }
+                            // 如果responseData是对象但没有code字段，尝试直接使用data字段
+                            else if (responseData && typeof responseData === 'object' && responseData.data) {
+                                allUsers = Array.isArray(responseData.data) ? responseData.data : [responseData.data];
+                            }
+                            // 如果responseData本身已经包含了用户数据（可能是数组），直接使用
+                            else if (Array.isArray(responseData)) {
+                                allUsers = responseData;
+                            }
+                            // 如果以上都不符合，可能是直接的用户数据对象
+                            else if (responseData && typeof responseData === 'object') {
+                                allUsers = [responseData];
+                            }
+                            else {
+                                console.error('获取用户数据失败: 无法解析响应数据结构');
+                                allUsers = [];
+                            }
+                            
+                            // 过滤用户数据：只显示isAdmin值为0或1的用户，不显示isAdmin值为2的用户
+                            self.users = allUsers.filter(function(user) {
+                                return user.isAdmin === 0 || user.isAdmin === 1;
+                            });
+                            
+                            self.loading = false;
+                        })
+                        .catch(function(error) {
+                            console.error('调用接口失败:', error);
+                            self.users = [];
+                            self.loading = false;
+                            alert('获取用户数据失败，请检查后端服务是否正常运行');
+                        });
+                },
+                editUserAdminStatus: function(user) {
+                    // 复制用户数据到编辑对象，避免直接修改原数据
+                    this.editingUser = {
+                        id: user.id,
+                        account: user.account,
+                        isAdmin: user.isAdmin
+                    };
+                    this.showEditDialog = true;
+                },
+                closeEditDialog: function() {
+                    this.showEditDialog = false;
+                    this.editingUser = {
+                        id: null,
+                        account: '',
+                        isAdmin: false
+                    };
+                },
+                saveUserAdminStatus: function() {
+                    var self = this;
+                    if (!this.editingUser.id) {
+                        alert('用户ID不能为空');
+                        return;
+                    }
+
+                    // 准备请求参数，确保格式正确
+                    var requestData = new URLSearchParams();
+                    requestData.append('userId', this.editingUser.id);
+                    requestData.append('isAdmin', this.editingUser.isAdmin);
+
+                    // 调用后端接口更新用户管理员状态
+                    axios.post('/system/updateUserAdminStatus', requestData, {
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        }
+                    }).then(function(response) {
+                        var responseData = response.data;
+                        
+                        // 更新成功后，重新加载用户列表以获取最新数据
+                        self.loadUsers();
+                        
+                        // 关闭对话框
+                        self.closeEditDialog();
+                        // 使用Element UI的消息提示，而不是alert弹窗
+                        self.$message({
+                            message: '用户管理员状态更新成功',
+                            type: 'success'
+                        });
+                        
+                    }).catch(function(error) {
+                        console.error('更新用户管理员状态失败:', error);
+                        if (error.response && error.response.status === 400) {
+                            alert('请求参数格式错误，请检查后端接口要求');
+                        } else {
+                            alert('更新用户管理员状态失败，请稍后重试');
+                        }
+                    });
+                }
+            }
+        });
+    };
+</script>
+</body>
+</html>

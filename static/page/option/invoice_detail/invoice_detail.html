@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>发票明细</title>
+    <link rel="stylesheet" href="invoice_detail.css">
+    <script src="../../../js/system.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+
+<body>
+
+    <div class="home" id="home">
+
+        <div class="search" style="display: flex; align-items: center; flex-wrap: wrap;">
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="searchParams.openid" placeholder="请输入openid查询"></el-input>
+            <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;"
+                v-model="searchParams.phone" placeholder="请输入用户手机号查询"></el-input>
+            <el-button size="mini" type="info" style="margin-right:10px;" @click="searchInvoice" plain>查询</el-button>
+            <el-button size="mini" type="warning" @click="resetSearch" plain>重置</el-button>
+        </div>
+
+        <div class="search" style="margin-top: 10px;">
+            <el-button size="mini" type="danger" @click="batchDelete()" plain>批量删除</el-button>
+        </div>
+
+        <div class="search" style="margin-top: 10px; font-size:12px;">
+            <el-table ref="multipleTable" :data="invoiceList" tooltip-effect="dark" style="width: 100%"
+                @selection-change="handleSelectionChange">
+                <el-table-column type="selection" width="55" align="center"></el-table-column>
+                <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+                <el-table-column prop="openid" label="用户openid" width="280" align="center"
+                    show-overflow-tooltip></el-table-column>
+                <el-table-column prop="phone" label="手机号" width="150" align="center"
+                    show-overflow-tooltip>
+                    <template slot-scope="scope">
+                        <span>{{ scope.row.phone || '未设置' }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="invoiceType" label="发票类型" width="120" align="center"
+                    show-overflow-tooltip></el-table-column>
+                <el-table-column prop="invoiceDate" label="消费时间" width="180" align="center">
+                    <template slot-scope="scope">
+                        <span>{{ formatDate(scope.row.invoiceDate) }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="applyTime" label="申请时间" width="180" align="center">
+                    <template slot-scope="scope">
+                        <span>{{ formatDate(scope.row.applyTime) }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="titleName" label="抬头名称" width="120" align="center"
+                    show-overflow-tooltip>
+                    <template slot-scope="scope">
+                        <span>{{ scope.row.titleName || '未设置' }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="email" label="电子邮箱" width="200" align="center"
+                    show-overflow-tooltip>
+                    <template slot-scope="scope">
+                        <span>{{ scope.row.email || '未设置' }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="amount" label="合计金额" width="120" align="center">
+                    <template slot-scope="scope">
+                        <span>{{ scope.row.amount || 0 }}元</span>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="state" label="发票状态" width="100" align="center">
+                    <template slot-scope="scope">
+                        <el-tag :type="getStateType(scope.row.state)" size="mini">{{getStateText(scope.row.state)}}</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column width="150" label="操作" align="center" fixed="right">
+                    <template slot-scope="scope">
+                        <el-button size="mini" type="primary" @click="processInvoice(scope.row)"
+                            :disabled="scope.row.state === 2" plain>去处理</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+
+        <div style="margin-top:10px; float: right">
+            <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange"
+                :current-page="currentPage" :page-sizes="[10, 20, 30]" :page-size="pageSize"
+                layout="total, sizes, prev, pager, next, jumper" :total="total">
+            </el-pagination>
+        </div>
+
+    </div>
+
+    <script>
+        let vm = new Vue({
+            el: "#home",
+            data() {
+            return {
+                invoiceList: [],
+                total: 0,
+                pageSize: 10,
+                currentPage: 1,
+                searchParams: {
+                    openid: '',
+                    phone: ''
+                },
+                multipleSelection: []
+            };
+            },
+            created() {
+                this.loadData();
+            },
+            mounted() {
+                // 添加键盘事件监听器，Enter键触发查询
+                document.addEventListener('keydown', this.handleKeyDown);
+            },
+            beforeDestroy() {
+                // 移除键盘事件监听器
+                document.removeEventListener('keydown', this.handleKeyDown);
+            },
+            methods: {
+                // 处理键盘按下事件
+                handleKeyDown(event) {
+                    if ((event.keyCode === 13 || event.key === 'Enter')) {
+                        this.searchInvoice();
+                    }
+                },
+                loadData() {
+                    const loading = this.$loading({
+                        lock: true,
+                        text: '数据加载中...',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    this.searchInvoice();
+                    loading.close();
+                },
+
+                searchInvoice() {
+                    const params = {
+                        pageNum: this.currentPage,
+                        pageSize: this.pageSize,
+                        openid: this.searchParams.openid,
+                        phone: this.searchParams.phone
+                    };
+
+                    axios.get('/system/invoice/list', { params })
+                        .then(res => {
+                            const data = res.data ? res.data.data : res;
+
+                            if (data && data.list) {
+                                this.invoiceList = data.list;
+                                this.total = data.total;
+                            } else if (data) {
+                                this.invoiceList = Array.isArray(data) ? data : [];
+                                this.total = this.invoiceList.length;
+                            } else {
+                                console.log('API响应异常:', res);
+                                this.invoiceList = [];
+                                this.total = 0;
+                            }
+                        })
+                        .catch(err => {
+                            console.error('获取发票列表失败:', err);
+                            this.$message.error('获取发票列表失败');
+                            this.invoiceList = [];
+                            this.total = 0;
+                        });
+                },
+
+                resetSearch() {
+                    this.searchParams = {
+                        openid: '',
+                        phone: ''
+                    };
+                    this.currentPage = 1;
+                    this.searchInvoice();
+                },
+
+                handleSizeChange(pageSize) {
+                    this.pageSize = pageSize;
+                    this.searchInvoice();
+                },
+
+                handleCurrentChange(pageNum) {
+                    this.currentPage = pageNum;
+                    this.searchInvoice();
+                },
+
+                formatDate(date) {
+                    if (!date) return '未设置';
+                    if (typeof date === 'string') {
+                        return date.substring(0, 19);
+                    }
+                    const d = new Date(date);
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const hours = String(d.getHours()).padStart(2, '0');
+                    const minutes = String(d.getMinutes()).padStart(2, '0');
+                    const seconds = String(d.getSeconds()).padStart(2, '0');
+                    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+                },
+
+                getStateText(state) {
+                    switch (state) {
+                        case 1:
+                            return '已申请';
+                        case 2:
+                            return '已开票';
+                        default:
+                            return '未知';
+                    }
+                },
+
+                getStateType(state) {
+                    switch (state) {
+                        case 1:
+                            return 'warning';
+                        case 2:
+                            return 'success';
+                        default:
+                            return 'info';
+                    }
+                },
+
+                processInvoice(row) {
+                    this.$confirm('确定要处理该发票吗？处理后发票状态将变更为"已开票"', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        axios.put('/system/invoice/process', null, {
+                            params: {
+                                id: row.id
+                            }
+                        }).then(res => {
+                            const data = res.data ? res.data.data : res;
+                            if (data) {
+                                this.$message.success('发票处理成功');
+                                this.searchInvoice();
+                            } else {
+                                const errorMsg = res && res.data && res.data.msg ? res.data.msg : '操作失败';
+                                this.$message.error(errorMsg);
+                            }
+                        }).catch(error => {
+                            console.error('发票处理失败:', error);
+                            const errorMsg = error && error.response && error.response.data && error.response.data.msg ? error.response.data.msg : '操作失败';
+                            this.$message.error(errorMsg);
+                        });
+                    }).catch(() => {
+                        this.$message.info('已取消操作');
+                    });
+                },
+
+                handleSelectionChange(val) {
+                    this.multipleSelection = val;
+                },
+
+                batchDelete() {
+                    if (this.multipleSelection.length === 0) {
+                        this.$message.warning('请选择要删除的发票');
+                        return;
+                    }
+
+                    this.$confirm('确定要删除选中的发票吗？', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        const ids = this.multipleSelection.map(invoice => invoice.id);
+
+                        axios.post('/system/invoice/batchDelete', ids).then(res => {
+                            const data = res.data ? res.data.data : res;
+
+                            if (data) {
+                                this.$message.success('批量删除成功');
+                                this.searchInvoice();
+                                this.multipleSelection = [];
+                            } else {
+                                const errorMsg = res && res.data && res.data.msg ? res.data.msg : '批量删除失败';
+                                this.$message.error(errorMsg);
+                            }
+                        }).catch(error => {
+                            console.error('批量删除失败:', error);
+                            const errorMsg = error && error.response && error.response.data && error.response.data.msg ? error.response.data.msg : '批量删除失败';
+                            this.$message.error(errorMsg);
+                        });
+                    }).catch(() => {
+                        this.$message.info('已取消删除');
+                    });
+                }
+            }
+        });
+    </script>
+
+</body>
+
+</html>

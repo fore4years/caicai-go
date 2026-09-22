@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" name="referrer" content="never">
+    <title>余额明细</title>
+    <link rel="stylesheet" href="balance_detail.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+
+<body>
+
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search" style="display: flex; align-items: center; flex-wrap: wrap;">
+        <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.openid" placeholder="请输入用户openid查询"></el-input>
+        <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.phone" placeholder="请输入用户手机号查询"></el-input>
+        <el-button size="mini" type="info" style="margin-right:10px;" @click="searchUsers" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="resetSearch" plain>重置</el-button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table ref="multipleTable" :data="userList" tooltip-effect="dark" style="width: 100%">
+            <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+            <el-table-column prop="openid" label="用户openid" width="280" align="center" show-overflow-tooltip></el-table-column>
+            <el-table-column prop="phone" label="手机号" width="150" align="center" show-overflow-tooltip>
+                <template slot-scope="scope">
+                    <span>{{ scope.row.phone || '未设置' }}</span>
+                </template>
+            </el-table-column>
+            <el-table-column prop="nickName" label="昵称" width="150" align="center" show-overflow-tooltip>
+                <template slot-scope="scope">
+                    <span>{{ scope.row.nickName || '微信用户' }}</span>
+                </template>
+            </el-table-column>
+            <el-table-column prop="balans" label="余额" width="120" align="center">
+                <template slot-scope="scope">
+                    <span>{{ scope.row.balans || 0 }}元</span>
+                </template>
+            </el-table-column>
+            <el-table-column prop="freezeBalans" label="冻结余额" width="120" align="center">
+                <template slot-scope="scope">
+                    <span>{{ scope.row.freezeBalans || 0 }}元</span>
+                </template>
+            </el-table-column>
+            <el-table-column width="360" label="操作" align="center" fixed="right">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="primary" @click="showBalanceDetailDialog(scope.row)" plain>余额明细</el-button>
+                    <el-button size="mini" type="success" @click="showRechargeDialog(scope.row)" plain>充值余额</el-button>
+                    <el-button size="mini" type="danger" @click="showDeductDialog(scope.row)" plain>扣除余额</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange" :current-page="currentPage" :page-sizes="[10, 20, 30]" :page-size="pageSize" layout="total, sizes, prev, pager, next, jumper" :total="total">
+        </el-pagination>
+    </div>
+
+    <!-- 充值余额弹窗 -->
+    <el-dialog title="充值余额" :visible.sync="showRechargeModal" width="400px" :close-on-click-modal="false">
+        <div class="modal-body">
+            <el-form label-width="100px">
+                <el-form-item label="用户openid：">
+                    <el-input v-model="currentUser.openid" placeholder="用户openid" disabled></el-input>
+                </el-form-item>
+                <el-form-item label="当前余额：">
+                    <el-input v-model="currentUser.balans" placeholder="当前余额" disabled>
+                        <template slot="append">元</template>
+                    </el-input>
+                </el-form-item>
+                <el-form-item label="充值金额：">
+                    <el-input v-model.number="rechargeAmount" placeholder="请输入充值金额" type="number">
+                        <template slot="append">元</template>
+                    </el-input>
+                </el-form-item>
+            </el-form>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button @click="showRechargeModal = false" size="mini">取消</el-button>
+            <el-button type="primary" @click="rechargeBalance" size="mini">确定</el-button>
+        </span>
+    </el-dialog>
+
+    <!-- 扣除余额弹窗 -->
+    <el-dialog title="扣除余额" :visible.sync="showDeductModal" width="400px" :close-on-click-modal="false">
+        <div class="modal-body">
+            <el-form label-width="100px">
+                <el-form-item label="用户openid：">
+                    <el-input v-model="currentUser.openid" placeholder="用户openid" disabled></el-input>
+                </el-form-item>
+                <el-form-item label="当前余额：">
+                    <el-input v-model="currentUser.balans" placeholder="当前余额" disabled>
+                        <template slot="append">元</template>
+                    </el-input>
+                </el-form-item>
+                <el-form-item label="扣除金额：">
+                    <el-input v-model.number="deductAmount" placeholder="请输入扣除金额" type="number">
+                        <template slot="append">元</template>
+                    </el-input>
+                </el-form-item>
+            </el-form>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button @click="showDeductModal = false" size="mini">取消</el-button>
+            <el-button type="primary" @click="deductBalance" size="mini">确定</el-button>
+        </span>
+    </el-dialog>
+
+    <!-- 余额明细弹窗 -->
+    <el-dialog title="余额来源" :visible.sync="showBalanceDetailModal" width="600px" :close-on-click-modal="false">
+        <div class="modal-body">
+            <el-form label-width="120px">
+                <el-form-item label="用户openid：">
+                    <el-input v-model="currentUser.openid" placeholder="用户openid" disabled></el-input>
+                </el-form-item>
+                <el-form-item label="手机号：">
+                    <el-input v-model="currentUser.phone" placeholder="手机号" disabled></el-input>
+                </el-form-item>
+                <el-form-item label="昵称：">
+                    <el-input v-model="currentUser.nickName" placeholder="昵称" disabled></el-input>
+                </el-form-item>
+
+                <!-- 余额来源信息 -->
+                <el-divider content-position="left">余额来源详情</el-divider>
+                <el-form-item label="当前余额：">
+                    <el-input v-model="balanceSourceData.currentBalance" placeholder="当前余额" disabled>
+                        <template slot="append">元</template>
+                    </el-input>
+                </el-form-item>
+                <el-form-item label="充值来源：">
+                    <el-input v-model="balanceSourceData.rechargeSource" placeholder="充值来源" disabled>
+                        <template slot="append">元</template>
+                    </el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+                        有效充值订单数：{{ balanceSourceData.rechargeOrderCount || 0 }} 笔
+                    </div>
+                </el-form-item>
+                <el-form-item label="其他来源：">
+                    <el-input v-model="balanceSourceData.otherSource" placeholder="其他来源" disabled>
+                        <template slot="append">元</template>
+                    </el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px;">
+                        其他来源：除开充值订单外额外赋予的余额
+                    </div>
+                </el-form-item>
+            </el-form>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button @click="showBalanceDetailModal = false" size="mini">关闭</el-button>
+        </span>
+    </el-dialog>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                userList: [],
+                total: 0,
+                pageSize: 10,
+                currentPage: 1,
+                searchParams: {
+                    openid: '',
+                    phone: ''
+                },
+                showRechargeModal: false,
+                showDeductModal: false,
+                showBalanceDetailModal: false,
+                currentUser: {},
+                rechargeAmount: 0,
+                deductAmount: 0,
+                balanceSourceData: {
+                    currentBalance: 0,
+                    rechargeSource: 0,
+                    otherSource: 0,
+                    rechargeOrderCount: 0
+                }
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.loadData();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                // 如果按下的是Enter键，并且弹窗没有打开
+                if ((event.keyCode === 13 || event.key === 'Enter') && !this.showRechargeModal && !this.showDeductModal && !this.showBalanceDetailModal) {
+                    this.searchUsers();
+                }
+            },
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.searchUsers();
+                loading.close(); // 关闭加载提示
+            },
+
+            searchUsers() {
+                // 调用后端余额明细API
+                axios.get('/system/balanceDetail/list', {
+                    params: {
+                        openid: this.searchParams.openid,
+                        phone: this.searchParams.phone,
+                        current: this.currentPage,
+                        size: this.pageSize
+                    }
+                })
+                    .then(res => {
+                        // 处理API响应
+                        const data = res.data ? res.data.data : res;
+
+                        // 字段映射（使用后端返回的驼峰命名字段）
+                        const mappedData = data.list.map(item => ({
+                            openid: item.openid || '',
+                            phone: item.phone || '',
+                            nickName: item.nickName || '微信用户',
+                            balans: item.balans || 0,
+                            freezeBalans: item.freezeBalans || 0
+                        }));
+
+                        this.userList = mappedData;
+                        this.total = data.total;
+                    })
+                    .catch(err => {
+                        console.error('获取用户列表失败:', err);
+                        console.error('错误详情:', err.response);
+                        const errorMsg = err.response && err.response.data && err.response.data.msg ? err.response.data.msg : '获取用户列表失败';
+                        this.$message.error(errorMsg);
+                        this.userList = [];
+                        this.total = 0;
+                    });
+            },
+
+            resetSearch() {
+                this.searchParams = {
+                    openid: '',
+                    phone: ''
+                };
+                this.currentPage = 1;
+                this.searchUsers();
+            },
+
+            handleSizeChange(pageSize) {
+                this.pageSize = pageSize;
+                this.searchUsers();
+            },
+
+            handleCurrentChange(pageNum) {
+                this.currentPage = pageNum;
+                this.searchUsers();
+            },
+
+            // 显示余额来源弹窗
+            showBalanceDetailDialog(row) {
+                this.currentUser = { ...row };
+                // 初始化余额来源数据
+                this.balanceSourceData = {
+                    currentBalance: '加载中...',
+                    rechargeSource: '加载中...',
+                    otherSource: '加载中...',
+                    rechargeOrderCount: 0
+                };
+                this.showBalanceDetailModal = true;
+
+                // 调用后端接口获取余额来源信息
+                axios.get('/system/balanceDetail/balanceSource', {
+                    params: {
+                        openid: row.openid
+                    }
+                })
+                .then(res => {
+                    const data = res.data ? res.data.data : res;
+
+                    if (data) {
+                        // 更新余额来源信息
+                        this.balanceSourceData = {
+                            currentBalance: data.currentBalance || 0,
+                            rechargeSource: data.rechargeSource || 0,
+                            otherSource: data.otherSource || 0,
+                            rechargeOrderCount: data.rechargeOrderCount || 0
+                        };
+                    } else {
+                        this.$message.error('获取余额来源信息失败');
+                        this.balanceSourceData = {
+                            currentBalance: '获取失败',
+                            rechargeSource: '获取失败',
+                            otherSource: '获取失败',
+                            rechargeOrderCount: 0
+                        };
+                    }
+                })
+                .catch(err => {
+                    console.error('获取余额来源信息失败:', err);
+                    const errorMsg = err.response && err.response.data && err.response.data.msg ? err.response.data.msg : '获取余额来源信息失败';
+                    this.$message.error(errorMsg);
+                    this.balanceSourceData = {
+                        currentBalance: '获取失败',
+                        rechargeSource: '获取失败',
+                        otherSource: '获取失败',
+                        rechargeOrderCount: 0
+                    };
+                });
+            },
+
+            // 显示充值余额弹窗
+            showRechargeDialog(row) {
+                this.currentUser = { ...row };
+                this.rechargeAmount = 0;
+                this.showRechargeModal = true;
+            },
+
+            // 显示扣除余额弹窗
+            showDeductDialog(row) {
+                this.currentUser = { ...row };
+                this.deductAmount = 0;
+                this.showDeductModal = true;
+            },
+
+            // 充值余额
+            rechargeBalance() {
+                if (!this.rechargeAmount || this.rechargeAmount <= 0) {
+                    this.$message.error('请输入有效的充值金额');
+                    return;
+                }
+
+                const params = new URLSearchParams();
+                params.append('openid', this.currentUser.openid);
+                params.append('amount', this.rechargeAmount);
+
+                axios.post('/system/balanceDetail/recharge', params, {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                })
+                    .then(res => {
+                        const data = res.data ? res.data.data : res;
+
+                        if (data) {
+                            this.$message.success('充值成功');
+                            this.showRechargeModal = false;
+                            // 刷新用户列表
+                            this.searchUsers();
+                        } else {
+                            const errorMsg = res && res.data && res.data.msg ? res.data.msg : '充值失败';
+                            this.$message.error(errorMsg);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('充值失败:', error);
+                        const errorMsg = error && error.response && error.response.data && error.response.data.msg ? error.response.data.msg : '充值失败';
+                        this.$message.error(errorMsg);
+                    });
+            },
+
+            // 扣除余额
+            deductBalance() {
+                if (!this.deductAmount || this.deductAmount <= 0) {
+                    this.$message.error('请输入有效的扣除金额');
+                    return;
+                }
+
+                if (this.deductAmount > this.currentUser.balans) {
+                    this.$message.error('扣除金额不能大于当前余额');
+                    return;
+                }
+
+                const params = new URLSearchParams();
+                params.append('openid', this.currentUser.openid);
+                params.append('amount', this.deductAmount);
+
+                axios.post('/system/balanceDetail/deduct', params, {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                })
+                    .then(res => {
+                        const data = res.data ? res.data.data : res;
+
+                        if (data) {
+                            this.$message.success('扣除成功');
+                            this.showDeductModal = false;
+                            // 刷新用户列表
+                            this.searchUsers();
+                        } else {
+                            const errorMsg = res && res.data && res.data.msg ? res.data.msg : '扣除失败';
+                            this.$message.error(errorMsg);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('扣除失败:', error);
+                        const errorMsg = error && error.response && error.response.data && error.response.data.msg ? error.response.data.msg : '扣除失败';
+                        this.$message.error(errorMsg);
+                    });
+            }
+        }
+    });
+</script>
+
+</body>
+
+</html>

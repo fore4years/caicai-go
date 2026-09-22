@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>收益详情</title>
+        <link rel="stylesheet" href="money_show_xq.css">
+        <script src="../../../js/system.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+        <!-- 引入样式 -->
+        <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+        <!-- 引入组件库 -->
+        <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    </head>
+
+    <body>
+
+        <div class="all">
+
+            <div class="fanhui" @click="fanhui">
+                <div class="icon"></div>
+                <div class="text">收益详情</div>
+            </div>
+
+            <div class="money_xq">
+
+                <div class="money_all">
+
+                    <div class="placeid">
+
+                        <div class="lvdian"></div>
+
+                        <div class="text">车位编号： {{placeid}}</div>
+
+                    </div>
+
+                    <div class="money_time">
+
+                        <div class="lvdian"></div>
+
+                        <div class="text">总收益（元）</div>
+
+                    </div>
+
+                    <div class="money">{{all}}</div>
+
+                    <div class="qiandiazi"></div>
+
+                </div>
+
+                <div class="money_today">
+
+                    <div class="placeid">
+
+                        <div class="lvdian"></div>
+
+                        <div class="text">车位编号： {{placeid}}</div>
+
+                    </div>
+
+                    <div class="money_time">
+
+                        <div class="lvdian"></div>
+
+                        <div class="text">今日收益（元）</div>
+
+                    </div>
+
+                    <div class="money">{{today}}</div>
+
+                    <div class="qiandiazi"></div>
+
+                </div>
+
+                <div class="money_time_range">
+
+                    <div class="time_selector">
+
+                        <el-date-picker
+                            v-model="dateRange"
+                            type="daterange"
+                            range-separator="至"
+                            start-placeholder="开始日期"
+                            end-placeholder="结束日期"
+                            value-format="yyyy-MM-dd"
+                            :default-value="[todayDate, todayDate]"
+                            @change="handleDateRangeChange"
+                            style="width: 100%;">
+                        </el-date-picker>
+
+                    </div>
+
+                    <div class="time_stats">
+
+                        <div class="stats_row">
+
+                            <div class="stats_item">
+
+                                <div class="stats_label">充电电量（度）</div>
+
+                                <div class="stats_value">{{timeStats.chargingDegree || 0}}</div>
+
+                            </div>
+
+                            <div class="stats_item">
+
+                                <div class="stats_label">充电电费（元）</div>
+
+                                <div class="stats_value">{{timeStats.powerRate || 0}}</div>
+
+                            </div>
+
+                        </div>
+
+                        <div class="stats_row">
+
+                            <div class="stats_item">
+
+                                <div class="stats_label">充电服务费（元）</div>
+
+                                <div class="stats_value">{{timeStats.serviceRate || 0}}</div>
+
+                            </div>
+
+                            <div class="stats_item">
+
+                                <div class="stats_label">超时占位费（元）</div>
+
+                                <div class="stats_value">{{timeStats.timeoutCar || 0}}</div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="money_jilu">
+
+                <div class="jilu_header">
+                    <div class="text">收益记录</div>
+                    <div class="export_btn" @click="exportExcel">导出</div>
+                </div>
+
+                <div class="neirong">
+
+                    <div class="title">
+
+                        <div class="orderid jz">订单号</div>
+                        <div class="beginTime jz">开始时间 <i :class="['sort-icon', sortDirection === 'desc' ? 'el-icon-caret-bottom' : 'el-icon-caret-top']" @click="toggleSort"></i></div>
+                        <div class="overTime jz">结束时间</div>
+                        <div class="user jz">充电用户</div>
+                        <div class="shouru jz">收入</div>
+
+                    </div>
+
+                    <div class="order" v-for="(item,index) in orders">
+
+                        <div class="orderid jz">{{item.orderid}}</div>
+                        <div class="beginTime jz">{{item.beginTime}}</div>
+                        <div class="overTime jz">{{item.overTime}}</div>
+                        <div class="user jz">{{item.openid}}</div>
+                        <div class="shouru jz">
+                            <el-tooltip class="item" effect="dark" placement="top" :open-delay="300">
+                                <div slot="content" style="font-size: 14px; line-height: 1.8;">
+                                    <div v-if="item.loading" style="font-size: 14px;">加载中...</div>
+                                    <div v-else style="font-size: 14px;">
+                                        <div style="margin-bottom: 5px;">本次充电度数：<strong>{{item.chargingDegree || 0}}</strong> 度</div>
+                                        <div style="margin-bottom: 5px;">本次消费电费：<strong>{{item.powerRate || '0.00'}}</strong> 元</div>
+                                        <div style="margin-bottom: 5px;">本次消费服务费：<strong>{{item.serviceRate || '0.00'}}</strong> 元</div>
+                                        <div>本次超时停车费：<strong>{{item.timeoutCar || '0.00'}}</strong> 元</div>
+                                    </div>
+                                </div>
+                                <div @mouseenter="loadOrderFees(item)" style="cursor: pointer; color: #409EFF;">
+                                    {{item.basicConsumption}}元
+                                </div>
+                            </el-tooltip>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="fenye">
+
+                    <el-pagination  class="chajian"
+                                    background
+                                    @size-change="handleSizeChange"
+                                    @current-change="handleCurrentChange"
+                                    :current-page="params.current"
+                                    :page-sizes="[6, 10, 20, 30]"
+                                    :page-size="params.size"
+                                    layout="total, sizes, prev, pager, next, jumper"
+                                    :total="max">
+                    </el-pagination>
+
+                </div>
+                
+            </div>
+
+        </div>
+
+    </body>
+
+    <script>
+
+        window.onload=function () {
+            // 解析URL参数
+            const urlParams = new URLSearchParams(window.location.search);
+            all.place = urlParams.get('place') || '';
+            all.spacesCode = urlParams.get('spacesCode') || '';
+            all.productId = urlParams.get('productId') || '';
+            all.direction = urlParams.get('direction') || '';
+            all.type = urlParams.get('type') || '';
+            
+            // 设置车位编号为spacesCode的值
+            all.placeid = all.spacesCode;
+            
+            // 设置今日日期
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            all.todayDate = `${year}-${month}-${day}`;
+            all.dateRange = [all.todayDate, all.todayDate];
+            
+            // 调用接口获取收益数据
+            all.getIncomeData();
+            
+            // 初始化时获取订单列表
+            all.getOrders();
+        }
+
+        var all=new Vue({
+            el:'.all',
+            data:{
+                placeid:'',
+                place:'',
+                spacesCode:'',
+                productId:'',
+                direction:'',
+                type:'',
+                all:0,
+                today:0,
+                dateRange: [],
+                todayDate: '',
+                timeStats: {
+                    chargingDegree: 0,
+                    powerRate: 0,
+                    serviceRate: 0,
+                    timeoutCar: 0
+                },
+                orders:[],
+                allOrders:[],
+
+                params: {
+                    current: 1,
+                    size: 6
+                },
+                max:0,
+                sortDirection: 'desc', // 排序方向：'desc'表示从近到远，'asc'表示从远到近
+            },
+            methods:{
+
+                getPlaceid(){
+                    // 不再需要查询后端，直接使用传递的参数
+                    this.placeid = this.spacesCode;
+                },
+
+                getOrders(){
+                    // 调用订单详情接口获取收益记录
+                    axios.get('/system/getOrderDetails', {
+                        params: {
+                            spacesCode: this.spacesCode,
+                            type: this.type
+                        }
+                    }).then(response => {
+                        if (response.data && Array.isArray(response.data)) {
+                            this.allOrders = response.data;
+                            // 根据开始时间排序
+                            this.sortOrdersByBeginTime();
+                            this.max = this.allOrders.length;
+                            this.handleCurrentChange(this.params.current);
+                            // 计算时间范围内的统计数据
+                            this.calculateTimeStats();
+                        } else {
+                            this.allOrders = [];
+                            this.orders = [];
+                            this.max = 0;
+                        }
+                    }).catch(error => {
+                        console.error('获取订单详情失败:', error);
+                        this.allOrders = [];
+                        this.orders = [];
+                        this.max = 0;
+                    });
+                },
+                
+                // 根据开始时间排序订单
+                sortOrdersByBeginTime() {
+                    this.allOrders.sort((a, b) => {
+                        const dateA = new Date(a.beginTime).getTime();
+                        const dateB = new Date(b.beginTime).getTime();
+                        return this.sortDirection === 'desc' ? dateB - dateA : dateA - dateB;
+                    });
+                },
+                
+                // 处理分页大小变化
+                handleSizeChange(pageSize) {
+                    this.params.size = pageSize;
+                    this.handleCurrentChange(1);
+                },
+                
+                // 处理当前页变化
+                handleCurrentChange(currentPage) {
+                    this.params.current = currentPage;
+                    
+                    // 计算当前页需要显示的数据
+                    const startIndex = (currentPage - 1) * this.params.size;
+                    const endIndex = startIndex + this.params.size;
+                    this.orders = this.allOrders.slice(startIndex, endIndex);
+                },
+                
+                // 切换排序方向
+                toggleSort() {
+                    // 切换排序方向
+                    this.sortDirection = this.sortDirection === 'desc' ? 'asc' : 'desc';
+                    
+                    // 重新排序
+                    this.sortOrdersByBeginTime();
+                    
+                    // 重新设置当前页为第一页
+                    this.params.current = 1;
+                    this.handleCurrentChange(1);
+                },
+
+                getIncomeData(){
+                    // 调用总收益接口
+                    axios.get('/system/getTotalIncome', {
+                        params: {
+                            spacesCode: this.spacesCode,
+                            type: this.type
+                        }
+                    }).then(response => {
+                        if (response.data && response.data.totalIncome !== undefined) {
+                            this.all = response.data.totalIncome;
+                        } else {
+                            this.all = 0;
+                        }
+                    }).catch(error => {
+                        console.error('获取总收益失败:', error);
+                        this.all = 0;
+                    });
+                    
+                    // 调用今日收益接口
+                    axios.get('/system/getTodayIncome', {
+                        params: {
+                            spacesCode: this.spacesCode,
+                            type: this.type
+                        }
+                    }).then(response => {
+                        if (response.data && response.data.todayIncome !== undefined) {
+                            this.today = response.data.todayIncome;
+                        } else {
+                            this.today = 0;
+                        }
+                    }).catch(error => {
+                        console.error('获取今日收益失败:', error);
+                        this.today = 0;
+                    });
+                },
+
+                del(orderid){
+                    // 暂时禁用删除功能
+                    alert('当前车位缺少收益数据，无法删除订单');
+                },
+
+                fanhui(){
+                    window.history.back();
+                },
+
+                // 导出当前车位的收益明细 Excel（附带上概览表所需的汇总统计字段与时间范围）
+                exportExcel(){
+                    const params = new URLSearchParams();
+                    params.append('spacesCode', this.spacesCode);
+                    params.append('type', this.type);
+                    params.append('startDate', (this.dateRange && this.dateRange[0]) || '');
+                    params.append('endDate', (this.dateRange && this.dateRange[1]) || '');
+                    params.append('chargingDegree', this.timeStats.chargingDegree);
+                    params.append('powerRate', this.timeStats.powerRate);
+                    params.append('serviceRate', this.timeStats.serviceRate);
+                    params.append('timeoutCar', this.timeStats.timeoutCar);
+                    const a = document.createElement('a');
+                    a.href = '/system/excel_export?' + params.toString();
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                },
+
+                // 加载订单费用详情
+                async loadOrderFees(order) {
+                    // 如果已经加载过，直接返回
+                    if (order.powerRate !== undefined && order.powerRate !== null) {
+                        return;
+                    }
+
+                    // 设置加载状态
+                    Vue.set(order, 'loading', true);
+
+                    try {
+                        let powerRate = 0;
+                        let serviceRate = 0;
+
+                        // 根据订单类型获取费用信息
+                        if (order.consumptionType === '二轮车充电') {
+                            // 二轮车充电订单
+                            try {
+                                const res = await axios.get(`/orderTwice/getByOpenid/${order.orderid}`);
+                                if (res) {
+                                    powerRate = res.totalFee || 0;
+                                    serviceRate = res.serviceFee || 0;
+                                }
+                            } catch (error) {
+                                console.error(`获取二轮车充电订单 ${order.orderid} 费用失败`, error);
+                            }
+                        } else if (order.consumptionType === '邻享充电') {
+                            // 邻享充电订单
+                            try {
+                                const res = await axios.get(`/orderElectronic/getElectronicByPrivateOrderidAndPrivateUser?orderid=${order.orderid}`);
+                                if (res) {
+                                    powerRate = res.totalFee || 0;
+                                    serviceRate = res.serviceFee || 0;
+
+                                    // 查询当前订单是否是桩主所充，是桩主则设置服务费为0
+                                    try {
+                                        const privateRes = await axios.get(`/privatePlace/getByOrder/${order.orderid}`);
+                                        if (privateRes === true || privateRes.data === true) {
+                                            serviceRate = 0;
+                                        }
+                                    } catch (privateError) {
+                                        console.warn(`查询邻享订单桩主信息失败: ${order.orderid}`);
+                                    }
+                                }
+                            } catch (error) {
+                                console.error(`获取邻享充电订单 ${order.orderid} 费用失败`, error);
+                            }
+                        } else {
+                            // 驿享充电等其他类型订单
+                            try {
+                                const res = await axios.get(`/orderElectronic/getElectronicByOrderid?orderid=${order.orderid}`);
+                                if (res) {
+                                    powerRate = res.totalFee || 0;
+                                    serviceRate = res.serviceFee || 0;
+                                }
+                            } catch (error) {
+                                console.error(`获取驿享充电订单 ${order.orderid} 费用失败`, error);
+                            }
+                        }
+
+                        // 设置电费和服务费
+                        Vue.set(order, 'powerRate', parseFloat(powerRate).toFixed(2));
+                        Vue.set(order, 'serviceRate', parseFloat(serviceRate).toFixed(2));
+
+                        // 计算超时停车费：收入 - 电费 - 服务费
+                        const basicConsumption = parseFloat(order.basicConsumption) || 0;
+                        let timeoutCar = basicConsumption - powerRate - serviceRate;
+
+                        // 如果超时停车费小于0，则设置为0
+                        if (timeoutCar < 0) {
+                            timeoutCar = 0;
+                        }
+
+                        Vue.set(order, 'timeoutCar', timeoutCar.toFixed(2));
+
+                    } catch (error) {
+                        console.error('加载订单费用详情失败:', error);
+                        Vue.set(order, 'powerRate', '0.00');
+                        Vue.set(order, 'serviceRate', '0.00');
+                        Vue.set(order, 'timeoutCar', '0.00');
+                    } finally {
+                        Vue.set(order, 'loading', false);
+                    }
+                },
+
+                handleDateRangeChange(dateRange) {
+                    if (dateRange && dateRange.length === 2) {
+                        this.calculateTimeStats();
+                    }
+                },
+
+                async calculateTimeStats() {
+                    if (!this.dateRange || this.dateRange.length !== 2) {
+                        this.timeStats = {
+                            chargingDegree: 0,
+                            powerRate: 0,
+                            serviceRate: 0,
+                            timeoutCar: 0
+                        };
+                        return;
+                    }
+
+                    const startDate = this.dateRange[0] + ' 00:00:00';
+                    const endDate = this.dateRange[1] + ' 23:59:59';
+
+                    const filteredOrders = this.allOrders.filter(order => {
+                        const orderTime = new Date(order.beginTime).getTime();
+                        const start = new Date(startDate).getTime();
+                        const end = new Date(endDate).getTime();
+                        return orderTime >= start && orderTime <= end;
+                    });
+
+                    let totalChargingDegree = 0;
+                    let totalPowerRate = 0;
+                    let totalServiceRate = 0;
+                    let totalTimeoutCar = 0;
+
+                    for (const order of filteredOrders) {
+                        await this.loadOrderFees(order);
+
+                        const degree = parseFloat(order.chargingDegree) || 0;
+                        const power = parseFloat(order.powerRate) || 0;
+                        const service = parseFloat(order.serviceRate) || 0;
+                        const timeout = parseFloat(order.timeoutCar) || 0;
+
+                        totalChargingDegree += degree;
+                        totalPowerRate += power;
+                        totalServiceRate += service;
+                        totalTimeoutCar += timeout;
+                    }
+
+                    this.timeStats = {
+                        chargingDegree: totalChargingDegree.toFixed(2),
+                        powerRate: totalPowerRate.toFixed(2),
+                        serviceRate: totalServiceRate.toFixed(2),
+                        timeoutCar: totalTimeoutCar.toFixed(2)
+                    };
+                }
+
+            }
+        })
+
+    </script>
+
+</html>

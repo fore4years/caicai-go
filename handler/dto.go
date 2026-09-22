@@ -155,6 +155,22 @@ func ResultSuccess(data interface{}) Result {
 	return Result{Success: true, Code: 200, Data: data}
 }
 
+// ResultError 构造失败响应（对齐 Java Result.error(code, msg)）。
+func ResultError(code int, msg string) Result {
+	return Result{Success: false, Code: code, Msg: msg}
+}
+
+// PageResult 对应 Java model.PageResult，分页接口的 data 载荷（total + list）。
+type PageResult struct {
+	Total int64       `json:"total"`
+	List  interface{} `json:"list"`
+}
+
+// ResultSuccessPage 构造分页成功响应（对齐 Java Result.success(IPage)）。
+func ResultSuccessPage(total int64, list interface{}) Result {
+	return ResultSuccess(PageResult{Total: total, List: list})
+}
+
 // UserDTO 对应 Java model.UserBean，JSON 字段名对齐 Jackson 序列化（驼峰）。
 type UserDTO struct {
 	Openid       string  `json:"openid,omitempty"`

@@ -1,7 +1,9 @@
 mqtt:
-  broker: "caicai"
-  port: 1883
+  broker: "81.69.46.160"
+  port: 1884
   qos: 1
+  username: "root"
+  password: "root"
 
 
 redis:

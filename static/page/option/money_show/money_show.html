@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>收益管理</title>
+    <link rel="stylesheet" href="ms.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+<body>
+
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 收益概览卡片 -->
+    <div class="search" style="display: flex; justify-content: space-between;">
+        <el-card class="box-card" style="width: 48%;">
+            <div slot="header" class="clearfix">
+                <span style="font-weight: bold;">全部收益（元）</span>
+            </div>
+            <div style="text-align: center; font-size: 28px; color: #409EFF; font-weight: bold; padding: 20px 0; position: relative;">
+                <span>{{all}}</span>
+            </div>
+        </el-card>
+
+        <el-card class="box-card" style="width: 48%;">
+            <div slot="header" class="clearfix">
+                <span style="font-weight: bold;">今日收益（元）</span>
+            </div>
+            <div style="text-align: center; font-size: 28px; color: #67C23A; font-weight: bold; padding: 20px 0; position: relative;">
+                <span style="position: relative; display: inline-block;">
+                    {{today}}
+                    <el-tooltip class="item" effect="dark" content="点击查看今日收益来源" placement="top">
+                        <el-button type="text" icon="el-icon-question" style="position: absolute; top: -5px; right: -25px; font-size: 16px; color: #67C23A; padding: 0; width: 24px; height: 24px; line-height: 24px;" @click="showTodayIncomeSource"></el-button>
+                    </el-tooltip>
+                </span>
+            </div>
+        </el-card>
+    </div>
+
+    <!-- 搜索框 -->
+    <div class="search" style="display: flex; align-items: center; flex-wrap: wrap; margin-top: 10px;">
+        <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" 
+            v-model="searchParams.address" placeholder="请输入地址查询"></el-input>
+        <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" 
+            v-model="searchParams.spacesCode" placeholder="请输入车位编号查询"></el-input>
+        <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" 
+            v-model="searchParams.productId" placeholder="请输入充电枪编号查询"></el-input>
+        <div style="display: flex; align-items: center; margin-right: 10px;">
+            <p style="font-size: 12px; margin-right: 10px; color: #6d6f73;">车位类型:</p>
+            <el-select size="mini" style="width: 150px; font-size:13px;" 
+                v-model="searchParams.type" placeholder="车位类型">
+                <el-option value="" label="全部"></el-option>
+                <el-option value="驿享充电" label="驿享充电"></el-option>
+                <el-option value="邻享充电" label="邻享充电"></el-option>
+            </el-select>
+        </div>
+        <el-button size="mini" type="info" style="margin-right:10px;" @click="search" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="resetSearch" plain>重置</el-button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table
+                :data="tableData"
+                tooltip-effect="dark"
+                style="width: 100%"
+                :row-class-name="tableRowClassName"
+        >
+            <el-table-column type="index" label="序号" width="60"></el-table-column>
+            <el-table-column prop="place" label="位置" width="300"></el-table-column>
+            <el-table-column prop="spacesCode" label="车位编号" width="140"></el-table-column>
+            <el-table-column prop="productId" label="充电枪编号" width="140"></el-table-column>
+            <el-table-column prop="direction" label="方向" width="80"></el-table-column>
+            <el-table-column prop="type" label="类型" width="120">
+                <template slot-scope="scope">
+                    {{scope.row.type}}
+                </template>
+            </el-table-column>
+            <el-table-column label="操作" width="120">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="primary" @click="openXq(scope.row)">查看详情</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="params.current"
+                :page-sizes="[7, 8, 10, 20, 30]"
+                :page-size="params.size"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total">
+        </el-pagination>
+    </div>
+
+    <!-- 收益来源弹窗 -->
+    <el-dialog :title="isTodayIncome ? '今日收益来源' : '全部收益来源'" :visible.sync="showSourceModal" width="60%" :close-on-click-modal="false">
+        <div class="modal-body">
+            <el-descriptions :column="2" border>
+                <el-descriptions-item :label="isTodayIncome ? '今日收益总额' : '全部收益总额'">
+                    {{isTodayIncome ? today : all}} 元
+                </el-descriptions-item>
+                <el-descriptions-item :label="isTodayIncome ? '今日消费电费总和' : '本次消费电费总和'">
+                    {{totalPowerRate}} 元
+                </el-descriptions-item>
+                <el-descriptions-item :label="isTodayIncome ? '今日消费服务费总和' : '本次消费服务费总和'">
+                    {{totalServiceRate}} 元
+                </el-descriptions-item>
+                <el-descriptions-item :label="isTodayIncome ? '今日消费超时停车费总和' : '本次消费超时停车费总和'">
+                    {{totalTimeoutCar}} 元
+                </el-descriptions-item>
+            </el-descriptions>
+        </div>
+        <span slot="footer" class="dialog-footer">
+            <el-button @click="closeSourceModal" size="mini">关闭</el-button>
+        </span>
+    </el-dialog>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                params: {
+                    current: 1,
+                    size: 7
+                },
+                searchParams: {
+                    address: '',
+                    spacesCode: '',
+                    productId: '',
+                    type: ''
+                },
+                total: 0,
+                tableData: [],
+                all: 0,
+                today: 0,
+                showSourceModal: false,
+                isTodayIncome: false, // 标记当前显示的是全部收益还是今日收益，目前全部收益的计算存在问题（前后服务费不统一），暂时没做
+                totalPowerRate: 0,
+                totalServiceRate: 0,
+                totalTimeoutCar: 0
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.loadData();
+            this.getMoney();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                // 如果按下的是Enter键，并且弹窗没有打开
+                if ((event.keyCode === 13 || event.key === 'Enter') && !this.showSourceModal) {
+                    this.search();
+                }
+            },
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.getPage(1);
+
+                loading.close(); 
+            },
+
+            // 获取车位数据
+            getPage(page) {
+                this.params.current = page;
+
+                const params = {
+                    current: page,
+                    size: this.params.size,
+                    address: this.searchParams.address || '',
+                    spacesCode: this.searchParams.spacesCode || '',
+                    productId: this.searchParams.productId || ''
+                };
+
+                const type = this.searchParams.type;
+
+                // 根据选择的类型决定调用哪些接口
+                if (type === '驿享充电') {
+                    // 只查询驿享充电
+                    axios.get('/system/getParkingSpacesPage', { params }).then(res => {
+                        const list = (res.data.list || []).map(item => ({...item, type: '驿享充电'}));
+                        this.tableData = list;
+                        this.total = res.data.total || 0;
+                    });
+                } else if (type === '邻享充电') {
+                    // 只查询邻享充电
+                    axios.get('/system/getPrivatePlacesPage', { params }).then(res => {
+                        const list = (res.data.list || []).map(item => ({...item, type: '邻享充电'}));
+                        this.tableData = list;
+                        this.total = res.data.total || 0;
+                    });
+                } else {
+                    // 查询所有类型，优先查询驿享充电，再查询邻享充电
+                    axios.get('/system/getParkingSpacesPage', { params }).then(parkingRes => {
+                        const parkingList = (parkingRes.data.list || []).map(item => ({...item, type: '驿享充电'}));
+                        const parkingTotal = parkingRes.data.total || 0;
+
+                        // 如果驿享充电数据已填满当前页，直接返回
+                        if (parkingList.length >= this.params.size) {
+                            this.tableData = parkingList;
+                            this.total = parkingTotal;
+                            return;
+                        }
+
+                        // 驿享充电数据不够一页，继续查询邻享充电
+                        const remainingSize = this.params.size - parkingList.length;
+                        const privateParams = {...params, size: remainingSize, current: 1};
+
+                        axios.get('/system/getPrivatePlacesPage', { params: privateParams }).then(privateRes => {
+                            const privateList = (privateRes.data.list || []).map(item => ({...item, type: '邻享充电'}));
+                            const privateTotal = privateRes.data.total || 0;
+
+                            this.tableData = [...parkingList, ...privateList];
+                            this.total = parkingTotal + privateTotal;
+                        });
+                    });
+                }
+            },
+
+            // 获取收益数据
+            getMoney() {
+                axios.get('/system/getMoney').then(res => {
+                    this.all = res.data.all;
+                    this.today = res.data.today;
+                });
+            },
+            
+            // 搜索
+            search() {
+                this.params.current = 1; // 搜索时回到第一页
+                this.getPage(1);
+            },
+            
+            // 重置搜索
+            resetSearch() {
+                this.searchParams = {
+                    address: '',
+                    spacesCode: '',
+                    productId: '',
+                    type: ''
+                };
+                this.params.current = 1;
+                this.getPage(1);
+            },
+
+            // 查看详情
+            openXq(rowData) {
+                // 将数据对象转换为URL参数
+                const params = new URLSearchParams({
+                    place: rowData.place || '',
+                    spacesCode: rowData.spacesCode || '',
+                    productId: rowData.productId || '',
+                    direction: rowData.direction || '',
+                    type: rowData.type || ''
+                }).toString();
+                window.location.href = "../money_show_xq/money_show_xq.html?" + params;
+            },
+            
+            // 显示今日收益来源弹窗
+            showTodayIncomeSource() {
+                this.isTodayIncome = true;
+                this.calculateTotalIncome(true); // true表示只计算今日订单
+                this.showSourceModal = true;
+            },
+            
+            // 关闭收益来源弹窗
+            closeSourceModal() {
+                this.showSourceModal = false;
+                this.isTodayIncome = false; // 重置标记
+            },
+            
+            // 计算收益来源
+            async calculateTotalIncome(isToday = false) {
+                const loading = this.$loading({
+                    lock: true,
+                    text: isToday ? '正在计算今日收益来源...' : '正在计算收益来源...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+
+                try {
+                    const todayOrderRes = await axios.get('/system/getTodayOrders', {
+                        params: {
+                            page: 1,
+                            length: 9999
+                        }
+                    });
+
+                    // 获取订单列表
+                    let orderList = [];
+                    if (todayOrderRes && todayOrderRes.data) {
+                        orderList = todayOrderRes.data.list || [];
+                    }
+
+                    if (!isToday) {
+                        const allOrderRes = await axios.get('/system/orderManage/list', {
+                            params: {
+                                current: 1,
+                                size: 9999,
+                                state: '已完成'
+                            }
+                        });
+                        
+                        if (allOrderRes && allOrderRes.data && allOrderRes.data.data) {
+                            orderList = allOrderRes.data.data.list || [];
+                        } else {
+                            orderList = allOrderRes.data.list || [];
+                        }
+                    }
+
+                    // 初始化费用统计
+                    let totalPowerRate = 0;
+                    let totalServiceRate = 0;
+
+                    // 遍历订单，计算各项费用
+                    for (const order of orderList) {
+                        let powerRate = 0;
+                        let serviceRate = 0;
+
+                        // 根据订单类型获取费用信息
+                        if (order.consumptionType === '二轮车充电') {
+                            // 二轮车充电订单
+                            try {
+                                const res = await axios.get(`/orderTwice/getByOpenid/${order.orderid}`);
+                                if (res) {
+                                    // 直接获取返回对象的字段
+                                    powerRate = res.totalFee || res.data?.totalFee || 0;
+                                    serviceRate = res.serviceFee || res.data?.serviceFee || 0;
+                                }
+                            } catch (error) {
+                                console.error(`获取二轮车充电订单 ${order.orderid} 费用失败`, error);
+                            }
+                        } else if (order.consumptionType === '邻享充电') {
+                            // 邻享充电订单
+                            try {
+                                const res = await axios.get('/orderElectronic/getElectronicByPrivateOrderidAndPrivateUser', {
+                                    params: { orderid: order.orderid }
+                                });
+                                if (res) {
+                                    // 直接获取返回对象的字段
+                                    powerRate = res.totalFee || res.data?.totalFee || 0;
+                                    serviceRate = res.serviceFee || res.data?.serviceFee || 0;
+                                    
+                                    // 查询当前订单是否是桩主所充，是桩主则设置服务费为0
+                                    try {
+                                        const privateRes = await axios.get(`/privatePlace/getByOrder/${order.orderid}`);
+                                        // 接口直接返回布尔值 true/false，而不是包含data的对象
+                                        if (privateRes === true || privateRes.data === true) {
+                                            serviceRate = 0;
+                                        }
+                                    } catch (privateError) {
+                                        console.warn(`查询邻享订单桩主信息失败: ${order.orderid}`);
+                                    }
+                                }
+                            } catch (error) {
+                                console.error(`获取邻享充电订单 ${order.orderid} 费用失败`, error);
+                            }
+                        } else {
+                            // 驿享充电等其他类型订单
+                            try {
+                                const res = await axios.get('/orderElectronic/getElectronicByOrderid', {
+                                    params: { orderid: order.orderid }
+                                });
+                                if (res) {
+                                    // 直接获取返回对象的字段
+                                    powerRate = res.totalFee || res.data?.totalFee || 0;
+                                    serviceRate = res.serviceFee || res.data?.serviceFee || 0;
+                                }
+                            } catch (error) {
+                                console.error(`获取驿享充电订单 ${order.orderid} 费用失败`, error);
+                            }
+                        }
+                        
+                        // 累加费用
+                        totalPowerRate += parseFloat(powerRate) || 0;
+                        totalServiceRate += parseFloat(serviceRate) || 0;
+                    }
+                    
+                    // 设置计算结果
+                    this.totalPowerRate = totalPowerRate.toFixed(2);
+                    this.totalServiceRate = totalServiceRate.toFixed(2);
+                    
+                    // 计算超时停车费总和：总收益 - 服务费 - 电费
+                    const totalIncome = isToday ? (parseFloat(this.today) || 0) : (parseFloat(this.all) || 0);
+                    let timeoutCar = totalIncome - totalPowerRate - totalServiceRate;
+                    this.totalTimeoutCar = timeoutCar < 0 ? '0.00' : timeoutCar.toFixed(2);
+                    
+                } catch (error) {
+                    console.error('计算收益来源失败:', error);
+                    this.$message.error('计算收益来源失败');
+                    // 设置默认值
+                    this.totalPowerRate = 0;
+                    this.totalServiceRate = 0;
+                    this.totalTimeoutCar = 0;
+                } finally {
+                    loading.close();
+                }
+            },
+
+            // 表格行样式
+            tableRowClassName({row, rowIndex}) {
+                if (rowIndex % 2 === 0) {
+                    return 'success-row';
+                }
+                return '';
+            },
+
+            // 分页
+            handleSizeChange(pageSize) {
+                this.params.size = pageSize;
+                this.getPage(this.params.current);
+            },
+
+            handleCurrentChange(pageNum) {
+                this.params.current = pageNum;
+                this.getPage(pageNum);
+            }
+        }
+    });
+</script>
+
+</body>
+</html>

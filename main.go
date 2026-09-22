@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -23,14 +25,16 @@ func main() {
 	// 初始化 gorm gen 查询对象
 	objects.SetDefault(conf.Db)
 
-	// 初始化锁控制基础设施（MQTT 下发 + Redis 距离数据）
-	service.InitLockControl(conf.Cfg.Mqtt, conf.Cfg.Redis)
+	// 初始化设备通信基础设施（MQTT 下发 + 订阅上行主题 + Redis）
+	service.InitDevice(conf.Cfg.Mqtt, conf.Cfg.Redis)
 
+	gin.DefaultWriter = io.Discard
 	r := gin.New()
 	// 全局日志 + 鉴权（对齐 Java WebAppConfigurer 的 PathInterceptor + LoginInterceptor）
 	r.Use(gin.Recovery(), middleware.MiddleLog(logger.Mylog), middleware.Auth())
 
 	router.RouterInit(r)
 
+	logger.Mylog.Info().Msg(fmt.Sprintf("应用启动成功, 监听端口: %d", conf.Cfg.App.Port))
 	r.Run(serverPort)
 }

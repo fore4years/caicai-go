@@ -45,6 +45,10 @@ var excludedPrefixes = []string{
 	// swagger / 静态资源
 	"/swagger-resources/", "/webjars/", "/v2/", "/swagger-ui/", "/v3/",
 	"/static/", "/error", "/page/", "/js/", "/css/", "/img/", "/fonts/", "/agreement/",
+	// 前端入口及根级静态文件（static/ 挂载在根路径后，根路径下的入口不被上面前缀覆盖）
+	"/index.html", "/favicon",
+	// 微信域名校验文件（static/ 根级）
+	"/MP_verify", "/RZgTjYwAOm", "/QfIw9ZHwHp",
 	// 微信登录/注册
 	"/wechat/", "/doc",
 	// 系统后台 / 运维
@@ -74,6 +78,10 @@ var excludedPrefixes = []string{
 
 // isExcluded 判断路径是否在白名单内。
 func isExcluded(path string) bool {
+	// 根路径 / 需要精确匹配（前缀匹配 "/" 会放行所有请求）。
+	if path == "/" {
+		return true
+	}
 	for _, p := range excludedPrefixes {
 		if strings.HasPrefix(path, p) {
 			return true

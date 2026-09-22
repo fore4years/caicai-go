@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>职工管理</title>
+    <link rel="stylesheet" href="employee.css">
+    <script src="../../../js/system.js"></script>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+
+<body>
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+
+    <!-- 搜索框 -->
+    <div class="search" style="display: flex; align-items: center; flex-wrap: wrap;">
+        <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.employeeId" placeholder="请输入员工工号查询"></el-input>
+        <el-input size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.phone" placeholder="请输入手机号查询"></el-input>
+        <span style="margin-right: 10px; font-size: 13px; color: #606266;">所属部门：</span>
+        <el-select size="mini" style="width: 200px; margin-right:10px; font-size:13px;" v-model="searchParams.department" placeholder="请选择所属部门">
+            <el-option label="全部" value=""></el-option>
+            <el-option label="研发部门" value="研发部门"></el-option>
+            <el-option label="硬件部门" value="硬件部门"></el-option>
+            <el-option label="设计部门" value="设计部门"></el-option>
+            <el-option label="其他" value="其他"></el-option>
+        </el-select>
+        <el-button size="mini" type="info" style="margin-right:10px;" @click="searchEmployees" plain>查询</el-button>
+        <el-button size="mini" type="warning" @click="resetSearch" plain>重置</el-button>
+    </div>
+
+    <!-- 添加-删除 -->
+    <div class="search" style="margin-top: 10px;">
+        <el-button size="mini" type="danger" @click="BatchDelete()" plain :disabled="!isAdmin" :title="isAdmin ? '批量删除选中的职工信息' : '无权限操作，请联系管理员'">批量删除</el-button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="search" style="margin-top: 10px; font-size:12px;">
+        <el-table
+                ref="multipleTable"
+                :data="tableData"
+                tooltip-effect="dark"
+                style="width: 100%"
+                @selection-change="handleSelectionChange"
+        >
+            <el-table-column type="selection" width="55"></el-table-column>
+            <el-table-column type="index" label="序号" width="80"></el-table-column>
+            <el-table-column prop="employeeId" label="员工工号" width="150"></el-table-column>
+            <el-table-column prop="name" label="姓名" width="120"></el-table-column>
+            <el-table-column prop="password" label="密码" width="150">
+                <template slot-scope="scope">
+                    {{ encryptPassword(scope.row.password) }}
+                </template>
+            </el-table-column>
+            <el-table-column prop="phone" label="手机号" width="150"></el-table-column>
+            <el-table-column prop="entryDate" label="入职日期" width="150">
+                <template slot-scope="scope">
+                    {{ formatDate(scope.row.entryDate) }}
+                </template>
+            </el-table-column>
+            <el-table-column prop="department" label="所属部门" width="150"></el-table-column>
+            <el-table-column prop="position" label="职务" width="150"></el-table-column>
+            <el-table-column prop="auditStatus" label="状态" width="120">
+                <template slot-scope="scope">
+                    <span :style="{ color: getStatusColor(scope.row.auditStatus) }">
+                    {{ formatStatus(scope.row.auditStatus) }}
+                    </span>
+                </template>
+            </el-table-column>
+            <el-table-column width="250px" label="操作">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="success" @click="handlePass(scope.$index, scope.row)" :disabled="!isAdmin" :title="isAdmin ? '通过该职工审核' : '无权限操作，请联系管理员'">通过</el-button>
+                    <el-button size="mini" type="danger" @click="handleRefuse(scope.$index, scope.row)" :disabled="!isAdmin" :title="isAdmin ? '拒绝该职工审核' : '无权限操作，请联系管理员'">拒绝</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+
+
+    <!-- 分页 -->
+    <div style="margin-top:10px; float: right">
+        <el-pagination
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+                :current-page="pageParams.pageNum"
+                :page-sizes="[10, 20, 30]"
+                :page-size="pageParams.pageSize"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total"
+        ></el-pagination>
+    </div>
+
+</div>
+
+<script>
+    // 将vue挂载到id为home的根元素上
+    let vm = new Vue({
+        el: "#home",
+        data() {
+            return {
+                formLabelWidth: '100px', //表单内每行的宽度
+                isAdmin: false, // 管理员权限状态
+                multipleSelection: [], // 存储选中的职工数据
+                // 搜索参数
+                searchParams: {
+                    employeeId: '',
+                    phone: '',
+                    department: ''
+                },
+                // 分页参数
+                pageParams: {
+                    pageNum: 1,
+                    pageSize: 10
+                },
+                total: 0,
+                tableData: [],
+                allEmployeeData: [] // 存储所有员工数据用于前端搜索
+            };
+        },
+        // 钩子函数 -- 初始化
+        created() {
+            this.checkAdminStatus();
+            this.loadData();
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发查询
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                if ((event.keyCode === 13 || event.key === 'Enter')) {
+                    this.searchEmployees();
+                }
+            },
+            // 检查管理员权限状态
+            checkAdminStatus() {
+                // 从Cookie中获取用户信息
+                let username = this.getCookie('username');
+                if (username) {
+                    // 发送请求检查管理员状态
+                    axios.get('/system/checkAdmin', {
+                        params: {
+                            account: username
+                        }
+                    }).then(response => {
+                        if (response.data.code === 200) {
+                            this.isAdmin = response.data.data.isAdmin === 1 || response.data.data.isAdmin === 2;
+                        } else {
+                            this.isAdmin = false;
+                            console.error('获取管理员状态失败:', response.data.msg);
+                        }
+                    }).catch(error => {
+                        this.isAdmin = false;
+                        console.error('检查管理员状态出错:', error);
+                    });
+                } else {
+                    this.isAdmin = false;
+                    console.warn('未找到用户信息，默认非管理员状态');
+                }
+            },
+
+            // 获取Cookie中的用户信息
+            getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+            },
+
+            loadData() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '数据加载中...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                // 更新页面数据
+                this.init();
+
+                loading.close(); // 关闭加载提示
+            },
+
+            // 获取所有数据并存储
+            init() {
+                // 添加重试机制，避免无限循环
+                if (this.initRetryCount === undefined) {
+                    this.initRetryCount = 0;
+                }
+                
+                if (this.initRetryCount > 3) {
+                    console.error("超过最大重试次数，停止刷新");
+                    this.$message({
+                        message: "数据加载失败，请刷新页面重试",
+                        type: "error"
+                    });
+                    this.initRetryCount = 0;
+                    return;
+                }
+                
+                this.initRetryCount++;
+                
+                axios.get('/om/employee/getAll')
+                .then(res => {
+                    // 重置重试计数器
+                    this.initRetryCount = 0;
+                    
+                    // 检查响应是否有效
+                    if (!res) {
+                        console.error("无效的响应:", res);
+                        this.$message({
+                            message: "服务器返回数据异常，请检查网络连接",
+                            type: "error"
+                        });
+                        this.allEmployeeData = [];
+                        this.searchEmployees();
+                        return;
+                    }
+                    
+                    // 根据实际的接口返回格式处理数据
+                    let data = res.data;
+                    
+                    // 如果res.data是undefined，但res本身是数组，说明数据直接存储在res中
+                    if (!data && Array.isArray(res)) {
+                        data = res;
+                    }
+                    
+                    // 如果返回的是标准的响应格式（包含success、code、data、msg）
+                    if (data && data.code === 200 && data.success === true) {
+                        data = data.data; // 这里data.data才是真正的数据数组
+                    }
+                    
+                    // 如果data是数组，存储所有数据
+                    if (Array.isArray(data)) {
+                        this.allEmployeeData = data;
+                    } else {
+                        // 如果data是对象，尝试提取list字段
+                        if (data && data.list) {
+                            this.allEmployeeData = data.list;
+                        } else {
+                            // 其他情况，设置为空数组
+                            console.warn("无法识别的数据格式，设置为空数组:", data);
+                            this.allEmployeeData = [];
+                        }
+                    }
+                    
+                    // 调用搜索方法进行初始显示
+                    this.searchEmployees();
+                }).catch(error => {
+                    console.error("获取职工数据失败:", error);
+                    this.$message({
+                        message: "获取职工数据失败!",
+                        type: "error"
+                    });
+                    // 即使出错也要设置空数组，避免无限循环
+                    this.allEmployeeData = [];
+                    this.searchEmployees();
+                })
+            },
+
+            // 格式化日期
+            formatDate(dateStr) {
+                if (!dateStr) return '';
+                try {
+                    const date = new Date(dateStr);
+                    return date.toLocaleDateString();
+                } catch (e) {
+                    return dateStr;
+                }
+            },
+
+            formatStatus(status) {
+                switch (status) {
+                    case 1:
+                        return '已通过';
+                    case -1:
+                        return '未通过';
+                    case 0:
+                        return '待审核';
+                    default:
+                        return '未知状态';
+                }
+            },
+            getStatusColor(status) {
+                switch (status) {
+                    case 1:
+                        return 'green';
+                    case -1:
+                        return 'red';
+                    case 0:
+                        return 'orange';
+                    default:
+                        return 'black';
+                }
+            },
+
+            // 前端搜索过滤
+            searchEmployees() {
+                // 如果还没有数据，先获取数据
+                if (this.allEmployeeData.length === 0) {
+                    this.init();
+                    return;
+                }
+                
+                // 前端搜索处理
+                let filteredList = [...this.allEmployeeData];
+                
+                // 员工工号搜索
+                if (this.searchParams.employeeId) {
+                    filteredList = filteredList.filter(item => 
+                        item.employeeId && item.employeeId.includes(this.searchParams.employeeId)
+                    );
+                }
+                
+                // 手机号搜索
+                if (this.searchParams.phone) {
+                    filteredList = filteredList.filter(item => 
+                        item.phone && item.phone.includes(this.searchParams.phone)
+                    );
+                }
+                
+                // 部门搜索
+                if (this.searchParams.department) {
+                    filteredList = filteredList.filter(item => 
+                        item.department === this.searchParams.department
+                    );
+                }
+                
+                // 前端分页处理
+                const start = (this.pageParams.pageNum - 1) * this.pageParams.pageSize;
+                const end = start + this.pageParams.pageSize;
+                const paginatedList = filteredList.slice(start, end);
+                
+                this.tableData = paginatedList;
+                this.total = filteredList.length;
+            },
+
+            // 通过按钮
+            handlePass(index, row) {
+                axios.get('/om/employee/updateStatus', {
+                    params: {
+                        status: 1,
+                        employeeId: row.employeeId
+                    }
+                }).then(res => {
+                    if (res) {
+                        this.$message({
+                            message: "操作成功!",
+                            type: "success"
+                        });
+                        // 重新获取所有数据并刷新显示
+                        this.init();
+                    } else {
+                        this.$message({
+                            message: "操作失败!",
+                            type: "error"
+                        });
+                    }
+                }).catch(error => {
+                    console.error("审核通过操作失败:", error);
+                    this.$message({
+                        message: "操作失败!",
+                        type: "error"
+                    });
+                })
+            },
+
+            // 拒绝按钮
+            handleRefuse(index, row) {
+                axios.get('/om/employee/updateStatus', {
+                    params: {
+                        status: -1,
+                        employeeId: row.employeeId
+                    }
+                }).then(res => {
+                    if (res) {
+                        this.$message({
+                            message: "操作成功!",
+                            type: "success"
+                        });
+                        // 重新获取所有数据并刷新显示
+                        this.init();
+                    } else {
+                        this.$message({
+                            message: "操作失败!",
+                            type: "error"
+                        });
+                    }
+                }).catch(error => {
+                    console.error("审核拒绝操作失败:", error);
+                    this.$message({
+                        message: "操作失败!",
+                        type: "error"
+                    });
+                })
+            },
+
+            // 批量删除请求
+            BatchDelete() {
+                if (!this.multipleSelection || this.multipleSelection.length === 0) {
+                    this.$message({
+                        type: "warning",
+                        message: "请先选择要删除的职工"
+                    });
+                    return;
+                }
+                
+                // 提示是否删除
+                this.$confirm(`确定要删除选中的 ${this.multipleSelection.length} 条职工信息吗?`, "提示", {
+                    confirmButtonText: "确定",
+                    cancelButtonText: "取消",
+                    type: "warning"
+                })
+                    .then(() => {
+                        // 批量删除逻辑
+                        this.performBatchDelete();
+                    })
+                    .catch(() => {
+                        this.$message({
+                            type: "info",
+                            message: "已取消批量删除"
+                        });
+                    });
+            },
+            
+            // 执行批量删除
+            performBatchDelete() {
+                const loading = this.$loading({
+                    lock: true,
+                    text: '正在删除...',
+                    background: 'rgba(0, 0, 0, 0.7)'
+                });
+                
+                // 收集所有要删除的员工工号
+                const employeeIds = this.multipleSelection.map(item => item.employeeId);
+                
+                // 使用Promise.all来并行执行所有删除请求
+                const deletePromises = employeeIds.map(employeeId => {
+                    return axios.delete(`/om/employee/deleteById?employeeId=${employeeId}`);
+                });
+                
+                Promise.all(deletePromises)
+                    .then(responses => {
+                        loading.close();
+                        
+                        // 统计成功和失败的删除数量
+                        let successCount = 0;
+                        let failCount = 0;
+                        
+                        responses.forEach((response, index) => {
+                            if (response) {
+                                successCount++;
+                            } else {
+                                failCount++;
+                                console.error(`删除员工 ${employeeIds[index]} 失败:`, response);
+                            }
+                        });
+                        
+                        if (failCount === 0) {
+                            this.$message({
+                                type: "success",
+                                message: `成功删除 ${successCount} 条职工信息`
+                            });
+                        } else if (successCount > 0) {
+                            this.$message({
+                                type: "warning",
+                                message: `成功删除 ${successCount} 条，失败 ${failCount} 条职工信息`
+                            });
+                        } else {
+                            this.$message({
+                                type: "error",
+                                message: `删除失败，请检查网络或联系管理员`
+                            });
+                        }
+                        
+                        // 重新加载数据
+                        this.init();
+                        // 清空选择
+                        this.multipleSelection = [];
+                        // 强制Vue重新渲染表格
+                        this.$nextTick(() => {
+                            this.$refs.multipleTable && this.$refs.multipleTable.doLayout();
+                        });
+                    })
+                    .catch(error => {
+                        loading.close();
+                        console.error("批量删除失败:", error);
+                        this.$message({
+                            type: "error",
+                            message: "批量删除失败，请检查网络或联系管理员"
+                        });
+                    });
+            },
+
+            // 存放选中的数据，要批量删除的数据
+            handleSelectionChange(val) {
+                this.multipleSelection = val;
+            },
+
+            // 重置搜索
+            resetSearch() {
+                this.searchParams = {
+                    employeeId: '',
+                    phone: '',
+                    department: ''
+                };
+                this.pageParams.pageNum = 1;
+                this.searchEmployees();
+            },
+
+            // 分页
+            handleSizeChange(pageSize) {
+                this.pageParams.pageSize = pageSize;
+                this.pageParams.pageNum = 1;
+                this.searchEmployees();
+            },
+
+            handleCurrentChange(pageNum) {
+                this.pageParams.pageNum = pageNum;
+                this.searchEmployees();
+            },
+
+            // 密码加密显示
+            encryptPassword(password) {
+                if (!password) return '';
+                // 简单加密：显示为固定长度的星号
+                return '********';
+            }
+        },
+    });
+
+</script>
+
+
+</body>
+
+</html>

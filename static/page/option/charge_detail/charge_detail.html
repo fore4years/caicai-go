@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>充电汇总</title>
+    <link rel="stylesheet" href="charge_detail.css">
+    <script src="../../../js/system.js"></script>
+    <!--        <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>-->
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+</head>
+
+<body>
+<!-- 创建一个根元素 -->
+<div class="home" id="home">
+    <!--日期选择器-->
+    <div class="block">
+        <el-date-picker
+                v-model="timeValue"
+                type="datetimerange"
+                :picker-options="pickerOptions"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                value-format="yyyy-MM-dd HH:mm:ss"
+                align="right">
+        </el-date-picker>
+        <el-button style="margin-left: 10px;" size="mini" type="success" @click="getStationInfoByDate()">查询</el-button>
+        <el-button size="mini" type="warning" @click="reset()" plain>重置</el-button>
+    </div>
+
+    <div class="title">
+        <div class="left">
+            <div class="top-nav"> 电量汇总（度）</div>
+            <div class="bottom-nav"> {{ degree != null ? degree : 0 }}</div>
+        </div>
+        <div class="right">
+            <div class="top-nav"> 今日电量（度）</div>
+            <div class="bottom-nav"> {{ todayDegree != null ? todayDegree : 0 }}</div>
+        </div>
+        <div class="right">
+            <div class="top-nav"> 收益汇总（元）</div>
+            <div class="bottom-nav"> {{ fee != null ? fee : 0 }}</div>
+        </div>
+        <div class="right">
+            <div class="top-nav"> 今日收益（元）</div>
+            <div class="bottom-nav"> {{ todayFee != null ? todayFee : 0 }}</div>
+        </div>
+    </div>
+
+    <!--充电记录-->
+    <div class="chart">
+        <div class="chart-title">充电记录</div>
+        <!-- 表格 -->
+        <div class="search" style="margin-top: 10px; font-size:12px;">
+            <el-table
+                    ref="multipleTable"
+                    :data="tableData"
+                    tooltip-effect="dark"
+                    style="width: 100%"
+            >
+                <el-table-column type="index" label="序号" width="80"></el-table-column>
+                <el-table-column prop="orderid" label="订单id" width="250"></el-table-column>
+                <el-table-column prop="openid" label="用户openid" width="300"></el-table-column>
+                <el-table-column prop="lockid" label="插座编号" width="120"></el-table-column>
+                <el-table-column prop="beginTime" label="开始充电时间" width="200"></el-table-column>
+                <el-table-column prop="closeTime" label="结束充电时间" width="200"></el-table-column>
+                <el-table-column prop="consumptionLocation" label="充电地址" width="200"></el-table-column>
+                <el-table-column prop="chargingDegree" label="充电度数" width="150"></el-table-column>
+                <el-table-column prop="chargingRates" label="充电费率" width="150"></el-table-column>
+                <el-table-column prop="chargingTime" label="充电时长" width="150"></el-table-column>
+                <el-table-column prop="basicConsumption" label="基本消费" width="200"></el-table-column>
+            </el-table>
+        </div>
+    </div>
+    <!-- 分页 -->
+    <div class="pagination">
+        <!--        <div class="prev-page-btn">返回上一页</div>-->
+        <el-button type="primary" icon="el-icon-arrow-left" @click="prevBtn">上一页</el-button>
+        <div style="margin:10px 0 0 800px; float: right">
+            <el-pagination
+                    @size-change="handleSizeChange"
+                    @current-change="handleCurrentChange"
+                    :current-page="params.pageNum"
+                    :page-sizes="[6, 20, 50, 100]"
+                    :page-size="params.pageSize"
+                    layout="total, sizes, prev, pager, next, jumper"
+                    :total="total"
+            ></el-pagination>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    window.onload = function () {
+        // 获取查询字符串
+        const searchParams = new URLSearchParams(window.location.search);
+
+        // 获取stationId参数
+        const pid = searchParams.get('pid');
+        vm.pid = pid;
+
+        console.log(pid); // 输出获取到的stationId值
+
+        vm.loadData();
+
+    }
+    // 将vue挂载到id为home的根元素上
+    const vm = new Vue({
+            el: "#home",
+            data() {
+                return {
+                    isLoading: true,
+                    pid: '',
+                    degree: 0, // 电量汇总
+                    todayDegree: 0, // 今日电量
+                    fee: 0, // 收益汇总
+                    todayFee: 0, // 今日收益
+                    params: {
+                        pid: "",
+                        pageNum: 1,
+                        pageSize: 6
+                    },
+                    total: 0,
+                    tableData: [],
+                    pickerOptions: {
+                        shortcuts: [{
+                            text: '最近一周',
+                            onClick(picker) {
+                                const end = new Date();
+                                const start = new Date();
+                                start.setTime(start.getTime() - 3600 * 1000 * 24 * 7);
+                                start.setHours(0, 0, 0, 0);
+                                end.setHours(0, 0, 0, 0);
+                                picker.$emit('pick', [start, end]);
+                            }
+                        }, {
+                            text: '最近一个月',
+                            onClick(picker) {
+                                const end = new Date();
+                                const start = new Date();
+                                start.setTime(start.getTime() - 3600 * 1000 * 24 * 30);
+                                start.setHours(0, 0, 0, 0);
+                                end.setHours(0, 0, 0, 0);
+                                picker.$emit('pick', [start, end]);
+                            }
+                        }, {
+                            text: '最近三个月',
+                            onClick(picker) {
+                                const end = new Date();
+                                const start = new Date();
+                                start.setTime(start.getTime() - 3600 * 1000 * 24 * 90);
+                                start.setHours(0, 0, 0, 0);
+                                end.setHours(0, 0, 0, 0);
+                                picker.$emit('pick', [start, end]);
+                            }
+                        }]
+                    },
+
+                    timeValue: ''
+                };
+            },
+            created() {
+            },
+            mounted() {
+                // 添加键盘事件监听器，Enter键触发查询
+                document.addEventListener('keydown', this.handleKeyDown);
+            },
+            beforeDestroy() {
+                // 移除键盘事件监听器
+                document.removeEventListener('keydown', this.handleKeyDown);
+            },
+            methods: {
+                // 处理键盘按下事件
+                handleKeyDown(event) {
+                    if ((event.keyCode === 13 || event.key === 'Enter')) {
+                        this.getStationInfoByDate();
+                    }
+                },
+                loadData() {
+                    const loading = this.$loading({
+                        lock: true,
+                        text: '数据加载中...',
+                        background: 'rgba(0, 0, 0, 0.7)'
+                    });
+                    // 更新页面数据
+                    this.getDegree();
+                    this.getOrderList();
+                    this.getFee();
+                    this.getTodayDegree();
+                    this.getTodayFee();
+
+                    loading.close(); // 关闭加载提示
+                },
+
+                // 根据日期查询
+                getStationInfoByDate() {
+                    console.log("日期：", this.timeValue)
+                    this.loadData();
+                },
+
+                // 获取电量汇总
+                getDegree() {
+                    axios.get('/system/order/getOrderDegree', {
+                        params: {
+                            pid: this.pid,
+                            startDate: this.timeValue[0],
+                            endDate: this.timeValue[1]
+                        }
+                    }).then(res => {
+                        console.log("自定义电量汇总：", res);
+                        this.degree = res;
+                    })
+                },
+
+                // 获取今日电量
+                getTodayDegree() {
+                    axios.get('/system/order/getOrderDegreeByToday', {
+                        params: {
+                            pid: this.pid
+                        }
+                    }).then(res => {
+                        console.log("今日电量汇总：", res);
+                        this.todayDegree = res;
+                    })
+                },
+
+                // 获取金额汇总
+                getFee() {
+                    axios.get('/system/order/getOrderFee', {
+                        params: {
+                            pid: this.pid,
+                            startDate: this.timeValue[0],
+                            endDate: this.timeValue[1]
+                        }
+                    }).then(res => {
+                        console.log("自定义金额汇总：", res);
+                        this.fee = res;
+                    })
+                },
+
+                // 获取今日金额
+                getTodayFee() {
+                    axios.get('/system/order/getOrderFeeByToday', {
+                        params: {
+                            pid: this.pid
+                        }
+                    }).then(res => {
+                        console.log("今日金额汇总：", res);
+                        this.todayFee = res;
+                    })
+                },
+
+                // 获取充电记录
+                getOrderList() {
+                    axios.get('/system/order/getOrdersByPidAndDate', {
+                        params: {
+                            pid: this.pid,
+                            current: this.params.pageNum,
+                            size: this.params.pageSize,
+                            startDate: this.timeValue[0],
+                            endDate: this.timeValue[1]
+                        }
+                    }).then(res => {
+                        console.log("充电记录：", res);
+                        this.tableData = res.list;
+                        this.total = res.total;
+                    })
+                },
+
+                // 表格分页
+                // 分页
+                handleSizeChange(pageSize) {
+                    this.params.pageSize = pageSize;
+                    this.getOrderList();
+                },
+
+                handleCurrentChange(pageNum) {
+                    this.params.pageNum = pageNum;
+                    this.getOrderList();
+                },
+
+                // 上一页
+                prevBtn() {
+                    window.location.href = "../charge_total/charge_total.html";
+                },
+
+                // 重置
+                reset() {
+                    this.timeValue = "";
+                    console.log("reset 方法 执行 :")
+                    this.loadData();
+                },
+
+            },
+
+        })
+    ;
+</script>
+
+</body>
+
+</html>

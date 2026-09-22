@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>七彩云创后台管理系统</title>
+    <link rel="stylesheet" href="/page/login/login.css">
+    <script src="../../js/system.js"></script>
+<!--    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>-->
+<!--    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>-->
+</head>
+
+<body class="body">
+
+<div class="left">
+
+    <div class="diyihang">
+
+        <div class="logo"></div>
+
+        <div class="title">七彩云创后台管理</div>
+
+    </div>
+
+    <div class="img"></div>
+
+</div>
+
+<div class="right" id="right">
+
+    <div class="login_kuang">
+
+        <div class="title" >登录</div>
+
+        <div class="account">
+
+            <div class="icon"></div>
+
+            <input type="text" class="in" @focus="msg_clean" autofocus placeholder="请输入" v-model="account">
+
+            <span class="msg">{{msg_act}}</span>
+
+        </div>
+
+        <div class="password">
+
+            <div class="icon"></div>
+
+            <input type="password" @focus="msg_clean" class="in" placeholder="请输入" v-model="password">
+
+            <span class="msg">{{msg_pwd}}</span>
+
+        </div>
+
+        <div class="disihang">
+
+            <div class="left_r">忘记密码？</div>
+
+            <div class="right_r">
+
+                <input type="checkbox" :checked="save" @click="saveCh">
+
+                <div class="text">保存密码</div>
+
+            </div>
+
+        </div>
+
+        <div class="btn" @click="login" @touchend.prevent="login">登录</div>
+
+    </div>
+    <div class="sign" style="position: absolute;color: black;bottom: 10px;right: 10px;font-size: 10px">
+        @2021-现在 caiparking.com 版权所有 / <a style="color: black;text-decoration: none;" href="http://beian.miit.gov.cn/" >蜀ICP备2021021637号</a>
+    </div>
+</div>
+
+
+</body>
+
+<script>
+
+    window.onload=function(){
+
+        if(window.top!=window){
+            window.top.location=window.location;
+        }
+
+        app.account=localStorage.getItem('account')
+        app.password=localStorage.getItem('password')
+
+    }
+
+    let app =new Vue({
+        el:'#right',
+        data:{
+            account:'',
+            password:'',
+
+            msg_act:'',
+            msg_pwd:'',
+
+            save:true,
+            isSubmitting: false,
+        },
+        methods:{
+
+            login: function () {
+                if (this.isSubmitting) return;
+                
+                var that=this;
+                let z = /[A-Za-z]/
+                if (this.account == '') {
+                    this.msg_act = '账号不能为空'
+                }else if(!z.test(this.account)){
+                    this.msg_act = '账号必须为全英文'
+                }
+                else if (this.password == '') {
+                    this.msg_pwd = '密码不能为空'
+                }else {
+                    this.isSubmitting = true;
+                    axios.post('/system/login',{
+                        account: this.account,
+                        password: this.password
+                    }, {
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    }).then(function (e) {
+                        console.log(e);
+                        that.msg_clean();
+                        if (e.data!=''){
+                            that.msg_pwd=e.data;
+                            that.isSubmitting = false;
+                        }else{
+                            localStorage.setItem('account',that.account);
+                            if(that.save){
+                                localStorage.setItem('password',that.password);
+                            }
+                            window.location.href="../index/index.html?account="+that.account
+                        }
+                    }).catch(function(error) {
+                        console.error('登录请求失败:', error);
+                        that.isSubmitting = false;
+                    })
+                }
+            },
+
+            msg_clean(){
+                this.msg_act='';
+                this.msg_pwd='';
+            },
+
+            saveCh(){
+                if (this.save){
+                    this.save=false;
+                }else{
+                    this.save=true;
+                }
+            }
+
+        }
+    })
+
+</script>
+
+</html>

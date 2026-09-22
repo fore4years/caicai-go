@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>修改密码</title>
+    <link rel="stylesheet" href="../../../css/common.css">
+    <link rel="stylesheet" href="pwdChange.css">
+    <script src="../../../js/system.js"></script>
+</head>
+<body>
+<div class="container">
+    <!-- 表单内容 -->
+    <div class="form-container">
+        <div class="form-box" id="pwdChangeForm">
+            <div class="form-item">
+                <label><span class="required">*</span> 原密码</label>
+                <input type="password" v-model="pwd" @focus="clean" placeholder="请输入原密码">
+                <div class="error-tip" v-if="tip0">{{ tip0 }}</div>
+            </div>
+
+            <div class="form-item">
+                <label><span class="required">*</span> 新密码</label>
+                <input type="password" v-model="pwd_n" @focus="clean" placeholder="请输入新密码">
+                <div class="error-tip" v-if="tip1">{{ tip1 }}</div>
+            </div>
+
+            <div class="form-item">
+                <label><span class="required">*</span> 确认密码</label>
+                <input type="password" v-model="pwd_an" @focus="clean" placeholder="请再次输入新密码">
+                <div class="error-tip" v-if="tip2">{{ tip2 }}</div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" @click="submit">提交</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var app = new Vue({
+        el: '#pwdChangeForm',
+        data: {
+            tip0: '',
+            tip1: '',
+            tip2: '',
+            pwd: '',
+            pwd_n: '',
+            pwd_an: ''
+        },
+        mounted() {
+            // 添加键盘事件监听器，Enter键触发表单提交
+            document.addEventListener('keydown', this.handleKeyDown);
+        },
+        beforeDestroy() {
+            // 移除键盘事件监听器
+            document.removeEventListener('keydown', this.handleKeyDown);
+        },
+        methods: {
+            // 处理键盘按下事件
+            handleKeyDown(event) {
+                if ((event.keyCode === 13 || event.key === 'Enter')) {
+                    this.submit();
+                }
+            },
+            clean() {
+                this.tip0 = '';
+                this.tip1 = '';
+                this.tip2 = '';
+            },
+
+            submit() {
+                let that = this;
+                if (this.pwd === '') {
+                    this.tip0 = '密码不能为空';
+                    return;
+                } else if (this.pwd_n === '') {
+                    this.tip1 = '密码不能为空';
+                    return;
+                } else if (this.pwd_an === '') {
+                    this.tip2 = '密码不能为空';
+                    return;
+                } else if (this.pwd_n !== this.pwd_an) {
+                    this.tip2 = '密码输入不一致';
+                    return;
+                }
+
+                axios.post('/system/pwdChange', {
+                    account: localStorage.getItem('account'),
+                    pwd_o: this.pwd,
+                    pwd_n: this.pwd_n,
+                }).then(function(e) {
+                    if (e.data == 'no') {
+                        that.tip0 = '原密码错误';
+                    } else {
+                        alert(e.data);
+                        localStorage.setItem('password', '');
+                        window.location.href = "../../login/login.html";
+                    }
+                });
+            },
+
+            cancel() {
+                window.history.back();
+            }
+        }
+    });
+</script>
+</body>
+</html>
