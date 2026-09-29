@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -47,6 +48,29 @@ func sumBasicConsumption(db *gorm.DB) decimal.Decimal {
 		return decimal.Zero
 	}
 	return v
+}
+
+// revenueOrders 解析 spacesCode/type 并查询对应已完成订单（begin_time 降序），对齐 Java getOrderDetails。
+func revenueOrders(spacesCode, typ string) ([]model.OrderTbl, string, bool) {
+	spacesID, consumptionType, ok := revenueSpaces(spacesCode, typ)
+	if !ok {
+		return nil, "", false
+	}
+	var orders []model.OrderTbl
+	conf.Db.Model(&model.OrderTbl{}).
+		Where("spaces_id = ? AND consumption_type = ? AND state = ?", spacesID, consumptionType, "已完成").
+		Order("begin_time desc").Find(&orders)
+	return orders, consumptionType, true
+}
+
+// queryDecimal 读取查询参数并解析为 decimal.Decimal，缺失或解析失败返回 0。
+func queryDecimal(c *gin.Context, key string) decimal.Decimal {
+	if v := c.Query(key); v != "" {
+		if d, err := decimal.NewFromString(v); err == nil {
+			return d
+		}
+	}
+	return decimal.Zero
 }
 
 // MoneyPlaces /system/moneyPlaces → {max, list}（原始 Map）
@@ -164,23 +188,18 @@ func (a *AdminRevenueController) GetTodayIncome(c *gin.Context) {
 	today := time.Now().Format("2006-01-02")
 	todayIncome := sumBasicConsumption(conf.Db.Model(&model.OrderTbl{}).
 		Where("spaces_id = ? AND consumption_type = ? AND state = ?", spacesID, consumptionType, "已完成").
-		Where("over_time LIKE ?", today+"%"))
+		Where("over_time LIKE ?", "%"+today+"%"))
 
 	c.JSON(http.StatusOK, gin.H{"todayIncome": todayIncome})
 }
 
 // GetOrderDetails /system/getOrderDetails?spacesCode=&type= → 订单明细列表（原始 List<Map>）
 func (a *AdminRevenueController) GetOrderDetails(c *gin.Context) {
-	spacesID, consumptionType, ok := revenueSpaces(c.Query("spacesCode"), c.Query("type"))
+	orders, _, ok := revenueOrders(c.Query("spacesCode"), c.Query("type"))
 	if !ok {
 		c.JSON(http.StatusOK, []gin.H{})
 		return
 	}
-
-	var orders []model.OrderTbl
-	conf.Db.Model(&model.OrderTbl{}).
-		Where("spaces_id = ? AND consumption_type = ? AND state = ?", spacesID, consumptionType, "已完成").
-		Order("begin_time desc").Find(&orders)
 
 	result := make([]gin.H, 0, len(orders))
 	for _, o := range orders {
@@ -206,7 +225,7 @@ func (a *AdminRevenueController) GetTodayOrders(c *gin.Context) {
 
 	todayQuery := func() *gorm.DB {
 		return conf.Db.Model(&model.OrderTbl{}).
-			Where("over_time LIKE ? AND state = ?", today+"%", "已完成").
+			Where("over_time LIKE ? AND state = ?", "%"+today+"%", "已完成").
 			Order("over_time desc")
 	}
 
@@ -221,7 +240,7 @@ func (a *AdminRevenueController) GetTodayOrders(c *gin.Context) {
 	db.Find(&orders)
 
 	todayTotalIncome := sumBasicConsumption(conf.Db.Model(&model.OrderTbl{}).
-		Where("over_time LIKE ? AND state = ?", today+"%", "已完成"))
+		Where("over_time LIKE ? AND state = ?", "%"+today+"%", "已完成"))
 
 	list := make([]OrderDTO, 0, len(orders))
 	for _, o := range orders {
@@ -230,7 +249,84 @@ func (a *AdminRevenueController) GetTodayOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"max": max, "list": list, "todayTotalIncome": todayTotalIncome})
 }
 
-// ExcelExport GET /system/excel_export（Java 为二进制 Excel 流，这里按计划返回 JSON 桩）
+// excelOverview 对齐 Java excelImpl.buildData（概览 Sheet 单行汇总）。
+type excelOverview struct {
+	StartTime      *LocalDateTime  `json:"startTime"`
+	EndTime        *LocalDateTime  `json:"endTime"`
+	ElectronNum    decimal.Decimal `json:"electronNum"`
+	ElectronFee    decimal.Decimal `json:"electronFee"`
+	ServiceFee     decimal.Decimal `json:"serviceFee"`
+	OvertimeUseFee decimal.Decimal `json:"overtimeUseFee"`
+}
+
+// excelDetailRow 对齐 Java excelImpl.buildDetailData（收益明细 Sheet 每行 9 列）。
+type excelDetailRow struct {
+	OrderNo        string          `json:"orderNo"`
+	StartTime      *LocalDateTime  `json:"startTime"`
+	EndTime        *LocalDateTime  `json:"endTime"`
+	UserOpenID     string          `json:"userOpenId"`
+	Amount         decimal.Decimal `json:"amount"`
+	ElectronNum    decimal.Decimal `json:"electronNum"`
+	ElectronFee    decimal.Decimal `json:"electronFee"`
+	ServiceFee     decimal.Decimal `json:"serviceFee"`
+	OvertimeUseFee decimal.Decimal `json:"overtimeUseFee"`
+}
+
+// parseExcelDate 将 yyyy-MM-dd 转为 LocalDateTime；startOfDay 为 true 取 00:00:00，否则 23:59:59。
+// 空或非法日期返回 nil（对齐 Java parseDate）。
+func parseExcelDate(date string, startOfDay bool) *LocalDateTime {
+	if strings.TrimSpace(date) == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil
+	}
+	if !startOfDay {
+		t = t.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+	}
+	v := LocalDateTime(t)
+	return &v
+}
+
+// ExcelExport GET /system/excel_export
+// Java 使用 FesodSheet 输出二进制 Excel（概览 + 收益明细两个 Sheet）。Go 无 Excel 依赖，
+// 此处按相同业务逻辑组装概览与明细数据并以 JSON 返回（对齐 excelImpl.buildData/buildDetailData）。
 func (a *AdminRevenueController) ExcelExport(c *gin.Context) {
-	c.JSON(http.StatusOK, ResultSuccess("导出成功"))
+	overview := excelOverview{
+		StartTime:      parseExcelDate(c.Query("startDate"), true),
+		EndTime:        parseExcelDate(c.Query("endDate"), false),
+		ElectronNum:    queryDecimal(c, "chargingDegree"),
+		ElectronFee:    queryDecimal(c, "powerRate"),
+		ServiceFee:     queryDecimal(c, "serviceRate"),
+		OvertimeUseFee: queryDecimal(c, "timeoutCar"),
+	}
+
+	orders, consumptionType, _ := revenueOrders(c.Query("spacesCode"), c.Query("type"))
+	details := make([]excelDetailRow, 0, len(orders))
+	for _, o := range orders {
+		var electronFee, serviceFee decimal.Decimal
+		if consumptionType == "邻享充电" {
+			electronFee, serviceFee = privateElectronicByOrderidAndPrivateUser(o.Orderid)
+		} else {
+			electronFee, serviceFee = electronicFeesByOrderid(o.Orderid)
+		}
+		overtimeUseFee := o.BasicConsumption.Sub(electronFee).Sub(serviceFee)
+		if overtimeUseFee.IsNegative() {
+			overtimeUseFee = decimal.Zero
+		}
+		details = append(details, excelDetailRow{
+			OrderNo:        o.Orderid,
+			StartTime:      timeToLocal(o.BeginTime),
+			EndTime:        timeToLocal(o.OverTime),
+			UserOpenID:     o.Openid,
+			Amount:         o.BasicConsumption,
+			ElectronNum:    decimal.NewFromFloat(o.ChargingDegree),
+			ElectronFee:    electronFee,
+			ServiceFee:     serviceFee,
+			OvertimeUseFee: overtimeUseFee,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"overview": overview, "details": details})
 }

@@ -17,7 +17,7 @@ mysql:
   port: 3306
   username: "root"
   password: "lanlan1313!@#"
-  dbname: "parking"
+  dbname: "test_parking"
 
 app:
-  port: 8080
+  port: 6666

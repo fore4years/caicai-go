@@ -12,11 +12,11 @@ const TableNameLedTbl = "led_tbl"
 
 // LedTbl LED设备表
 type LedTbl struct {
-	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:序号" json:"id"`                 // 序号
-	Imei       string    `gorm:"column:imei;not null;comment:设备IMEI" json:"imei"`                              // 设备IMEI
-	GatewayID  string    `gorm:"column:gateway_id;not null;comment:网关ID" json:"gateway_id"`                    // 网关ID
-	CreateTime time.Time `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
-	UpdateTime time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
+	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:序号" json:"id"`                                // 序号
+	Imei       string    `gorm:"column:imei;not null;comment:设备IMEI" json:"imei"`                                             // 设备IMEI
+	GatewayID  string    `gorm:"column:gateway_id;not null;comment:网关ID" json:"gateway_id"`                                   // 网关ID
+	CreateTime time.Time `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
+	UpdateTime time.Time `gorm:"column:update_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
 }
 
 // TableName LedTbl's table name

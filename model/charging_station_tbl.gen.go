@@ -18,9 +18,9 @@ type ChargingStationTbl struct {
 	Name       string    `gorm:"column:name;comment:充电站名" json:"name"`                           // 充电站名
 	Openid     string    `gorm:"column:openid;comment:用户openid" json:"openid"`                   // 用户openid
 	PowerMax   int32     `gorm:"column:power_max;default:3000" json:"power_max"`
-	Pid        string    `gorm:"column:pid;primaryKey;comment:产品id" json:"pid"`                                // 产品id
-	CreateTime time.Time `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:安装时间" json:"create_time"` // 安装时间
-	UpdateTime time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
+	Pid        string    `gorm:"column:pid;primaryKey;comment:产品id" json:"pid"`                                               // 产品id
+	CreateTime time.Time `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:安装时间" json:"create_time"` // 安装时间
+	UpdateTime time.Time `gorm:"column:update_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
 }
 
 // TableName ChargingStationTbl's table name

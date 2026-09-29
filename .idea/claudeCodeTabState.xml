@@ -6,9 +6,10 @@
         <entry key="0">
           <value>
             <TabSessionState>
+              <option name="projectPath" value="H:\LB\code\caicai-go" />
               <option name="provider" value="claude" />
-              <option name="sessionId" value="df3a28b6-3138-48f7-8276-277f8c0589a1" />
-              <option name="cwd" value="E:\code\go\caicai-go" />
+              <option name="sessionId" value="2578da62-46ab-45a4-9ce3-6f14821699a7" />
+              <option name="cwd" value="H:\LB\code\caicai-go" />
               <option name="model" value="claude-sonnet-5[1m]" />
               <option name="permissionMode" value="plan" />
             </TabSessionState>

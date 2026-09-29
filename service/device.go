@@ -145,6 +145,26 @@ func SetRedisValue(key, value string) {
 	rdb.Set(context.Background(), key, value, 0)
 }
 
+// GetRedisValue 读取 Redis 字符串键值；未命中或客户端未初始化时返回空串。
+func GetRedisValue(key string) string {
+	if rdb == nil {
+		return ""
+	}
+	v, err := rdb.Get(context.Background(), key).Result()
+	if err != nil {
+		return ""
+	}
+	return v
+}
+
+// DelRedisValue 删除 Redis 键（对齐 Java redisTemplate.delete）。
+func DelRedisValue(key string) {
+	if rdb == nil {
+		return
+	}
+	rdb.Del(context.Background(), key)
+}
+
 // lockGateway 锁及其关联的产品/网关信息。
 type lockGateway struct {
 	lock    model.LockTbl

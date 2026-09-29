@@ -18,9 +18,9 @@ type ExternalController struct{}
 func (e *ExternalController) OpenGunHolderSensor(c *gin.Context) {
 	imei := c.Query("imei")
 
-	// 1. 根据 Imei 查 imei_tab 中 charging_station = imei 的记录，获取 chargingSocket
+	// 1. 根据 Imei 查 imei_tab 中 charging_station = imei 的记录，获取 chargingSocket（对齐 Java getByChargingStation，过滤逻辑删除）。
 	var row model.ImeiTab
-	if err := conf.Db.Where("charging_station = ?", imei).First(&row).Error; err != nil {
+	if err := conf.Db.Where("charging_station = ? AND deleted = 0", imei).First(&row).Error; err != nil {
 		c.JSON(http.StatusOK, ResultError(404, "未找到该 Imei 对应的枪座绑定关系"))
 		return
 	}

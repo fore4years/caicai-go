@@ -4,6 +4,7 @@ import (
 	"github.com/shopspring/decimal"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -188,7 +189,7 @@ func (c *LockController) GetById(ctx *gin.Context) {
 
 func (c *LockController) GetByLockId(ctx *gin.Context) {
 	var l model.LockTbl
-	if err := conf.Db.Where("lockid = ?", ctx.Query("lockId")).First(&l).Error; err != nil {
+	if err := conf.Db.Where("lockid = ?", strings.ToUpper(ctx.Query("lockId"))).First(&l).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -219,7 +220,7 @@ func (c *LockController) GetAll(ctx *gin.Context) {
 
 func (c *LockController) GetByPid(ctx *gin.Context) {
 	var l model.LockTbl
-	if err := conf.Db.Where("product_id = ?", ctx.Query("pid")).First(&l).Error; err != nil {
+	if err := conf.Db.Where("product_id = ?", strings.ToUpper(ctx.Query("pid"))).First(&l).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -319,7 +320,7 @@ func (c *ChargingStateController) Page(ctx *gin.Context) {
 	var total int64
 	conf.Db.Model(&model.ChargingStateTbl{}).Count(&total)
 	var rows []model.ChargingStateTbl
-	conf.Db.Model(&model.ChargingStateTbl{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	conf.Db.Model(&model.ChargingStateTbl{}).Order("create_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
 	list := make([]chargingStateDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, chargingStateToDTO(r))
@@ -399,6 +400,16 @@ func (c *StationManagementController) Save(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
+	if m.ProductID == "" {
+		ctx.JSON(http.StatusOK, ResultError(400, "产品id不能为空"))
+		return
+	}
+	var cnt int64
+	conf.Db.Model(&model.ChargingStationManagementTbl{}).Where("product_id = ?", m.ProductID).Count(&cnt)
+	if cnt > 0 {
+		ctx.JSON(http.StatusOK, ResultError(400, "该充电站id已存在,请检查后重试!"))
+		return
+	}
 	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&m).Error == nil))
 }
 
@@ -457,18 +468,24 @@ func (c *ReceptacleController) Add(ctx *gin.Context) {
 }
 
 func (c *ReceptacleController) BatchAdd(ctx *gin.Context) {
-	// body {pid, count?} 简化为：批量插入 count 个插座
+	// body {pid, num}，对齐 Java ReceptacleDto。
 	var req struct {
-		Pid   string `json:"pid"`
-		Count int    `json:"count"`
+		Pid string `json:"pid"`
+		Num int    `json:"num"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil || req.Count <= 0 {
+	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	for i := 1; i <= req.Count; i++ {
-		conf.Db.Create(&model.ReceptacleTbl{Pid: req.Pid, Number: int32(i), Status: 0, Name: strconv.Itoa(i)})
+	if req.Num <= 0 {
+		ctx.JSON(http.StatusOK, ResultError(400, "数量必须为正数"))
+		return
 	}
+	rows := make([]model.ReceptacleTbl, 0, req.Num)
+	for i := 1; i <= req.Num; i++ {
+		rows = append(rows, model.ReceptacleTbl{Pid: req.Pid, Number: int32(i), Status: 0, Name: strconv.Itoa(i) + "号插座"})
+	}
+	conf.Db.Create(&rows)
 	ctx.JSON(http.StatusOK, ResultSuccess(true))
 }
 
@@ -478,8 +495,8 @@ func (c *ReceptacleController) DeleteById(ctx *gin.Context) {
 }
 
 func (c *ReceptacleController) BatchDelete(ctx *gin.Context) {
-	res := conf.Db.Where("pid = ?", ctx.Param("pid")).Delete(&model.ReceptacleTbl{})
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	conf.Db.Where("pid = ?", ctx.Param("pid")).Delete(&model.ReceptacleTbl{})
+	ctx.JSON(http.StatusOK, ResultSuccess(true))
 }
 
 // ============ ImeiController（/imei） ============
@@ -487,21 +504,50 @@ func (c *ReceptacleController) BatchDelete(ctx *gin.Context) {
 type ImeiController struct{}
 
 func (c *ImeiController) Binding(ctx *gin.Context) {
-	res := conf.Db.Create(&model.ImeiTab{ChargingStation: ctx.Query("station"), ChargingSocket: ctx.Query("socket"), Status: 1})
+	station := ctx.Query("station")
+	socket := ctx.Query("socket")
+
+	// 已存在绑定关系直接返回成功（对齐 Java ImeiServiceImpl.binding 的 checkBinding）。
+	var cnt int64
+	conf.Db.Model(&model.ImeiTab{}).
+		Where("charging_station = ? AND charging_socket = ? AND deleted = 0", station, socket).
+		Count(&cnt)
+	if cnt > 0 {
+		ctx.JSON(http.StatusOK, ResultSuccess(true))
+		return
+	}
+
+	res := conf.Db.Create(&model.ImeiTab{ChargingStation: station, ChargingSocket: socket, Status: 1})
 	ctx.JSON(http.StatusOK, ResultSuccess(res.Error == nil))
 }
 
 func (c *ImeiController) CancelBinding(ctx *gin.Context) {
-	res := conf.Db.Where("charging_station = ? AND charging_socket = ?", ctx.Query("station"), ctx.Query("socket")).Delete(&model.ImeiTab{})
+	station := ctx.Query("station")
+	socket := ctx.Query("socket")
+
+	// 不存在绑定关系直接返回成功（对齐 Java ImeiServiceImpl.cancelBinding）。
+	var cnt int64
+	conf.Db.Model(&model.ImeiTab{}).
+		Where("charging_station = ? AND charging_socket = ? AND deleted = 0", station, socket).
+		Count(&cnt)
+	if cnt == 0 {
+		ctx.JSON(http.StatusOK, ResultSuccess(true))
+		return
+	}
+
+	// 逻辑删除（@TableLogic -> deleted = 1），对齐 Java remove()。
+	res := conf.Db.Model(&model.ImeiTab{}).
+		Where("charging_station = ? AND charging_socket = ? AND deleted = 0", station, socket).
+		Update("deleted", 1)
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
 func (c *ImeiController) ListBinding(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.ImeiTab{}).Count(&total)
+	conf.Db.Model(&model.ImeiTab{}).Where("deleted = 0").Count(&total)
 	var rows []model.ImeiTab
-	conf.Db.Model(&model.ImeiTab{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	conf.Db.Model(&model.ImeiTab{}).Where("deleted = 0").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
 	list := make([]imeiDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, imeiToDTO(r))

@@ -12,9 +12,9 @@ const TableNameOrderPrivateTbl = "order_private_tbl"
 
 // OrderPrivateTbl 私桩—订单关联表
 type OrderPrivateTbl struct {
-	Orderid       string    `gorm:"column:orderid;primaryKey;comment:订单id" json:"orderid"`                        // 订单id
-	IsPrivateUser int32     `gorm:"column:is_private_user;comment:是否为私桩桩主" json:"is_private_user"`                // 是否为私桩桩主
-	CreateTime    time.Time `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
+	Orderid       string    `gorm:"column:orderid;primaryKey;comment:订单id" json:"orderid"`                                       // 订单id
+	IsPrivateUser int32     `gorm:"column:is_private_user;comment:是否为私桩桩主" json:"is_private_user"`                               // 是否为私桩桩主
+	CreateTime    time.Time `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
 }
 
 // TableName OrderPrivateTbl's table name

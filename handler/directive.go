@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -25,27 +26,51 @@ func deviceID(gateway, nid string) string {
 // parseDirection 解析方向字符串。
 func parseDirection(s string) byte {
 	switch s {
-	case "1", "11", "0x11", "LEFT", "left":
+	case "1", "11", "0x11", "LEFT", "left", "L", "l":
 		return protocol.DirectionLeft
-	case "2", "22", "0x22", "RIGHT", "right":
+	case "2", "22", "0x22", "RIGHT", "right", "R", "r":
 		return protocol.DirectionRight
 	default:
 		return protocol.DirectionDefault
 	}
 }
 
-// reverseHexString 反转字符串（对齐 Java HexUtil.reverseHexString）。
+// reverseHexString 反转字符串，按 2 个十六进制字符为一组倒序（对齐 Java HexUtil.reverseHexString）。
 func reverseHexString(s string) string {
-	runes := []rune(s)
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
+	var b strings.Builder
+	for i := len(s) - 2; i >= 0; i -= 2 {
+		b.WriteString(s[i : i+2])
 	}
-	return string(runes)
+	return b.String()
 }
 
 // convertStringToHex 将字符串转为 ASCII 十六进制（对齐 Java HexUtil.convertStringToHex）。
 func convertStringToHex(s string) string {
 	return hex.EncodeToString([]byte(s))
+}
+
+// parseTimeData 解析车位牌时间数据 "HH:MM-HH:MM"，转为 4 字节（对齐 Java ChangeOpenTimeMessage.parseTimeData）。
+func parseTimeData(timeData string) []byte {
+	if timeData == "" {
+		return []byte{0, 0, 0, 0}
+	}
+	parts := strings.SplitN(timeData, "-", 2)
+	if len(parts) != 2 {
+		return []byte{0, 0, 0, 0}
+	}
+	start := strings.SplitN(parts[0], ":", 2)
+	end := strings.SplitN(parts[1], ":", 2)
+	if len(start) != 2 || len(end) != 2 {
+		return []byte{0, 0, 0, 0}
+	}
+	sh, e1 := strconv.Atoi(start[0])
+	sm, e2 := strconv.Atoi(start[1])
+	eh, e3 := strconv.Atoi(end[0])
+	em, e4 := strconv.Atoi(end[1])
+	if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
+		return []byte{0, 0, 0, 0}
+	}
+	return []byte{byte(sh), byte(sm), byte(eh), byte(em)}
 }
 
 // SendHex /directive/sendHex?gateway=&hex=
@@ -126,14 +151,19 @@ func (d *DirectiveController) SetGatewayAddress(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(400, "gatewayId长度限制为8"))
 		return
 	}
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpSetGateway, protocol.DirectionDefault, []byte(gatewayID))
+	data, err := hex.DecodeString(gatewayID)
+	if err != nil {
+		c.JSON(http.StatusOK, ResultError(400, "gatewayId长度限制为8"))
+		return
+	}
+	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpSetGateway, protocol.DirectionDefault, data)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // SetPwm /directive/setPwm?gateway=&nid=&direction=&pwm=
 func (d *DirectiveController) SetPwm(c *gin.Context) {
-	pwm := c.Query("pwm")
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpSetPWM, parseDirection(c.Query("direction")), []byte(pwm))
+	pwm, _ := strconv.Atoi(c.Query("pwm"))
+	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpSetPWM, parseDirection(c.Query("direction")), []byte{byte(pwm)})
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -144,8 +174,9 @@ func (d *DirectiveController) GetGatewayList(c *gin.Context) {
 
 // SetOpenTime /directive/setOpenTime?gateway=&nid=&ledMac=&OpenTime=&opCode=
 func (d *DirectiveController) SetOpenTime(c *gin.Context) {
-	data := convertStringToHex(reverseHexString(c.Query("ledMac"))) + convertStringToHex(c.Query("OpenTime"))
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpOpenTime, protocol.DirectionDefault, []byte(data))
+	dataHex := convertStringToHex(reverseHexString(c.Query("ledMac"))) + convertStringToHex(c.Query("OpenTime"))
+	data, _ := hex.DecodeString(dataHex)
+	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpOpenTime, protocol.DirectionDefault, data)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -153,20 +184,24 @@ func (d *DirectiveController) SetOpenTime(c *gin.Context) {
 func (d *DirectiveController) CalibrationPower(c *gin.Context) {
 	v1, _ := strconv.Atoi(c.Query("value1"))
 	v2, _ := strconv.Atoi(c.Query("value2"))
-	data := []byte{byte(v1 >> 8), byte(v1), byte(v2 >> 8), byte(v2)}
-	ok := service.SendCommand(c.Query("gateway"), protocol.OpCalibrationPower, protocol.DirectionDefault, data)
+	calibrationValue1 := strings.ToUpper(strconv.FormatInt(int64(v1), 16))
+	calibrationValue2 := strings.ToUpper(strconv.FormatInt(int64(v2), 16))
+	hexStr := "AA0200" + "C3" + "0004" + calibrationValue1 + calibrationValue2 + "45CD"
+	ok := service.SendHex(c.Query("gateway"), hexStr)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // OpenGauge /directive/openGauge?gateway=&nid=&data=
 func (d *DirectiveController) OpenGauge(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpOpenGauge, protocol.DirectionDefault, []byte(c.Query("data")))
+	v, _ := strconv.Atoi(c.Query("data"))
+	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpOpenGauge, protocol.DirectionDefault, []byte{byte(v)})
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // CloseGauge /directive/closeGauge?gateway=&nid=&data=
 func (d *DirectiveController) CloseGauge(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpCloseGauge, protocol.DirectionDefault, []byte(c.Query("data")))
+	v, _ := strconv.Atoi(c.Query("data"))
+	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpCloseGauge, protocol.DirectionDefault, []byte{byte(v)})
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -184,13 +219,15 @@ func (d *DirectiveController) CloseEle(c *gin.Context) {
 
 // OpenVoice /directive/openVoice?gateway=&nid=&data=
 func (d *DirectiveController) OpenVoice(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpOpenVoice, protocol.DirectionDefault, []byte(c.Query("data")))
+	v, _ := strconv.Atoi(c.Query("data"))
+	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpOpenVoice, protocol.DirectionDefault, []byte{byte(v)})
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // RotationPlatform /directive/rotationPlatform?gateway=&nid=&data=
 func (d *DirectiveController) RotationPlatform(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpRotationPlatform, protocol.DirectionDefault, []byte(c.Query("data")))
+	v, _ := strconv.Atoi(c.Query("data"))
+	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpRotationPlatform, protocol.DirectionDefault, []byte{byte(v)})
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -203,7 +240,8 @@ func (d *DirectiveController) ChargingEndDetection(c *gin.Context) {
 // SendBluetoothMac /directive/sendBluetoothMac?gateway=&nid=&mac=
 func (d *DirectiveController) SendBluetoothMac(c *gin.Context) {
 	macHex := convertStringToHex(reverseHexString(c.Query("mac")))
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpSendBluetoothMac, protocol.DirectionDefault, []byte(macHex))
+	data, _ := hex.DecodeString(macHex)
+	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpSendBluetoothMac, protocol.DirectionDefault, data)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -227,7 +265,7 @@ func (d *DirectiveController) GetChargeGunStatus(c *gin.Context) {
 
 // ChangeOpenTime /directive/changeOpenTime?gateway=&nid=&timeData=
 func (d *DirectiveController) ChangeOpenTime(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpChangeOpenTime, protocol.DirectionDefault, []byte(c.Query("timeData")))
+	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), protocol.OpChangeOpenTime, protocol.DirectionDefault, parseTimeData(c.Query("timeData")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 

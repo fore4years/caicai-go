@@ -877,6 +877,16 @@ func RouterInit(r *gin.Engine) {
 		}
 	}
 
+	// 补全缺失的 Java 接口（车辆/充电列表、价格、充电站、支付、员工/故障/硬件、车位申请审核、部分缺失补齐）
+	handler.RegisterCarCharge(r)
+	handler.RegisterPricing(r)
+	handler.RegisterZbbArea(r)
+	handler.RegisterChargeStation(r)
+	handler.RegisterPayment(r)
+	handler.RegisterWxMisc(r)
+	handler.RegisterAdminPlaceApply(r)
+	handler.RegisterPartialGaps(r)
+
 	// 静态资源：前端以根绝对路径引用（/js/、/page/、/img/、/agreement/ 等）。
 	// 不能用 r.Static("/", ...)（会注册根 catch-all /*filepath，与 /system、/om 等 API 前缀冲突导致启动 panic），
 	// 故按子目录分别挂载，根级文件用 StaticFile 精确注册。

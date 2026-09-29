@@ -10,6 +10,7 @@ import (
 	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/middleware"
+	"caicai-go/model"
 	"caicai-go/objects"
 	"caicai-go/router"
 	"caicai-go/service"
@@ -24,6 +25,11 @@ func main() {
 	}
 	// 初始化 gorm gen 查询对象
 	objects.SetDefault(conf.Db)
+
+	// 持久化对象自动迁移（AutoMigrate 创建/更新所有业务表）
+	if err := model.Migrate(conf.Db); err != nil {
+		logger.Mylog.Fatal().Err(err).Msg("数据库迁移失败")
+	}
 
 	// 初始化设备通信基础设施（MQTT 下发 + 订阅上行主题 + Redis）
 	service.InitDevice(conf.Cfg.Mqtt, conf.Cfg.Redis)

@@ -15,20 +15,31 @@ import (
 	"caicai-go/model"
 )
 
+// productGatewayDTO 对应 Java model.GatewayBean 的序列化字段（驼峰）。
+type productGatewayDTO struct {
+	ID           int32          `json:"id,omitempty"`
+	Mac          string         `json:"mac,omitempty"`
+	Iccid        string         `json:"iccid,omitempty"`
+	Name         string         `json:"name,omitempty"`
+	InstallPlace string         `json:"installPlace,omitempty"`
+	InstallTime  *LocalDateTime `json:"installTime,omitempty"`
+}
+
 // productDTO 对应 Java model.ProductBean 的序列化字段（驼峰）。
 type productDTO struct {
-	Pid            string         `json:"pid"`
-	Nid            string         `json:"nid,omitempty"`
-	Imei           string         `json:"imei,omitempty"`
-	GatewayID      int32          `json:"gatewayId,omitempty"`
-	Environment    string         `json:"environment,omitempty"`
-	ProductionTime *LocalDateTime `json:"productionTime,omitempty"`
-	IsTwicecar     int32          `json:"isTwicecar,omitempty"`
-	HasCpLine      int32          `json:"hasCpLine,omitempty"`
+	Pid            string             `json:"pid"`
+	Nid            string             `json:"nid,omitempty"`
+	Imei           string             `json:"imei,omitempty"`
+	GatewayID      int32              `json:"gatewayId,omitempty"`
+	Environment    string             `json:"environment,omitempty"`
+	ProductionTime *LocalDateTime     `json:"productionTime,omitempty"`
+	IsTwicecar     int32              `json:"isTwicecar,omitempty"`
+	HasCpLine      int32              `json:"hasCpLine,omitempty"`
+	Gateway        *productGatewayDTO `json:"gateway,omitempty"`
 }
 
 func productToDTO(p model.TabProduct) productDTO {
-	return productDTO{
+	dto := productDTO{
 		Pid:            p.Pid,
 		Nid:            p.Nid,
 		Imei:           p.Imei,
@@ -38,6 +49,18 @@ func productToDTO(p model.TabProduct) productDTO {
 		IsTwicecar:     p.IsTwicecar,
 		HasCpLine:      p.HasCpLine,
 	}
+	// 对齐 Java ProductBean.resultMap 中 <collection property="gateway" column="gateway_id">。
+	if g := gatewayByID(p.GatewayID); g != nil {
+		dto.Gateway = &productGatewayDTO{
+			ID:           g.ID,
+			Mac:          g.Mac,
+			Iccid:        g.Iccid,
+			Name:         g.Name,
+			InstallPlace: g.InstallPlace,
+			InstallTime:  timeToLocal(g.InstallTime),
+		}
+	}
+	return dto
 }
 
 // productReq 新增/更新请求体（对齐 Java ProductDTO，字段名用前端使用的驼峰）。
@@ -63,15 +86,19 @@ func productListQuery(gatewayID, tiaojian string) *gorm.DB {
 	return db
 }
 
-func productPage(c *gin.Context, gatewayID, tiaojian string) {
+// productPage 分页查询产品；ordered 为 true 时附加 Java 的自定义排序。
+// getAll/search 使用自定义排序，searchByGatewayId 不带排序（对齐 Java 各方法的 .last(...) 差异）。
+func productPage(c *gin.Context, gatewayID, tiaojian string, ordered bool) {
 	current, size := parsePage(c)
 	var total int64
 	productListQuery(gatewayID, tiaojian).Count(&total)
 
 	var products []model.TabProduct
-	productListQuery(gatewayID, tiaojian).
-		Order("SUBSTRING(pid, 1, 3) ASC, CAST(SUBSTRING(pid, 4) AS UNSIGNED) DESC").
-		Offset(pageOffset(current, size)).Limit(size).Find(&products)
+	q := productListQuery(gatewayID, tiaojian)
+	if ordered {
+		q = q.Order("SUBSTRING(pid, 1, 3) ASC, CAST(SUBSTRING(pid, 4) AS UNSIGNED) DESC")
+	}
+	q.Offset(pageOffset(current, size)).Limit(size).Find(&products)
 
 	list := make([]productDTO, 0, len(products))
 	for _, p := range products {
@@ -82,17 +109,17 @@ func productPage(c *gin.Context, gatewayID, tiaojian string) {
 
 // GetAll GET /system/product/getAll
 func (a *AdminProductController) GetAll(c *gin.Context) {
-	productPage(c, "", "")
+	productPage(c, "", "", true)
 }
 
 // Search GET /system/product/search?tiaojian=
 func (a *AdminProductController) Search(c *gin.Context) {
-	productPage(c, "", c.Query("tiaojian"))
+	productPage(c, "", c.Query("tiaojian"), true)
 }
 
 // SearchByGatewayId GET /system/product/searchByGatewayId?gatewayId=
 func (a *AdminProductController) SearchByGatewayId(c *gin.Context) {
-	productPage(c, c.Query("gatewayId"), "")
+	productPage(c, c.Query("gatewayId"), "", false)
 }
 
 // GetByProductId GET /system/product/getByProductId?productId=

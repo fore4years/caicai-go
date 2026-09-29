@@ -2,12 +2,12 @@ package handler
 
 import (
 	"database/sql"
-	"github.com/shopspring/decimal"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"caicai-go/conf"
@@ -82,6 +82,8 @@ type parkingSpaceDTO struct {
 	Service       decimal.Decimal `gorm:"column:service" json:"service,omitempty"`
 	ServiceFee    decimal.Decimal `gorm:"column:service_fee" json:"serviceFee,omitempty"`
 	PriceMode     int             `gorm:"column:price_mode" json:"priceMode,omitempty"`
+	Distance      float64         `gorm:"column:distance" json:"distance,omitempty"`
+	State         string          `gorm:"column:state" json:"state,omitempty"`
 }
 
 // AdminPlaceController 对齐 Java System.controller.PlaceListCon。
@@ -371,10 +373,10 @@ func (a *AdminParkingSpaceController) GetAll(c *gin.Context) {
 func (a *AdminParkingSpaceController) UpdateServiceAndFeeById(c *gin.Context) {
 	id := c.Query("id")
 	updates := map[string]interface{}{}
-	if v, err := strconv.ParseFloat(c.Query("serviceAmount"), 64); err == nil && c.Query("serviceAmount") != "" {
+	if v, err := decimal.NewFromString(c.Query("serviceAmount")); err == nil && c.Query("serviceAmount") != "" {
 		updates["service"] = v
 	}
-	if v, err := strconv.ParseFloat(c.Query("serviceFee"), 64); err == nil && c.Query("serviceFee") != "" {
+	if v, err := decimal.NewFromString(c.Query("serviceFee")); err == nil && c.Query("serviceFee") != "" {
 		updates["service_fee"] = v
 	}
 	if v, err := strconv.Atoi(c.Query("overtimeFee")); err == nil && c.Query("overtimeFee") != "" {

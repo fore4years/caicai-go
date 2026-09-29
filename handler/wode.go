@@ -37,10 +37,11 @@ func (w *WodeController) GetOrders(c *gin.Context) {
 }
 
 // GetOrderXq 获取订单详情（对应 Java wxWodeSer.getOrderXq）。
+// Java 的 map 始终包含 "order" 与 "place" 两个 key，查不到时为 null。
 func (w *WodeController) GetOrderXq(c *gin.Context) {
 	orderid := c.Query("orderid")
 
-	result := gin.H{}
+	result := gin.H{"order": nil, "place": nil}
 
 	if order, err := objects.OrderTbl.WithContext(c.Request.Context()).Where(objects.OrderTbl.Orderid.Eq(orderid)).First(); err == nil {
 		result["order"] = orderToDTO(*order)
@@ -91,13 +92,13 @@ func (w *WodeController) TimeDifference(c *gin.Context) {
 
 	parts := strings.Split(place.OpenTime, "-")
 	if len(parts) < 2 {
-		c.JSON(http.StatusOK, Result{Success: false, Code: 500, Msg: "此车位营业时间已过，请选择其他车位"})
+		c.JSON(http.StatusOK, Result{Success: false, Code: 400, Msg: "此车位营业时间已过，请选择其他车位"})
 		return
 	}
 	startTime, err1 := time.Parse("15:04", parts[0])
 	endTime, err2 := time.Parse("15:04", parts[1])
 	if err1 != nil || err2 != nil {
-		c.JSON(http.StatusOK, Result{Success: false, Code: 500, Msg: "此车位营业时间已过，请选择其他车位"})
+		c.JSON(http.StatusOK, Result{Success: false, Code: 400, Msg: "此车位营业时间已过，请选择其他车位"})
 		return
 	}
 
@@ -106,7 +107,7 @@ func (w *WodeController) TimeDifference(c *gin.Context) {
 	endDateTime := time.Date(now.Year(), now.Month(), now.Day(), endTime.Hour(), endTime.Minute(), 0, 0, now.Location())
 
 	if !(now.After(startDateTime) && now.Before(endDateTime)) {
-		c.JSON(http.StatusOK, Result{Success: false, Code: 500, Msg: "此车位营业时间已过，请选择其他车位"})
+		c.JSON(http.StatusOK, Result{Success: false, Code: 400, Msg: "此车位营业时间已过，请选择其他车位"})
 		return
 	}
 

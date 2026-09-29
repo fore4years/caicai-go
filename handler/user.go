@@ -70,6 +70,71 @@ type ownerLoginReq struct {
 	Account   string `form:"account" json:"account"`
 }
 
+// wxUserDTO 对应 Java domain.user（loginWxSerImpl 登录返回的用户对象）。
+// Java 用 non_null 序列化，字段名与 domain.user 保持一致：nickName/freeTime 驼峰、id_number/plate_num 下划线。
+type wxUserDTO struct {
+	Openid    string `json:"openid,omitempty"`
+	NickName  string `json:"nickName,omitempty"`
+	Gender    string `json:"gender,omitempty"`
+	AvatarURL string `json:"avatarUrl,omitempty"`
+	Province  string `json:"province,omitempty"`
+	City      string `json:"city,omitempty"`
+	Phone     string `json:"phone,omitempty"`
+	Message   string `json:"message,omitempty"`
+	Integral  string `json:"integral,omitempty"`
+	FreeTime  string `json:"freeTime,omitempty"`
+	IDNumber  string `json:"id_number,omitempty"`
+	PlateNum  string `json:"plate_num,omitempty"`
+	Name      string `json:"name,omitempty"`
+}
+
+// toWxUserDTO 将 user_tbl 表模型映射为 Java domain.user 的序列化结果。
+func toWxUserDTO(u model.UserTbl) wxUserDTO {
+	return wxUserDTO{
+		Openid:    u.Openid,
+		NickName:  u.NickName,
+		Province:  u.Province,
+		City:      u.City,
+		Phone:     u.Phone,
+		Integral:  u.Integral,
+		FreeTime:  u.FreeTime,
+		IDNumber:  u.IDNumber,
+		PlateNum:  u.PlateNum,
+		Name:      u.Name,
+		AvatarURL: string(u.Avatar),
+	}
+}
+
+// wxOwnerDTO 对应 Java domain.owner（loginWxSerImpl 登录返回的业主对象）。
+type wxOwnerDTO struct {
+	Ownerid   string `json:"ownerid,omitempty"`
+	NickName  string `json:"nickName,omitempty"`
+	Gender    string `json:"gender,omitempty"`
+	AvatarURL string `json:"avatarUrl,omitempty"`
+	Province  string `json:"province,omitempty"`
+	City      string `json:"city,omitempty"`
+	Phone     string `json:"phone,omitempty"`
+	WxNumber  string `json:"wxNumber,omitempty"`
+	Email     string `json:"email,omitempty"`
+	Account   string `json:"account,omitempty"`
+}
+
+// toWxOwnerDTO 将 owner_tbl 表模型映射为 Java domain.owner 的序列化结果。
+func toWxOwnerDTO(o model.OwnerTbl) wxOwnerDTO {
+	return wxOwnerDTO{
+		Ownerid:   o.Ownerid,
+		NickName:  o.NickName,
+		Gender:    o.Gender,
+		AvatarURL: o.AvatarURL,
+		Province:  o.Province,
+		City:      o.City,
+		Phone:     o.Phone,
+		WxNumber:  o.WxNumber,
+		Email:     o.Email,
+		Account:   o.Account,
+	}
+}
+
 // WxLogin 用户登录（对应 Java loginWxSerImpl.wxDenglu）
 func (u *UserController) WxLogin(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -92,11 +157,13 @@ func (u *UserController) WxLogin(c *gin.Context) {
 	}
 
 	// 2. 判断是否已注册
+	// 对齐 Java：注册分支返回空的 user 对象（Java 中 new user() 未回填），已注册分支返回数据库记录。
 	zhuce := 0
-	user, err := objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).First()
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	var userDTO wxUserDTO
+	_, findErr := objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).First()
+	if errors.Is(findErr, gorm.ErrRecordNotFound) {
 		// 未注册：写入 user_tbl + driveruse_tbl
-		user = &model.UserTbl{
+		user := &model.UserTbl{
 			Openid:   openid,
 			NickName: req.NickName,
 			Province: req.Province,
@@ -117,31 +184,27 @@ func (u *UserController) WxLogin(c *gin.Context) {
 			return
 		}
 		saveDriverUse(ctx, openid)
-	} else if err != nil {
-		logger.Mylog.Err(err).Caller().Send()
+	} else if findErr != nil {
+		logger.Mylog.Err(findErr).Caller().Send()
 		c.JSON(http.StatusOK, gin.H{"jieguo": false})
 		return
 	} else {
-		// 已注册：更新微信资料，再重新查询
+		// 已注册：仅更新微信资料 nick_name/province/city（对齐 updataWxlogin），再重新查询
 		zhuce = 1
 		_, _ = objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).Updates(map[string]interface{}{
 			"nick_name": req.NickName,
 			"province":  req.Province,
 			"city":      req.City,
-			"integral":  req.Integral,
-			"free_time": req.FreeTime,
-			"id_number": req.IDNumber,
-			"plate_num": req.PlateNum,
-			"name":      req.Name,
 		})
-		user, _ = objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).First()
+		user, _ := objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).First()
+		userDTO = toWxUserDTO(*user)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"jieguo": true,
 		"openid": openid,
 		"zhuce":  zhuce,
-		"user":   user,
+		"user":   userDTO,
 	})
 }
 
@@ -166,9 +229,11 @@ func (u *UserController) LoginOwner(c *gin.Context) {
 	}
 
 	zhuce := 0
-	owner, err := objects.OwnerTbl.WithContext(ctx).Where(objects.OwnerTbl.Ownerid.Eq(ownerid)).First()
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		owner = &model.OwnerTbl{
+	var ownerDTO wxOwnerDTO
+	_, findErr := objects.OwnerTbl.WithContext(ctx).Where(objects.OwnerTbl.Ownerid.Eq(ownerid)).First()
+	if errors.Is(findErr, gorm.ErrRecordNotFound) {
+		// 未注册：写入 owner_tbl（Java 注册分支返回空的 owner 对象）
+		owner := &model.OwnerTbl{
 			Ownerid:   ownerid,
 			NickName:  req.NickName,
 			Gender:    req.Gender,
@@ -185,11 +250,12 @@ func (u *UserController) LoginOwner(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"jieguo": false})
 			return
 		}
-	} else if err != nil {
-		logger.Mylog.Err(err).Caller().Send()
+	} else if findErr != nil {
+		logger.Mylog.Err(findErr).Caller().Send()
 		c.JSON(http.StatusOK, gin.H{"jieguo": false})
 		return
 	} else {
+		// 已注册：仅更新 nickName/gender/avatarUrl/province/city（对齐 updataWxlogin），再重新查询
 		zhuce = 1
 		_, _ = objects.OwnerTbl.WithContext(ctx).Where(objects.OwnerTbl.Ownerid.Eq(ownerid)).Updates(map[string]interface{}{
 			"nickName":  req.NickName,
@@ -197,17 +263,15 @@ func (u *UserController) LoginOwner(c *gin.Context) {
 			"avatarUrl": req.AvatarURL,
 			"province":  req.Province,
 			"city":      req.City,
-			"wxNumber":  req.WxNumber,
-			"email":     req.Email,
-			"account":   req.Account,
 		})
-		owner, _ = objects.OwnerTbl.WithContext(ctx).Where(objects.OwnerTbl.Ownerid.Eq(ownerid)).First()
+		owner, _ := objects.OwnerTbl.WithContext(ctx).Where(objects.OwnerTbl.Ownerid.Eq(ownerid)).First()
+		ownerDTO = toWxOwnerDTO(*owner)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"jieguo":  true,
 		"ownerid": ownerid,
-		"owner":   owner,
+		"owner":   ownerDTO,
 		"zhuce":   zhuce,
 	})
 }

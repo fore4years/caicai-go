@@ -25,7 +25,7 @@ type PurchasePoleApplicationTbl struct {
 	UsageScenario        string          `gorm:"column:usage_scenario;not null;comment:使用场景" json:"usage_scenario"`                                 // 使用场景
 	InstallationAddress  string          `gorm:"column:installation_address;not null;comment:安装地址" json:"installation_address"`                     // 安装地址
 	DetailedAddress      string          `gorm:"column:detailed_address;not null;comment:详细地址" json:"detailed_address"`                             // 详细地址
-	ApplyTime            time.Time       `gorm:"column:apply_time;default:CURRENT_TIMESTAMP;comment:申请时间" json:"apply_time"`                        // 申请时间
+	ApplyTime            time.Time       `gorm:"column:apply_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:申请时间" json:"apply_time"`         // 申请时间
 	OrderStatus          string          `gorm:"column:order_status;not null;default:待发货;comment:订单状态：待发货、已发货、待签收、已完成、已取消、已退款" json:"order_status"` // 订单状态：待发货、已发货、待签收、已完成、已取消、已退款
 	ActualPayment        decimal.Decimal `gorm:"column:actual_payment;default:0.00;comment:实付款金额" json:"actual_payment"`                            // 实付款金额
 	PayTime              time.Time       `gorm:"column:pay_time;comment:支付时间" json:"pay_time"`                                                      // 支付时间

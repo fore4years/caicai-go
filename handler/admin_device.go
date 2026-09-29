@@ -2,7 +2,7 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -168,12 +168,29 @@ func (a *AdminLoRaController) LoRasousuo(c *gin.Context) {
 func (a *AdminLoRaController) SearchByMac(c *gin.Context) {
 	current, size := parsePage(c)
 	mac := c.Query("mac")
-	if mac == "" {
-		a.GetLoRapage(c)
+	if strings.TrimSpace(mac) == "" {
+		var total int64
+		conf.Db.Model(&model.TabGateway{}).Count(&total)
+		if total == 0 {
+			c.JSON(http.StatusOK, nil)
+			return
+		}
+		var gateways []model.TabGateway
+		conf.Db.Model(&model.TabGateway{}).Order("install_time desc").
+			Offset(pageOffset(current, size)).Limit(size).Find(&gateways)
+		list := make([]gatewayDTO, 0, len(gateways))
+		for _, g := range gateways {
+			list = append(list, gatewayToDTO(g))
+		}
+		c.JSON(http.StatusOK, gin.H{"max": total, "list": list})
 		return
 	}
 	var max int64
 	conf.Db.Model(&model.TabGateway{}).Where("mac LIKE ?", "%"+mac+"%").Count(&max)
+	if max == 0 {
+		c.JSON(http.StatusOK, nil)
+		return
+	}
 	var gateways []model.TabGateway
 	conf.Db.Model(&model.TabGateway{}).Where("mac LIKE ?", "%"+mac+"%").
 		Order("install_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&gateways)
@@ -203,7 +220,7 @@ type AdminLockController struct{}
 func (a *AdminLockController) GetlockPage(c *gin.Context) {
 	current, size := parsePage(c)
 	var locks []model.LockTbl
-	conf.Db.Model(&model.LockTbl{}).Order("install_time desc").
+	conf.Db.Model(&model.LockTbl{}).
 		Offset(pageOffset(current, size)).Limit(size).Find(&locks)
 	list := make([]lockDTO, 0, len(locks))
 	for _, l := range locks {
@@ -269,6 +286,7 @@ func (a *AdminLockController) Disable(c *gin.Context) {
 }
 
 // LockChange /system/lockChange body {page,length,tiaojian}
+// 对齐 Java：左连 place_tbl 按车位状态筛选，忽略分页返回全部（max 为返回条数）。
 func (a *AdminLockController) LockChange(c *gin.Context) {
 	var req struct {
 		Page     string `json:"page"`
@@ -276,23 +294,16 @@ func (a *AdminLockController) LockChange(c *gin.Context) {
 		Tiaojian string `json:"tiaojian"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	current := 1
-	size := 10
-	if req.Page != "" {
-		current, _ = strconv.Atoi(req.Page)
-	}
-	if req.Length != "" {
-		size, _ = strconv.Atoi(req.Length)
-	}
 
-	db := conf.Db.Model(&model.LockTbl{})
+	db := conf.Db.Table("lock_tbl l").Select("l.*").
+		Joins("left join place_tbl p on l.placeid = p.placeid")
 	if req.Tiaojian == "已禁用" {
-		db = db.Where("state = ?", "已禁用")
+		db = db.Where("p.state = ?", "已禁用")
 	} else {
-		db = db.Where("state <> ?", "已禁用")
+		db = db.Where("p.state <> ?", "已禁用")
 	}
 	var locks []model.LockTbl
-	db.Offset(pageOffset(current, size)).Limit(size).Find(&locks)
+	db.Scan(&locks)
 	list := make([]lockDTO, 0, len(locks))
 	for _, l := range locks {
 		list = append(list, lockToDTO(l))
@@ -344,7 +355,7 @@ func (a *AdminLockController) Accessupdatestate(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 
 	// 插入消息 + 标记充电桩 + 通过审核（对齐 Java access()）
-	conf.Db.Exec("INSERT INTO message_tbl (ownerid, msgTime, message, status) VALUES (?,?,?,?)",
+	conf.Db.Exec("INSERT INTO message_tbl (ownerid, msgtime, message, status) VALUES (?,?,?,?)",
 		req.Ownerid, time.Now().Format("2006-01-02 15:04:05"), "充电桩申请已通过~", "未读")
 	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", req.Placeid).Update("ischarge", 1)
 	res := conf.Db.Exec("UPDATE charge_tbl SET charge = '已通过' WHERE placeid = ?", req.Placeid)

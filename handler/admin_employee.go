@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -63,7 +64,15 @@ func (a *AdminEmployeeController) Add(c *gin.Context) {
 		employeeID, req.Name, req.Password, req.Phone, req.IDCard, req.EntryDate, req.Department, req.Position, 0,
 	).Error
 	if err != nil {
-		c.JSON(http.StatusOK, ResultError(500, "手机号已存在，注册失败"))
+		// 对齐 Java OmEmployeeController：唯一键冲突按异常信息区分是手机号重复还是其他字段重复。
+		msg := err.Error()
+		if strings.Contains(msg, "uk_phone") {
+			c.JSON(http.StatusOK, ResultError(500, "手机号已存在，注册失败"))
+		} else if strings.Contains(msg, "Duplicate") {
+			c.JSON(http.StatusOK, ResultError(500, "数据重复，注册失败"))
+		} else {
+			c.JSON(http.StatusOK, ResultError(500, "运维职工信息新增异常："+msg))
+		}
 		return
 	}
 	c.JSON(http.StatusOK, Result{Success: true, Code: 200, Msg: "运维职工信息新增成功", Data: true})
@@ -72,17 +81,22 @@ func (a *AdminEmployeeController) Add(c *gin.Context) {
 // GetByName GET /om/employee/getByName?name=
 func (a *AdminEmployeeController) GetByName(c *gin.Context) {
 	var e employeeDTO
-	if err := conf.Db.Raw(employeeSelect+" WHERE name = ?", c.Query("name")).Scan(&e).Error; err != nil || e.EmployeeID == "" {
+	err := conf.Db.Raw(employeeSelect+" WHERE name = ?", c.Query("name")).Scan(&e).Error
+	if err != nil {
+		c.JSON(http.StatusOK, ResultError(500, "查询异常："+err.Error()))
+		return
+	}
+	if e.EmployeeID == "" {
 		c.JSON(http.StatusOK, ResultError(404, "用户不存在"))
 		return
 	}
 	c.JSON(http.StatusOK, Result{Success: true, Code: 200, Msg: "查询成功", Data: e})
 }
 
-// GetAll GET /om/employee/getAll
+// GetAll GET /om/employee/getAll（对齐 Java OmEmployeeMapper.selectAll：按入职日期倒序）。
 func (a *AdminEmployeeController) GetAll(c *gin.Context) {
 	var employees []employeeDTO
-	if err := conf.Db.Raw(employeeSelect).Scan(&employees).Error; err != nil {
+	if err := conf.Db.Raw(employeeSelect + " ORDER BY entry_date DESC").Scan(&employees).Error; err != nil {
 		c.JSON(http.StatusOK, ResultError(500, "查询异常："+err.Error()))
 		return
 	}

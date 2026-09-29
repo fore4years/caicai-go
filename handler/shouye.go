@@ -109,7 +109,7 @@ func (s *ShouyeController) SaomaForCharge(c *gin.Context) {
 	cm, err := objects.ChargeMessageTbl.WithContext(c.Request.Context()).Where(
 		objects.ChargeMessageTbl.Nid.Eq(nid),
 		objects.ChargeMessageTbl.Direction.Eq(direction),
-		objects.ChargeMessageTbl.Chargeid.Neq(""),
+		objects.ChargeMessageTbl.Chargeid.IsNotNull(),
 	).First()
 	if err != nil || cm.Placeid == "" {
 		c.JSON(http.StatusOK, nil)

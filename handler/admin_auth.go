@@ -96,16 +96,27 @@ func (a *AdminAuthController) CheckAdmin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "查询成功", "data": gin.H{"isAdmin": s.IsAdmin}})
 }
 
-// GetAllUsers GET /system/getAllUsers，返回 Result<[]systemRow>。
+// GetAllUsers GET /system/getAllUsers，返回 Result<Map>（对齐 Java SystemUserSerImpl.getAllUsers：
+// data 为含 code/msg/data/total 的 Map，外层再包 Result.success）。
 func (a *AdminAuthController) GetAllUsers(c *gin.Context) {
 	var users []systemRow
 	if err := conf.Db.Raw(
 		"SELECT id, account, password, is_admin FROM system_tbl ORDER BY id",
 	).Scan(&users).Error; err != nil {
-		c.JSON(http.StatusOK, ResultError(500, err.Error()))
+		c.JSON(http.StatusOK, ResultSuccess(gin.H{
+			"code": 500, "msg": "获取用户数据失败：" + err.Error(), "data": gin.H{},
+		}))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(users))
+	if len(users) == 0 {
+		c.JSON(http.StatusOK, ResultSuccess(gin.H{
+			"code": 404, "msg": "未找到用户数据", "data": gin.H{},
+		}))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(gin.H{
+		"code": 200, "msg": "获取用户数据成功", "data": users, "total": len(users),
+	}))
 }
 
 // UpdateUserAdminStatus POST /system/updateUserAdminStatus?userId=xxx&isAdmin=true。
@@ -113,11 +124,27 @@ func (a *AdminAuthController) UpdateUserAdminStatus(c *gin.Context) {
 	userId := c.Query("userId")
 	isAdmin := c.Query("isAdmin") == "true"
 
-	var isAdminInt int
-	if isAdmin {
-		isAdminInt = 1
+	if strings.TrimSpace(userId) == "" {
+		c.JSON(http.StatusOK, ResultSuccess(gin.H{"code": 400, "msg": "用户ID不能为空"}))
+		return
 	}
 
-	res := conf.Db.Exec("UPDATE system_tbl SET is_admin = ? WHERE id = ?", isAdminInt, userId)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	adminStatus := 0
+	if isAdmin {
+		adminStatus = 1
+	}
+
+	res := conf.Db.Exec("UPDATE system_tbl SET is_admin = ? WHERE id = ?", adminStatus, userId)
+	if res.Error != nil {
+		c.JSON(http.StatusOK, ResultSuccess(gin.H{"code": 500, "msg": "更新用户权限失败：" + res.Error.Error()}))
+		return
+	}
+	if res.RowsAffected > 0 {
+		c.JSON(http.StatusOK, ResultSuccess(gin.H{
+			"code": 200, "msg": "用户权限更新成功",
+			"data": gin.H{"userId": userId, "newAdminStatus": adminStatus},
+		}))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(gin.H{"code": 404, "msg": "用户不存在或更新失败"}))
 }

@@ -102,7 +102,7 @@ func (a *AdminChargeStateController) List(c *gin.Context) {
 		if productID != "" {
 			db = db.Where("product_id = ?", productID)
 		}
-		return db
+		return db.Order("create_time desc")
 	}
 
 	var total int64

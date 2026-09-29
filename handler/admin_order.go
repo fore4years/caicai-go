@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 	"time"
@@ -196,17 +197,21 @@ func (a *AdminOrderController) BatchDeleteOrders(c *gin.Context) {
 }
 
 // orderSum 汇总某列（charging_degree / basic_consumption），返回字符串；无数据返回 nil。
+// 对齐 Java OrderMapper.xml getDegreeByPid / getFeeByPid / getDegreeByPidAndToday / getFeeByPidAndToday：
+//   - pid 为恒等条件（XML 未用 <if> 包裹）
+//   - state = '已完成'
+//   - over_time 范围：今日版为 [今日 00:00:00, 明日 00:00:00]
+//   - SUM 无匹配行时返回 NULL → 返回 nil（对齐 Java 返回 null 字符串）
 func orderSum(pid, startDate, endDate, column string, today bool) *string {
-	q := "SELECT COALESCE(SUM(" + column + "),0) FROM order_tbl WHERE state = '已完成'"
-	var args []interface{}
-	if pid != "" {
-		q += " AND pid = ?"
-		args = append(args, pid)
-	}
+	q := "SELECT SUM(" + column + ") FROM order_tbl WHERE pid = ? AND state = '已完成'"
+	args := []interface{}{pid}
+
 	if today {
-		t := time.Now().Format("2006-01-02")
+		t := time.Now()
+		day := t.Format("2006-01-02")
+		next := t.AddDate(0, 0, 1).Format("2006-01-02")
 		q += " AND over_time >= ? AND over_time <= ?"
-		args = append(args, t+" 00:00:00", t+" 23:59:59")
+		args = append(args, day+" 00:00:00", next+" 00:00:00")
 	} else {
 		if startDate != "" {
 			q += " AND over_time >= ?"
@@ -218,11 +223,14 @@ func orderSum(pid, startDate, endDate, column string, today bool) *string {
 		}
 	}
 
-	var v decimal.Decimal
-	if err := conf.Db.Raw(q, args...).Row().Scan(&v); err != nil {
+	var ns sql.NullString
+	if err := conf.Db.Raw(q, args...).Row().Scan(&ns); err != nil {
 		return nil
 	}
-	s := v.String()
+	if !ns.Valid {
+		return nil
+	}
+	s := ns.String
 	return &s
 }
 
