@@ -10,7 +10,7 @@ import (
 
 const TableNameWangguanTbl = "wangguan_tbl"
 
-// WangguanTbl 未使用
+// WangguanTbl mapped from table <wangguan_tbl>
 type WangguanTbl struct {
 	ID           int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"` // 主键id
 	Name         string    `gorm:"column:name;not null;comment:网关名称" json:"name"`                  // 网关名称

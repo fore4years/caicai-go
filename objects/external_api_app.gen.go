@@ -43,7 +43,6 @@ func newExternalAPIApp(db *gorm.DB, opts ...gen.DOOption) externalAPIApp {
 	return _externalAPIApp
 }
 
-// externalAPIApp 外部 API 应用密钥
 type externalAPIApp struct {
 	externalAPIAppDo externalAPIAppDo
 

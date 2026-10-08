@@ -10,15 +10,15 @@ import (
 
 const TableNameUsercarTbl = "usercar_tbl"
 
-// UsercarTbl 车俩表
+// UsercarTbl mapped from table <usercar_tbl>
 type UsercarTbl struct {
 	Openid     string    `gorm:"column:openid" json:"openid"`
 	PlateNum   string    `gorm:"column:plate_num" json:"plate_num"`
 	State      string    `gorm:"column:state" json:"state"`
 	ID         int64     `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
 	IsDelete   int32     `gorm:"column:isDelete;not null" json:"isDelete"`
-	CreateTime time.Time `gorm:"column:createTime;not null;type:timestamp;default:CURRENT_TIMESTAMP" json:"createTime"`
-	Update     time.Time `gorm:"column:update;not null;type:timestamp;default:CURRENT_TIMESTAMP" json:"update"`
+	CreateTime time.Time `gorm:"column:createTime;not null;default:CURRENT_TIMESTAMP" json:"createTime"`
+	Update     time.Time `gorm:"column:update;not null;default:CURRENT_TIMESTAMP" json:"update"`
 }
 
 // TableName UsercarTbl's table name

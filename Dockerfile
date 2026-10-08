@@ -33,6 +33,9 @@ WORKDIR /app
 # 从构建阶段拷贝二进制
 COPY --from=builder /app/caicai-go .
 
+# 微信支付 v3 商户私钥（签名用）
+COPY --from=builder /app/apiclient_key.pem .
+
 # 如果你的 conf.yaml 想打进镜像（不推荐，但简单）：
 # COPY --from=builder /app/conf.yaml .
 ENV GIN_MODE=release

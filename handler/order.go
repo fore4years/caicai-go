@@ -28,9 +28,11 @@ func (o *OrderController) GetNotFinish(c *gin.Context) {
 }
 
 // GetUserInfo 获取当前用户信息（对应 Java UserController.getUserInfo）。
+// 用 phone 查询：JWT 的 aud 恒为手机号，跨小程序（主小程序/运维/驿帕尔）唯一，
+// 避免运维登录时 JWT 的 openid 实际是 omid、按 openid 查不到用户的问题。
 func (o *OrderController) GetUserInfo(c *gin.Context) {
-	openid := c.GetString("openid")
-	user, err := objects.UserTbl.WithContext(c.Request.Context()).Where(objects.UserTbl.Openid.Eq(openid)).First()
+	phone := c.GetString("phone")
+	user, err := objects.UserTbl.WithContext(c.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).First()
 	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return

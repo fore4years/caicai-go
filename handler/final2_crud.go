@@ -562,11 +562,13 @@ func (c *PurchasePoleApplicationController) ApplyAndProcessRefund(ctx *gin.Conte
 	// 5. 金额（元 → 分）
 	refundAmount := int(app.ActualPayment.Mul(decimal.NewFromInt(100)).IntPart())
 	totalAmount := refundAmount
-	refundWxOrder(app.TransactionID, refundOrderID, refundAmount, totalAmount)
+	refundStatus, err := refundWxOrder(app.TransactionID, refundOrderID, refundAmount, totalAmount)
+	if err != nil {
+		ctx.JSON(http.StatusOK, ResultError(500, "申请并处理退款异常: 微信退款失败: "+err.Error()))
+		return
+	}
 
 	// 6. 处理退款结果
-	// wxpay 桩实现：接入真实微信退款后，status 应由 refundWxOrder 返回。
-	refundStatus := "SUCCESS"
 	switch refundStatus {
 	case "SUCCESS":
 		conf.Db.Model(&model.PurchasePoleApplicationTbl{}).Where("order_number = ?", req.OrderNumber).Updates(map[string]interface{}{

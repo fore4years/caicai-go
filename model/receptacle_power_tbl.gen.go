@@ -10,13 +10,13 @@ import (
 
 const TableNameReceptaclePowerTbl = "receptacle_power_tbl"
 
-// ReceptaclePowerTbl 插座电量表
+// ReceptaclePowerTbl mapped from table <receptacle_power_tbl>
 type ReceptaclePowerTbl struct {
-	ID           int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                                // 主键id
-	ReceptacleID int32     `gorm:"column:receptacle_id;comment:插座id" json:"receptacle_id"`                                        // 插座id
-	Pid          string    `gorm:"column:pid;comment:充电站id" json:"pid"`                                                           // 充电站id
-	MeterValue   float64   `gorm:"column:meter_value;comment:电表示数" json:"meter_value"`                                            // 电表示数
-	UpdateTime   time.Time `gorm:"column:update_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:电表更新时间" json:"update_time"` // 电表更新时间
+	ID           int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                 // 主键id
+	ReceptacleID int32     `gorm:"column:receptacle_id;comment:插座id" json:"receptacle_id"`                         // 插座id
+	Pid          string    `gorm:"column:pid;comment:充电站id" json:"pid"`                                            // 充电站id
+	MeterValue   float64   `gorm:"column:meter_value;comment:电表示数" json:"meter_value"`                             // 电表示数
+	UpdateTime   time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:电表更新时间" json:"update_time"` // 电表更新时间
 }
 
 // TableName ReceptaclePowerTbl's table name

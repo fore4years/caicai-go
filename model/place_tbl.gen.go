@@ -6,7 +6,7 @@ package model
 
 const TableNamePlaceTbl = "place_tbl"
 
-// PlaceTbl 业主车位信息表
+// PlaceTbl mapped from table <place_tbl>
 type PlaceTbl struct {
 	Placeid         string `gorm:"column:placeid;primaryKey;comment:车位id" json:"placeid"`         // 车位id
 	Ownerid         string `gorm:"column:ownerid;comment:所属业主id" json:"ownerid"`                  // 所属业主id

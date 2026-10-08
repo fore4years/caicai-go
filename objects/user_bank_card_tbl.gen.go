@@ -41,7 +41,6 @@ func newUserBankCardTbl(db *gorm.DB, opts ...gen.DOOption) userBankCardTbl {
 	return _userBankCardTbl
 }
 
-// userBankCardTbl 用户银行卡信息表
 type userBankCardTbl struct {
 	userBankCardTblDo userBankCardTblDo
 

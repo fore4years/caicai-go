@@ -5,13 +5,14 @@
 package model
 
 import (
-	"github.com/shopspring/decimal"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const TableNameRechargeOrderTblSorted = "recharge_order_tbl_sorted"
 
-// RechargeOrderTblSorted VIEW
+// RechargeOrderTblSorted mapped from table <recharge_order_tbl_sorted>
 type RechargeOrderTblSorted struct {
 	OrderID               string          `gorm:"column:order_id;not null;comment:充值订单号" json:"order_id"`                                // 充值订单号
 	Openid                string          `gorm:"column:openid;not null;comment:用户openid" json:"openid"`                                 // 用户openid

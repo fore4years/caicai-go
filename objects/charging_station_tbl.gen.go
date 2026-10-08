@@ -29,7 +29,6 @@ func newChargingStationTbl(db *gorm.DB, opts ...gen.DOOption) chargingStationTbl
 	tableName := _chargingStationTbl.chargingStationTblDo.TableName()
 	_chargingStationTbl.ALL = field.NewAsterisk(tableName)
 	_chargingStationTbl.ID = field.NewInt32(tableName, "id")
-	_chargingStationTbl.Point = field.NewString(tableName, "point")
 	_chargingStationTbl.Place = field.NewString(tableName, "place")
 	_chargingStationTbl.Name = field.NewString(tableName, "name")
 	_chargingStationTbl.Openid = field.NewString(tableName, "openid")
@@ -37,26 +36,28 @@ func newChargingStationTbl(db *gorm.DB, opts ...gen.DOOption) chargingStationTbl
 	_chargingStationTbl.Pid = field.NewString(tableName, "pid")
 	_chargingStationTbl.CreateTime = field.NewTime(tableName, "create_time")
 	_chargingStationTbl.UpdateTime = field.NewTime(tableName, "update_time")
+	_chargingStationTbl.Longitude = field.NewFloat64(tableName, "longitude")
+	_chargingStationTbl.Latitude = field.NewFloat64(tableName, "latitude")
 
 	_chargingStationTbl.fillFieldMap()
 
 	return _chargingStationTbl
 }
 
-// chargingStationTbl 二轮车充电站
 type chargingStationTbl struct {
 	chargingStationTblDo chargingStationTblDo
 
 	ALL        field.Asterisk
 	ID         field.Int32  // 主键id
-	Point      field.String // 经纬度点
 	Place      field.String // 位置
 	Name       field.String // 充电站名
 	Openid     field.String // 用户openid
 	PowerMax   field.Int32
-	Pid        field.String // 产品id
-	CreateTime field.Time   // 安装时间
-	UpdateTime field.Time   // 修改时间
+	Pid        field.String  // 产品id
+	CreateTime field.Time    // 安装时间
+	UpdateTime field.Time    // 修改时间
+	Longitude  field.Float64 // 经度
+	Latitude   field.Float64 // 纬度
 
 	fieldMap map[string]field.Expr
 }
@@ -74,7 +75,6 @@ func (c chargingStationTbl) As(alias string) *chargingStationTbl {
 func (c *chargingStationTbl) updateTableName(table string) *chargingStationTbl {
 	c.ALL = field.NewAsterisk(table)
 	c.ID = field.NewInt32(table, "id")
-	c.Point = field.NewString(table, "point")
 	c.Place = field.NewString(table, "place")
 	c.Name = field.NewString(table, "name")
 	c.Openid = field.NewString(table, "openid")
@@ -82,6 +82,8 @@ func (c *chargingStationTbl) updateTableName(table string) *chargingStationTbl {
 	c.Pid = field.NewString(table, "pid")
 	c.CreateTime = field.NewTime(table, "create_time")
 	c.UpdateTime = field.NewTime(table, "update_time")
+	c.Longitude = field.NewFloat64(table, "longitude")
+	c.Latitude = field.NewFloat64(table, "latitude")
 
 	c.fillFieldMap()
 
@@ -110,9 +112,8 @@ func (c *chargingStationTbl) GetFieldByName(fieldName string) (field.OrderExpr, 
 }
 
 func (c *chargingStationTbl) fillFieldMap() {
-	c.fieldMap = make(map[string]field.Expr, 9)
+	c.fieldMap = make(map[string]field.Expr, 10)
 	c.fieldMap["id"] = c.ID
-	c.fieldMap["point"] = c.Point
 	c.fieldMap["place"] = c.Place
 	c.fieldMap["name"] = c.Name
 	c.fieldMap["openid"] = c.Openid
@@ -120,6 +121,8 @@ func (c *chargingStationTbl) fillFieldMap() {
 	c.fieldMap["pid"] = c.Pid
 	c.fieldMap["create_time"] = c.CreateTime
 	c.fieldMap["update_time"] = c.UpdateTime
+	c.fieldMap["longitude"] = c.Longitude
+	c.fieldMap["latitude"] = c.Latitude
 }
 
 func (c chargingStationTbl) clone(db *gorm.DB) chargingStationTbl {

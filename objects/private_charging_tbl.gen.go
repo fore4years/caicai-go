@@ -45,7 +45,7 @@ func newPrivateChargingTbl(db *gorm.DB, opts ...gen.DOOption) privateChargingTbl
 	_privateChargingTbl.OneClickOpening = field.NewInt32(tableName, "one_click_opening")
 	_privateChargingTbl.ShareTime = field.NewString(tableName, "share_time")
 	_privateChargingTbl.ExchangePlace = field.NewBool(tableName, "exchange_place")
-	_privateChargingTbl.Fee = field.NewFloat64(tableName, "fee")
+	_privateChargingTbl.Fee = field.NewString(tableName, "fee")
 	_privateChargingTbl.OfficialUse = field.NewBool(tableName, "official_use")
 	_privateChargingTbl.OvertimeFee = field.NewBool(tableName, "overtime_fee")
 	_privateChargingTbl.LedID = field.NewInt32(tableName, "led_id")
@@ -58,35 +58,34 @@ func newPrivateChargingTbl(db *gorm.DB, opts ...gen.DOOption) privateChargingTbl
 	return _privateChargingTbl
 }
 
-// privateChargingTbl 私桩用户表
 type privateChargingTbl struct {
 	privateChargingTblDo privateChargingTblDo
 
 	ALL                field.Asterisk
-	ID                 field.Int32   // 主键id
-	Openid             field.String  // 微信用户唯一openid
-	Name               field.String  // 桩主姓名
-	IDCard             field.String  // 身份证号
-	Phone              field.String  // 手机号
-	CommunityName      field.String  // 小区名称
-	CommunityAddress   field.String  // 小区地址
-	CommunitySpacesNum field.String  // 小区车位号
-	ProductType        field.String  // 充电桩类型
-	ElectricityType    field.String  // 用电类型
-	ProductID          field.String  // 充电桩编号
-	SpacesNum          field.String  // 系统车位编号
-	ImageID            field.Int32   // 车位照片id,对应image_tbl表
-	Status             field.Int32   // 状态(0：未审核，1：审核通过，-1：未通过)
-	OneClickOpening    field.Int32   // 一键开放
-	ShareTime          field.String  // 共享时段
-	ExchangePlace      field.Bool    // 是否调换车位（0 - 不需要调换车位，1 - 需要调换车位）
-	Fee                field.Float64 // 服务费率(元/度)
-	OfficialUse        field.Bool    // 是否正式投入使用（0-否，1-是）
-	OvertimeFee        field.Bool    // 是否收取超时停车费（0-否，1-是）
-	LedID              field.Int32   // 车位牌设备id
-	HasCpLine          field.Int32   // 是否有CP线
-	CreateTime         field.Time    // 创建时间
-	UpdateTime         field.Time    // 修改时间
+	ID                 field.Int32  // 主键id
+	Openid             field.String // 微信用户唯一openid
+	Name               field.String // 桩主姓名
+	IDCard             field.String // 身份证号
+	Phone              field.String // 手机号
+	CommunityName      field.String // 小区名称
+	CommunityAddress   field.String // 小区地址
+	CommunitySpacesNum field.String // 小区车位号
+	ProductType        field.String // 充电桩类型
+	ElectricityType    field.String // 用电类型
+	ProductID          field.String // 充电桩编号
+	SpacesNum          field.String // 系统车位编号
+	ImageID            field.Int32  // 车位照片id,对应image_tbl表
+	Status             field.Int32  // 状态(0：未审核，1：审核通过，-1：未通过)
+	OneClickOpening    field.Int32  // 一键开放
+	ShareTime          field.String // 共享时段
+	ExchangePlace      field.Bool   // 是否调换车位（0 - 不需要调换车位，1 - 需要调换车位）
+	Fee                field.String // 服务费率(元/度)
+	OfficialUse        field.Bool   // 是否正式投入使用（0-否，1-是）
+	OvertimeFee        field.Bool   // 是否收取超时停车费（0-否，1-是）
+	LedID              field.Int32  // 车位牌设备id
+	HasCpLine          field.Int32  // 是否有CP线
+	CreateTime         field.Time   // 创建时间
+	UpdateTime         field.Time   // 修改时间
 
 	fieldMap map[string]field.Expr
 }
@@ -120,7 +119,7 @@ func (p *privateChargingTbl) updateTableName(table string) *privateChargingTbl {
 	p.OneClickOpening = field.NewInt32(table, "one_click_opening")
 	p.ShareTime = field.NewString(table, "share_time")
 	p.ExchangePlace = field.NewBool(table, "exchange_place")
-	p.Fee = field.NewFloat64(table, "fee")
+	p.Fee = field.NewString(table, "fee")
 	p.OfficialUse = field.NewBool(table, "official_use")
 	p.OvertimeFee = field.NewBool(table, "overtime_fee")
 	p.LedID = field.NewInt32(table, "led_id")

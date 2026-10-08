@@ -10,7 +10,7 @@ import (
 
 const TableNameExternalAPIApp = "external_api_app"
 
-// ExternalAPIApp 外部 API 应用密钥
+// ExternalAPIApp mapped from table <external_api_app>
 type ExternalAPIApp struct {
 	ID          int64     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键" json:"id"`                                    // 主键
 	AppKey      string    `gorm:"column:app_key;not null;comment:应用标识 (AppKey), 调用方放在 X-App-Key 请求头" json:"app_key"`               // 应用标识 (AppKey), 调用方放在 X-App-Key 请求头

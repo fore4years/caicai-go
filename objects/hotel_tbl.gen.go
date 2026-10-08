@@ -45,7 +45,6 @@ func newHotelTbl(db *gorm.DB, opts ...gen.DOOption) hotelTbl {
 	return _hotelTbl
 }
 
-// hotelTbl 酒店注册信息表
 type hotelTbl struct {
 	hotelTblDo hotelTblDo
 

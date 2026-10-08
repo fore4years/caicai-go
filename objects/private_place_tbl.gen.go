@@ -42,7 +42,6 @@ func newPrivatePlaceTbl(db *gorm.DB, opts ...gen.DOOption) privatePlaceTbl {
 	return _privatePlaceTbl
 }
 
-// privatePlaceTbl 私桩车位表
 type privatePlaceTbl struct {
 	privatePlaceTblDo privatePlaceTblDo
 

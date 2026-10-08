@@ -45,7 +45,6 @@ func newZbbArea(db *gorm.DB, opts ...gen.DOOption) zbbArea {
 	return _zbbArea
 }
 
-// zbbArea 区域表
 type zbbArea struct {
 	zbbAreaDo zbbAreaDo
 

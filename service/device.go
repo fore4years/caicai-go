@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -25,6 +26,9 @@ var (
 
 // deviceTopicPrefix 设备主题前缀。
 const deviceTopicPrefix = "device/"
+
+// gatewayRegisteredKey 网关注册缓存（Redis SET，存放已注册网关的 imei/mac）。
+const gatewayRegisteredKey = "gateway:registered"
 
 // InitDevice 初始化设备通信依赖的 MQTT 与 Redis 客户端。
 // 连接 broker，并订阅所有设备的上行主题（report/event/alarm/heartbeat）。
@@ -49,13 +53,20 @@ func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 	// 连接成功（含重连成功）时重新订阅上行主题。
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		logger.Mylog.Info().Msg("MQTT 连接成功")
-		for _, sub := range []string{"report", "event", "alarm", "heartbeat"} {
+		for _, sub := range []string{"report", "event", "alarm"} {
 			topic := deviceTopicPrefix + "+/" + sub
 			if token := client.Subscribe(topic, byte(mqcfg.Qos), onDeviceMessage); token.Wait() && token.Error() != nil {
 				logger.Mylog.Err(token.Error()).Msgf("订阅主题失败: %s", topic)
 			} else {
 				logger.Mylog.Info().Msgf("已订阅主题: %s", topic)
 			}
+		}
+		// 心跳主题（JSON 载荷）：网关注册，首次心跳即注册
+		heartbeatTopic := deviceTopicPrefix + "+/heartbeat"
+		if token := client.Subscribe(heartbeatTopic, byte(mqcfg.Qos), onHeartbeat); token.Wait() && token.Error() != nil {
+			logger.Mylog.Err(token.Error()).Msgf("订阅主题失败: %s", heartbeatTopic)
+		} else {
+			logger.Mylog.Info().Msgf("已订阅主题: %s", heartbeatTopic)
 		}
 	})
 	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
@@ -102,6 +113,52 @@ func onDeviceMessage(client mqtt.Client, msg mqtt.Message) {
 		rdb.Set(context.Background(), key, data, 10*time.Minute)
 	}
 	logger.Mylog.Info().Msgf("收到设备数据, topic: %s, device: %s, cmd: 0x%02X, data: %q", msg.Topic(), deviceID, cmd, data)
+}
+
+// onHeartbeat 心跳处理（MQTT JSON 约定：首次心跳即网关注册）。
+// 主题 device/{imei}/heartbeat，载荷 {"imei":"xx","iccid":"xx"}。
+// tab_gateway 已存在该 imei（作为 mac）则跳过；心跳一分钟一次，仅首次注册。
+func onHeartbeat(client mqtt.Client, msg mqtt.Message) {
+	var req struct {
+		Imei  string `json:"imei"`
+		Iccid string `json:"iccid"`
+	}
+	// imei == mac == 网关id
+	if err := json.Unmarshal(msg.Payload(), &req); err != nil {
+		logger.Mylog.Warn().Msgf("网关注册 JSON 解析失败, topic: %s, err: %v", msg.Topic(), err)
+		return
+	}
+	if req.Imei == "" {
+		logger.Mylog.Warn().Msgf("网关注册缺少 imei, topic: %s", msg.Topic())
+		return
+	}
+
+	ctx := context.Background()
+	// 1. 先查 Redis 缓存，已注册则直接跳过，避免每次心跳查库
+	if rdb != nil {
+		if ok, err := rdb.SIsMember(ctx, gatewayRegisteredKey, req.Imei).Result(); err == nil && ok {
+			return
+		}
+	}
+
+	// 2. 未命中缓存，查库确认是否已存在（如服务重启后缓存丢失）
+	var exist model.TabGateway
+	if err := conf.Db.Where("mac = ?", req.Imei).First(&exist).Error; err == nil {
+		if rdb != nil {
+			rdb.SAdd(ctx, gatewayRegisteredKey, req.Imei)
+		}
+		return // 已注册，回填缓存后跳过
+	}
+
+	// 3. 未注册，入库 + 写缓存
+	if err := conf.Db.Exec("INSERT INTO tab_gateway(mac, iccid) VALUES (?, ?)", req.Imei, req.Iccid).Error; err != nil {
+		logger.Mylog.Err(err).Msgf("网关注册入库失败: imei=%s, iccid=%s", req.Imei, req.Iccid)
+		return
+	}
+	if rdb != nil {
+		rdb.SAdd(ctx, gatewayRegisteredKey, req.Imei)
+	}
+	logger.Mylog.Info().Msgf("网关注册成功: imei=%s, iccid=%s", req.Imei, req.Iccid)
 }
 
 // publish 发布原始 payload 到指定 topic。

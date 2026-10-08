@@ -41,7 +41,6 @@ func newPointTbl(db *gorm.DB, opts ...gen.DOOption) pointTbl {
 	return _pointTbl
 }
 
-// pointTbl 用户积分表
 type pointTbl struct {
 	pointTblDo pointTblDo
 

@@ -29,28 +29,27 @@ func newChargingPriceTbl(db *gorm.DB, opts ...gen.DOOption) chargingPriceTbl {
 	tableName := _chargingPriceTbl.chargingPriceTblDo.TableName()
 	_chargingPriceTbl.ALL = field.NewAsterisk(tableName)
 	_chargingPriceTbl.ID = field.NewInt32(tableName, "id")
-	_chargingPriceTbl.Total = field.NewFloat64(tableName, "total")
+	_chargingPriceTbl.Total = field.NewString(tableName, "total")
 	_chargingPriceTbl.Name = field.NewString(tableName, "name")
 	_chargingPriceTbl.MinPower = field.NewFloat64(tableName, "min_power")
 	_chargingPriceTbl.MaxPower = field.NewFloat64(tableName, "max_power")
-	_chargingPriceTbl.Service = field.NewFloat64(tableName, "service")
+	_chargingPriceTbl.Service = field.NewString(tableName, "service")
 
 	_chargingPriceTbl.fillFieldMap()
 
 	return _chargingPriceTbl
 }
 
-// chargingPriceTbl 二轮车--电价
 type chargingPriceTbl struct {
 	chargingPriceTblDo chargingPriceTblDo
 
 	ALL      field.Asterisk
 	ID       field.Int32   // 电价id
-	Total    field.Float64 // 单价
+	Total    field.String  // 单价
 	Name     field.String  // 电价名称
 	MinPower field.Float64 // 最小功率
 	MaxPower field.Float64 // 最大功率
-	Service  field.Float64 // 服务费
+	Service  field.String  // 服务费
 
 	fieldMap map[string]field.Expr
 }
@@ -68,11 +67,11 @@ func (c chargingPriceTbl) As(alias string) *chargingPriceTbl {
 func (c *chargingPriceTbl) updateTableName(table string) *chargingPriceTbl {
 	c.ALL = field.NewAsterisk(table)
 	c.ID = field.NewInt32(table, "id")
-	c.Total = field.NewFloat64(table, "total")
+	c.Total = field.NewString(table, "total")
 	c.Name = field.NewString(table, "name")
 	c.MinPower = field.NewFloat64(table, "min_power")
 	c.MaxPower = field.NewFloat64(table, "max_power")
-	c.Service = field.NewFloat64(table, "service")
+	c.Service = field.NewString(table, "service")
 
 	c.fillFieldMap()
 

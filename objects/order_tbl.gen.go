@@ -36,7 +36,7 @@ func newOrderTbl(db *gorm.DB, opts ...gen.DOOption) orderTbl {
 	_orderTbl.BeginTime = field.NewTime(tableName, "begin_time")
 	_orderTbl.OverTime = field.NewTime(tableName, "over_time")
 	_orderTbl.State = field.NewString(tableName, "state")
-	_orderTbl.TotalPrice = field.NewFloat64(tableName, "total_price")
+	_orderTbl.TotalPrice = field.NewString(tableName, "total_price")
 	_orderTbl.CloseTime = field.NewTime(tableName, "close_time")
 	_orderTbl.PlateNum = field.NewString(tableName, "plate_num")
 	_orderTbl.SpacesID = field.NewInt32(tableName, "spaces_id")
@@ -45,7 +45,7 @@ func newOrderTbl(db *gorm.DB, opts ...gen.DOOption) orderTbl {
 	_orderTbl.ConsumptionLocation = field.NewString(tableName, "consumption_location")
 	_orderTbl.ConsumptionType = field.NewString(tableName, "consumption_type")
 	_orderTbl.ChargingDegree = field.NewFloat64(tableName, "charging_degree")
-	_orderTbl.ChargingRates = field.NewFloat64(tableName, "charging_rates")
+	_orderTbl.ChargingRates = field.NewString(tableName, "charging_rates")
 	_orderTbl.ChargerPower = field.NewString(tableName, "charger_power")
 	_orderTbl.StartMode = field.NewString(tableName, "start_mode")
 	_orderTbl.StopMode = field.NewString(tableName, "stop_mode")
@@ -53,8 +53,8 @@ func newOrderTbl(db *gorm.DB, opts ...gen.DOOption) orderTbl {
 	_orderTbl.FullTime = field.NewTime(tableName, "full_time")
 	_orderTbl.LeaveTime = field.NewTime(tableName, "leave_time")
 	_orderTbl.SettlementTime = field.NewTime(tableName, "settlement_time")
-	_orderTbl.BasicConsumption = field.NewFloat64(tableName, "basic_consumption")
-	_orderTbl.DecideAmount = field.NewFloat64(tableName, "decide_amount")
+	_orderTbl.BasicConsumption = field.NewString(tableName, "basic_consumption")
+	_orderTbl.DecideAmount = field.NewString(tableName, "decide_amount")
 	_orderTbl.Pid = field.NewString(tableName, "pid")
 	_orderTbl.GiftAmount = field.NewString(tableName, "gift_amount")
 	_orderTbl.ChargeGunPull = field.NewInt32(tableName, "charge_gun_pull")
@@ -69,7 +69,6 @@ func newOrderTbl(db *gorm.DB, opts ...gen.DOOption) orderTbl {
 	return _orderTbl
 }
 
-// orderTbl 订单
 type orderTbl struct {
 	orderTblDo orderTblDo
 
@@ -82,7 +81,7 @@ type orderTbl struct {
 	BeginTime            field.Time    // 开始时间
 	OverTime             field.Time    // 关锁/还枪时间
 	State                field.String  // 当前状态
-	TotalPrice           field.Float64 // 单价
+	TotalPrice           field.String  // 单价
 	CloseTime            field.Time    // 用户关闭订单时间
 	PlateNum             field.String  // 车牌号
 	SpacesID             field.Int32   // 车位id
@@ -91,7 +90,7 @@ type orderTbl struct {
 	ConsumptionLocation  field.String  // 消费地址
 	ConsumptionType      field.String  // 消费类型
 	ChargingDegree       field.Float64 // 充电度数
-	ChargingRates        field.Float64 // 充电费率(元)
+	ChargingRates        field.String  // 充电费率(元)
 	ChargerPower         field.String  // 充电器功率(瓦)
 	StartMode            field.String  // 启动方式
 	StopMode             field.String  // 结束方式
@@ -99,8 +98,8 @@ type orderTbl struct {
 	FullTime             field.Time    // 充满时间
 	LeaveTime            field.Time    // 车辆驶离时间
 	SettlementTime       field.Time    // 结算时间
-	BasicConsumption     field.Float64 // 基本消费
-	DecideAmount         field.Float64 // 定金
+	BasicConsumption     field.String  // 基本消费
+	DecideAmount         field.String  // 定金
 	Pid                  field.String  // 产品id
 	GiftAmount           field.String  // 赠送金额
 	ChargeGunPull        field.Int32   // 充电枪是否拔下,0未拔,1已拔
@@ -133,7 +132,7 @@ func (o *orderTbl) updateTableName(table string) *orderTbl {
 	o.BeginTime = field.NewTime(table, "begin_time")
 	o.OverTime = field.NewTime(table, "over_time")
 	o.State = field.NewString(table, "state")
-	o.TotalPrice = field.NewFloat64(table, "total_price")
+	o.TotalPrice = field.NewString(table, "total_price")
 	o.CloseTime = field.NewTime(table, "close_time")
 	o.PlateNum = field.NewString(table, "plate_num")
 	o.SpacesID = field.NewInt32(table, "spaces_id")
@@ -142,7 +141,7 @@ func (o *orderTbl) updateTableName(table string) *orderTbl {
 	o.ConsumptionLocation = field.NewString(table, "consumption_location")
 	o.ConsumptionType = field.NewString(table, "consumption_type")
 	o.ChargingDegree = field.NewFloat64(table, "charging_degree")
-	o.ChargingRates = field.NewFloat64(table, "charging_rates")
+	o.ChargingRates = field.NewString(table, "charging_rates")
 	o.ChargerPower = field.NewString(table, "charger_power")
 	o.StartMode = field.NewString(table, "start_mode")
 	o.StopMode = field.NewString(table, "stop_mode")
@@ -150,8 +149,8 @@ func (o *orderTbl) updateTableName(table string) *orderTbl {
 	o.FullTime = field.NewTime(table, "full_time")
 	o.LeaveTime = field.NewTime(table, "leave_time")
 	o.SettlementTime = field.NewTime(table, "settlement_time")
-	o.BasicConsumption = field.NewFloat64(table, "basic_consumption")
-	o.DecideAmount = field.NewFloat64(table, "decide_amount")
+	o.BasicConsumption = field.NewString(table, "basic_consumption")
+	o.DecideAmount = field.NewString(table, "decide_amount")
 	o.Pid = field.NewString(table, "pid")
 	o.GiftAmount = field.NewString(table, "gift_amount")
 	o.ChargeGunPull = field.NewInt32(table, "charge_gun_pull")

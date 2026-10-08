@@ -30,16 +30,16 @@ func newRechargeOrderTbl(db *gorm.DB, opts ...gen.DOOption) rechargeOrderTbl {
 	_rechargeOrderTbl.ALL = field.NewAsterisk(tableName)
 	_rechargeOrderTbl.OrderID = field.NewString(tableName, "order_id")
 	_rechargeOrderTbl.Openid = field.NewString(tableName, "openid")
-	_rechargeOrderTbl.RechargeAmount = field.NewFloat64(tableName, "recharge_amount")
-	_rechargeOrderTbl.RefundedAmount = field.NewFloat64(tableName, "refunded_amount")
-	_rechargeOrderTbl.RemainingRefundAmount = field.NewFloat64(tableName, "remaining_refund_amount")
+	_rechargeOrderTbl.RechargeAmount = field.NewString(tableName, "recharge_amount")
+	_rechargeOrderTbl.RefundedAmount = field.NewString(tableName, "refunded_amount")
+	_rechargeOrderTbl.RemainingRefundAmount = field.NewString(tableName, "remaining_refund_amount")
 	_rechargeOrderTbl.OrderStatus = field.NewString(tableName, "order_status")
 	_rechargeOrderTbl.CreateTime = field.NewTime(tableName, "create_time")
 	_rechargeOrderTbl.UpdateTime = field.NewTime(tableName, "update_time")
 	_rechargeOrderTbl.PaymentTime = field.NewTime(tableName, "payment_time")
 	_rechargeOrderTbl.RefundTime = field.NewTime(tableName, "refund_time")
 	_rechargeOrderTbl.RefundCount = field.NewInt32(tableName, "refund_count")
-	_rechargeOrderTbl.MaxRefundAmount = field.NewFloat64(tableName, "max_refund_amount")
+	_rechargeOrderTbl.MaxRefundAmount = field.NewString(tableName, "max_refund_amount")
 	_rechargeOrderTbl.RefundApplyCount = field.NewInt32(tableName, "refund_apply_count")
 	_rechargeOrderTbl.WechatTransactionID = field.NewString(tableName, "wechat_transaction_id")
 
@@ -48,25 +48,24 @@ func newRechargeOrderTbl(db *gorm.DB, opts ...gen.DOOption) rechargeOrderTbl {
 	return _rechargeOrderTbl
 }
 
-// rechargeOrderTbl 充值订单表
 type rechargeOrderTbl struct {
 	rechargeOrderTblDo rechargeOrderTblDo
 
 	ALL                   field.Asterisk
-	OrderID               field.String  // 充值订单号
-	Openid                field.String  // 用户openid
-	RechargeAmount        field.Float64 // 充值金额
-	RefundedAmount        field.Float64 // 已退款金额
-	RemainingRefundAmount field.Float64 // 剩余可退金额
-	OrderStatus           field.String  // 订单状态（待支付、已支付、已退款、已关闭）
-	CreateTime            field.Time    // 创建时间
-	UpdateTime            field.Time    // 更新时间
-	PaymentTime           field.Time    // 支付时间
-	RefundTime            field.Time    // 退款时间
-	RefundCount           field.Int32   // 退款次数
-	MaxRefundAmount       field.Float64 // 最大可退金额
-	RefundApplyCount      field.Int32   // 退款申请次数
-	WechatTransactionID   field.String  // 微信支付交易号
+	OrderID               field.String // 充值订单号
+	Openid                field.String // 用户openid
+	RechargeAmount        field.String // 充值金额
+	RefundedAmount        field.String // 已退款金额
+	RemainingRefundAmount field.String // 剩余可退金额
+	OrderStatus           field.String // 订单状态（待支付、已支付、已退款、已关闭）
+	CreateTime            field.Time   // 创建时间
+	UpdateTime            field.Time   // 更新时间
+	PaymentTime           field.Time   // 支付时间
+	RefundTime            field.Time   // 退款时间
+	RefundCount           field.Int32  // 退款次数
+	MaxRefundAmount       field.String // 最大可退金额
+	RefundApplyCount      field.Int32  // 退款申请次数
+	WechatTransactionID   field.String // 微信支付交易号
 
 	fieldMap map[string]field.Expr
 }
@@ -85,16 +84,16 @@ func (r *rechargeOrderTbl) updateTableName(table string) *rechargeOrderTbl {
 	r.ALL = field.NewAsterisk(table)
 	r.OrderID = field.NewString(table, "order_id")
 	r.Openid = field.NewString(table, "openid")
-	r.RechargeAmount = field.NewFloat64(table, "recharge_amount")
-	r.RefundedAmount = field.NewFloat64(table, "refunded_amount")
-	r.RemainingRefundAmount = field.NewFloat64(table, "remaining_refund_amount")
+	r.RechargeAmount = field.NewString(table, "recharge_amount")
+	r.RefundedAmount = field.NewString(table, "refunded_amount")
+	r.RemainingRefundAmount = field.NewString(table, "remaining_refund_amount")
 	r.OrderStatus = field.NewString(table, "order_status")
 	r.CreateTime = field.NewTime(table, "create_time")
 	r.UpdateTime = field.NewTime(table, "update_time")
 	r.PaymentTime = field.NewTime(table, "payment_time")
 	r.RefundTime = field.NewTime(table, "refund_time")
 	r.RefundCount = field.NewInt32(table, "refund_count")
-	r.MaxRefundAmount = field.NewFloat64(table, "max_refund_amount")
+	r.MaxRefundAmount = field.NewString(table, "max_refund_amount")
 	r.RefundApplyCount = field.NewInt32(table, "refund_apply_count")
 	r.WechatTransactionID = field.NewString(table, "wechat_transaction_id")
 

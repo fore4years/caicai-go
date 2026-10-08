@@ -41,7 +41,6 @@ func newTabOrderElectronic(db *gorm.DB, opts ...gen.DOOption) tabOrderElectronic
 	return _tabOrderElectronic
 }
 
-// tabOrderElectronic 四轮车订单充电时段电量
 type tabOrderElectronic struct {
 	tabOrderElectronicDo tabOrderElectronicDo
 

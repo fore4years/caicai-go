@@ -41,7 +41,6 @@ func newReceptacleTbl(db *gorm.DB, opts ...gen.DOOption) receptacleTbl {
 	return _receptacleTbl
 }
 
-// receptacleTbl 二轮车插座表
 type receptacleTbl struct {
 	receptacleTblDo receptacleTblDo
 

@@ -54,8 +54,3 @@ func cancelWxOrder(orderID string) {
 func subtractWxDefaultAmount(orderID string, amount int) {
 	logWxPay("subtractWxDefaultAmount", orderID, amount)
 }
-
-// refundWxOrder 退款（对齐 WxPayService.refunds）。
-func refundWxOrder(transactionID, orderID string, refund, total int) {
-	logWxPay("refundWxOrder", transactionID, orderID, refund, total)
-}

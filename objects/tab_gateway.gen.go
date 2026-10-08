@@ -40,7 +40,6 @@ func newTabGateway(db *gorm.DB, opts ...gen.DOOption) tabGateway {
 	return _tabGateway
 }
 
-// tabGateway 网关
 type tabGateway struct {
 	tabGatewayDo tabGatewayDo
 

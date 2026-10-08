@@ -149,16 +149,13 @@ func (c *PackageRecordController) createPackageRecord(req packageRecordRequest) 
 }
 
 // deductPackageBalance 对齐 Java UserServiceImpl.deductBalance（仅扣可用余额 balans）。
+// 单条原子 UPDATE，条件写进 WHERE 防止余额扣成负数。
 func deductPackageBalance(openid string, amount decimal.Decimal) bool {
-	var user model.UserTbl
-	if conf.Db.Where("openid = ?", openid).First(&user).Error != nil {
-		return false
-	}
-	if user.Balans.LessThan(amount) {
-		return false
-	}
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).
-		Update("balans", user.Balans.Sub(amount))
+	amt := amount.StringFixed(2)
+	res := conf.Db.Exec(
+		"UPDATE user_tbl SET balans = balans - CAST(? AS DECIMAL(10,2)) WHERE openid = ? AND balans >= CAST(? AS DECIMAL(10,2))",
+		amt, openid, amt,
+	)
 	return res.RowsAffected > 0
 }
 
@@ -217,10 +214,10 @@ func (c *PackageRecordController) processRefund(orderNo string) (string, string)
 	refundOrderID := "REFUND_PR_" + fmt.Sprintf("%d", time.Now().UnixMilli())
 	refundFee := int(pkg.Amount.Mul(decimal.NewFromInt(100)).IntPart())
 	totalFee := refundFee
-	refundWxOrder(pkg.TransactionID, refundOrderID, refundFee, totalFee)
-
-	// wxpay 桩实现：接入真实微信退款后，status 应由 refundWxOrder 返回。
-	refundStatus := "SUCCESS"
+	refundStatus, err := refundWxOrder(pkg.TransactionID, refundOrderID, refundFee, totalFee)
+	if err != nil {
+		return "", "微信退款失败: " + err.Error()
+	}
 	switch refundStatus {
 	case "SUCCESS":
 		conf.Db.Model(&model.PackageRecordTbl{}).Where("order_no = ?", orderNo).Update("status", "refunded")

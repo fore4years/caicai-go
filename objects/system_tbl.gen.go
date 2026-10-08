@@ -38,7 +38,6 @@ func newSystemTbl(db *gorm.DB, opts ...gen.DOOption) systemTbl {
 	return _systemTbl
 }
 
-// systemTbl 后台管理用户表
 type systemTbl struct {
 	systemTblDo systemTblDo
 

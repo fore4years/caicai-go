@@ -42,7 +42,6 @@ func newWangguanTbl(db *gorm.DB, opts ...gen.DOOption) wangguanTbl {
 	return _wangguanTbl
 }
 
-// wangguanTbl 未使用
 type wangguanTbl struct {
 	wangguanTblDo wangguanTblDo
 

@@ -42,7 +42,6 @@ func newMessageTbl(db *gorm.DB, opts ...gen.DOOption) messageTbl {
 	return _messageTbl
 }
 
-// messageTbl 未使用
 type messageTbl struct {
 	messageTblDo messageTblDo
 

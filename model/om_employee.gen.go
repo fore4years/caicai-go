@@ -10,7 +10,7 @@ import (
 
 const TableNameOmEmployee = "om_employee"
 
-// OmEmployee 运维职工申请表
+// OmEmployee mapped from table <om_employee>
 type OmEmployee struct {
 	EmployeeID  string    `gorm:"column:employee_id;primaryKey;comment:员工工号" json:"employee_id"`                        // 员工工号
 	Name        string    `gorm:"column:name;not null;comment:姓名" json:"name"`                                          // 姓名

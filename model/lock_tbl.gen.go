@@ -10,7 +10,7 @@ import (
 
 const TableNameLockTbl = "lock_tbl"
 
-// LockTbl 车位锁
+// LockTbl mapped from table <lock_tbl>
 type LockTbl struct {
 	Lockid      string    `gorm:"column:lockid;primaryKey;comment:锁id" json:"lockid"` // 锁id
 	Lockmac     string    `gorm:"column:lockmac" json:"lockmac"`
@@ -22,9 +22,9 @@ type LockTbl struct {
 	State       string    `gorm:"column:state" json:"state"`
 	Sn          string    `gorm:"column:sn" json:"sn"`
 	Inductor    string    `gorm:"column:inductor" json:"inductor"`
-	InstallTime time.Time `gorm:"column:install_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:安装时间" json:"install_time"` // 安装时间
-	Name        string    `gorm:"column:name;comment:安装人员" json:"name"`                                                          // 安装人员
-	ProductID   string    `gorm:"column:product_id;comment:产品ID" json:"product_id"`                                              // 产品ID
+	InstallTime time.Time `gorm:"column:install_time;default:CURRENT_TIMESTAMP;comment:安装时间" json:"install_time"` // 安装时间
+	Name        string    `gorm:"column:name;comment:安装人员" json:"name"`                                           // 安装人员
+	ProductID   string    `gorm:"column:product_id;comment:产品ID" json:"product_id"`                               // 产品ID
 }
 
 // TableName LockTbl's table name

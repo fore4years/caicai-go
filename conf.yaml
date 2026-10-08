@@ -20,4 +20,4 @@ mysql:
   dbname: "test_parking"
 
 app:
-  port: 6666
+  port: 8888

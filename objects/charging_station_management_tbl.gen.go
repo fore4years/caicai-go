@@ -45,7 +45,6 @@ func newChargingStationManagementTbl(db *gorm.DB, opts ...gen.DOOption) charging
 	return _chargingStationManagementTbl
 }
 
-// chargingStationManagementTbl 充电站管理表(管理人员注册表)
 type chargingStationManagementTbl struct {
 	chargingStationManagementTblDo chargingStationManagementTblDo
 

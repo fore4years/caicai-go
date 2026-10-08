@@ -42,7 +42,6 @@ func newLockUseTbl(db *gorm.DB, opts ...gen.DOOption) lockUseTbl {
 	return _lockUseTbl
 }
 
-// lockUseTbl 已废弃
 type lockUseTbl struct {
 	lockUseTblDo lockUseTblDo
 

@@ -6,7 +6,7 @@ package model
 
 const TableNameZbbArea = "zbb_area"
 
-// ZbbArea 区域表
+// ZbbArea mapped from table <zbb_area>
 type ZbbArea struct {
 	ID          int32   `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
 	Pid         int32   `gorm:"column:pid;not null;comment:父id" json:"pid"`                   // 父id

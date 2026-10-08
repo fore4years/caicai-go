@@ -6,7 +6,7 @@ package model
 
 const TableNameHotelStaffTbl = "hotel_staff_tbl"
 
-// HotelStaffTbl 酒店员工申请表
+// HotelStaffTbl mapped from table <hotel_staff_tbl>
 type HotelStaffTbl struct {
 	ID              int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:与逻辑无关主键" json:"id"` // 与逻辑无关主键
 	OpenID          string `gorm:"column:openId;not null;comment:用户id" json:"openId"`                 // 用户id

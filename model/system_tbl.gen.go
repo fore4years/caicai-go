@@ -6,7 +6,7 @@ package model
 
 const TableNameSystemTbl = "system_tbl"
 
-// SystemTbl 后台管理用户表
+// SystemTbl mapped from table <system_tbl>
 type SystemTbl struct {
 	ID       string `gorm:"column:id;primaryKey;comment:管理员id" json:"id"`           // 管理员id
 	Account  string `gorm:"column:account;comment:账户" json:"account"`               // 账户

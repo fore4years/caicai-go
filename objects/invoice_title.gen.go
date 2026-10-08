@@ -43,7 +43,6 @@ func newInvoiceTitle(db *gorm.DB, opts ...gen.DOOption) invoiceTitle {
 	return _invoiceTitle
 }
 
-// invoiceTitle 发票抬头
 type invoiceTitle struct {
 	invoiceTitleDo invoiceTitleDo
 

@@ -5,13 +5,14 @@
 package model
 
 import (
-	"github.com/shopspring/decimal"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const TableNameOrderTbl = "order_tbl"
 
-// OrderTbl 订单
+// OrderTbl mapped from table <order_tbl>
 type OrderTbl struct {
 	Orderid              string          `gorm:"column:orderid;primaryKey" json:"orderid"`
 	Openid               string          `gorm:"column:openid;comment:用户微信id" json:"openid"`                                         // 用户微信id

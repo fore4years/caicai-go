@@ -49,7 +49,6 @@ func newChargingStateTbl(db *gorm.DB, opts ...gen.DOOption) chargingStateTbl {
 	return _chargingStateTbl
 }
 
-// chargingStateTbl 充电桩-实时状态表
 type chargingStateTbl struct {
 	chargingStateTblDo chargingStateTblDo
 

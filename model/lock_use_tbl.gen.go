@@ -6,7 +6,7 @@ package model
 
 const TableNameLockUseTbl = "lock_use_tbl"
 
-// LockUseTbl 已废弃
+// LockUseTbl mapped from table <lock_use_tbl>
 type LockUseTbl struct {
 	ID         int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:无关逻辑组件" json:"id"` // 无关逻辑组件
 	Lockid     string `gorm:"column:lockid;comment:锁编号" json:"lockid"`                          // 锁编号

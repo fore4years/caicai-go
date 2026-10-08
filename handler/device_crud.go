@@ -1,10 +1,11 @@
 package handler
 
 import (
-	"github.com/shopspring/decimal"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/shopspring/decimal"
 
 	"github.com/gin-gonic/gin"
 

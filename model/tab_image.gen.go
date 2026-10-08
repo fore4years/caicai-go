@@ -6,7 +6,7 @@ package model
 
 const TableNameTabImage = "tab_image"
 
-// TabImage 图片表
+// TabImage mapped from table <tab_image>
 type TabImage struct {
 	ID    int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:图片id" json:"id"` // 图片id
 	Image []byte `gorm:"column:image;comment:图片" json:"image"`                           // 图片

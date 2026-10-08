@@ -43,8 +43,8 @@ func newUserTbl(db *gorm.DB, opts ...gen.DOOption) userTbl {
 	_userTbl.Avatar = field.NewBytes(tableName, "avatar")
 	_userTbl.IDCardEmblem = field.NewInt32(tableName, "id_card_emblem")
 	_userTbl.IDCardAvatar = field.NewInt32(tableName, "id_card_avatar")
-	_userTbl.Balans = field.NewFloat64(tableName, "balans")
-	_userTbl.FreezeBalans = field.NewFloat64(tableName, "freeze_balans")
+	_userTbl.Balans = field.NewString(tableName, "balans")
+	_userTbl.FreezeBalans = field.NewString(tableName, "freeze_balans")
 	_userTbl.IDEntity = field.NewString(tableName, "id_entity")
 	_userTbl.OmEnable = field.NewString(tableName, "om_enable")
 	_userTbl.IsSteer = field.NewString(tableName, "is_steer")
@@ -58,35 +58,34 @@ func newUserTbl(db *gorm.DB, opts ...gen.DOOption) userTbl {
 	return _userTbl
 }
 
-// userTbl 用户表
 type userTbl struct {
 	userTblDo userTblDo
 
 	ALL          field.Asterisk
-	Openid       field.String  // 用户唯一标识
-	Omid         field.String  // 运维微信id
-	YiparlOpenid field.String  // 逸泊停车微信id
-	NickName     field.String  // 用户昵称
-	Province     field.String  // 微信所在省
-	City         field.String  // 微信所在市
-	Phone        field.String  // 手机号
-	Integral     field.String  // 用户积分
-	FreeTime     field.String  // 免费停车时长
-	PlateNum     field.String  // 用户首选车牌
-	IDNumber     field.String  // 用户身份证号
-	Name         field.String  // 用户姓名
-	Avatar       field.Bytes   // 头像
-	IDCardEmblem field.Int32   // 身份证国徽面image_id
-	IDCardAvatar field.Int32   // 身份证头像面image_id
-	Balans       field.Float64 // 用户余额
-	FreezeBalans field.Float64 // 用户冻结金额
-	IDEntity     field.String  // 身份标识 , 1驾驶人员,2业主,3酒店老板,4酒店管理人员
-	OmEnable     field.String  // 运维身份审核,0未审核,1,审核通过,-1审核未通过
-	IsSteer      field.String  // 首页用户引导状态(0,未读,1,已读)
-	IsProcedure  field.String  // 二轮车充电操作流程状态(0,未读,1,已读)
-	IsLogin      field.String  // 是否登录(0,未登录,1,已登录)
-	CreateTime   field.Time    // 创建账户时间
-	UpdateTime   field.Time    // 修改时间
+	Openid       field.String // 用户唯一标识
+	Omid         field.String // 运维微信id
+	YiparlOpenid field.String // 逸泊停车微信id
+	NickName     field.String // 用户昵称
+	Province     field.String // 微信所在省
+	City         field.String // 微信所在市
+	Phone        field.String // 手机号
+	Integral     field.String // 用户积分
+	FreeTime     field.String // 免费停车时长
+	PlateNum     field.String // 用户首选车牌
+	IDNumber     field.String // 用户身份证号
+	Name         field.String // 用户姓名
+	Avatar       field.Bytes  // 头像
+	IDCardEmblem field.Int32  // 身份证国徽面image_id
+	IDCardAvatar field.Int32  // 身份证头像面image_id
+	Balans       field.String // 用户余额
+	FreezeBalans field.String // 用户冻结金额
+	IDEntity     field.String // 身份标识 , 1驾驶人员,2业主,3酒店老板,4酒店管理人员
+	OmEnable     field.String // 运维身份审核,0未审核,1,审核通过,-1审核未通过
+	IsSteer      field.String // 首页用户引导状态(0,未读,1,已读)
+	IsProcedure  field.String // 二轮车充电操作流程状态(0,未读,1,已读)
+	IsLogin      field.String // 是否登录(0,未登录,1,已登录)
+	CreateTime   field.Time   // 创建账户时间
+	UpdateTime   field.Time   // 修改时间
 
 	fieldMap map[string]field.Expr
 }
@@ -118,8 +117,8 @@ func (u *userTbl) updateTableName(table string) *userTbl {
 	u.Avatar = field.NewBytes(table, "avatar")
 	u.IDCardEmblem = field.NewInt32(table, "id_card_emblem")
 	u.IDCardAvatar = field.NewInt32(table, "id_card_avatar")
-	u.Balans = field.NewFloat64(table, "balans")
-	u.FreezeBalans = field.NewFloat64(table, "freeze_balans")
+	u.Balans = field.NewString(table, "balans")
+	u.FreezeBalans = field.NewString(table, "freeze_balans")
 	u.IDEntity = field.NewString(table, "id_entity")
 	u.OmEnable = field.NewString(table, "om_enable")
 	u.IsSteer = field.NewString(table, "is_steer")

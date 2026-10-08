@@ -4,17 +4,17 @@
 
 package model
 
-const TableNameOnlineLockstatus = "online_lockstatus_Table"
+const TableNameOnlineLockstatusTable = "online_lockstatus_Table"
 
-// OnlineLockstatus 对应 Java domain.online_lockstatus（车位锁在线/电量状态表）。
-type OnlineLockstatus struct {
+// OnlineLockstatusTable mapped from table <online_lockstatus_Table>
+type OnlineLockstatusTable struct {
 	Number  string `gorm:"column:number" json:"number"`
 	LockID  string `gorm:"column:lockID" json:"lockID"`
 	Battery string `gorm:"column:battery" json:"battery"`
 	Online  string `gorm:"column:online" json:"online"`
 }
 
-// TableName OnlineLockstatus's table name.
-func (*OnlineLockstatus) TableName() string {
-	return TableNameOnlineLockstatus
+// TableName OnlineLockstatusTable's table name
+func (*OnlineLockstatusTable) TableName() string {
+	return TableNameOnlineLockstatusTable
 }

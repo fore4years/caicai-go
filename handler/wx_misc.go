@@ -142,7 +142,7 @@ func (c *CheweisuoController) kaisuo(userID, lockID string) string {
 		return "这个锁没有入网哦，扫别的锁试试吧"
 	}
 
-	var on model.OnlineLockstatus
+	var on model.OnlineLockstatusTable
 	if err := conf.Db.Where("lockID = ?", lockID).First(&on).Error; err != nil {
 		return "获取锁的状态失败"
 	}
@@ -183,7 +183,7 @@ func (c *CheweisuoController) dakai(userID, lockID string) string {
 		State:     orderStateConduct, // 进行中
 	}
 	conf.Db.Create(&order)
-	conf.Db.Model(&model.OnlineLockstatus{}).Where("lockID = ?", lockID).Update("online", "y")
+	conf.Db.Model(&model.OnlineLockstatusTable{}).Where("lockID = ?", lockID).Update("online", "y")
 	return "开锁成功"
 }
 
@@ -370,12 +370,12 @@ func (c *ZijianController) Shibai(ctx *gin.Context) {
 }
 
 func (c *ZijianController) shibai(id string) int {
-	var on model.OnlineLockstatus
+	var on model.OnlineLockstatusTable
 	if err := conf.Db.Where("lockID = ?", id).First(&on).Error; err != nil {
 		// 锁未上线，业务处理完毕
 		return 1
 	}
-	res := conf.Db.Model(&model.OnlineLockstatus{}).Where("lockID = ?", id).Update("battery", "n")
+	res := conf.Db.Model(&model.OnlineLockstatusTable{}).Where("lockID = ?", id).Update("battery", "n")
 	if res.RowsAffected > 0 {
 		return 1
 	}
@@ -388,7 +388,7 @@ func (c *ZijianController) Chenggong(ctx *gin.Context) {
 }
 
 func (c *ZijianController) chenggong(id string) int {
-	var on model.OnlineLockstatus
+	var on model.OnlineLockstatusTable
 	if err := conf.Db.Where("lockID = ?", id).First(&on).Error; err != nil {
 		// 锁未上线：生成 9 位编号并注册上线（battery=y, online=n）
 		number := 0
@@ -405,7 +405,7 @@ func (c *ZijianController) chenggong(id string) int {
 		}
 		return 0
 	}
-	res := conf.Db.Model(&model.OnlineLockstatus{}).Where("lockID = ?", id).Update("battery", "y")
+	res := conf.Db.Model(&model.OnlineLockstatusTable{}).Where("lockID = ?", id).Update("battery", "y")
 	if res.RowsAffected > 0 {
 		return 1
 	}
@@ -495,36 +495,4 @@ func (c *OwnerChargeController) IsAddCharge(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, ResultSuccess(chargeInstalled)) // 10001
-}
-
-// ============ 路由注册 ============
-
-// RegisterWxMisc 注册本文件全部控制器路由（不修改 router/router.go，由调用方统一接入）。
-func RegisterWxMisc(r *gin.Engine) {
-	staff := new(StaffController)
-	r.GET("/wx/selectname", staff.Selectname)
-	r.GET("/wx/getState", staff.GetState)
-
-	guzhang := new(WxGuzhangController)
-	r.POST("/wx/guzhangtijiao", guzhang.GuzhangTijiao)
-	r.GET("/wx/getAllfault", guzhang.GetAllFault)
-	r.GET("/wx/updateState", guzhang.UpdateState)
-	r.GET("/wx/getMaintenance_time", guzhang.GetMaintenanceTime)
-
-	cheweisuo := new(CheweisuoController)
-	r.GET("/cheweisuo/kaisuo", cheweisuo.Kaisuo)
-
-	lockc := new(HardwareLockController)
-	r.POST("/wx/lock/open/scan/phone", lockc.OpenScanPhone)
-	r.POST("/wx/lock/close/scan/phone", lockc.CloseScanPhone)
-	r.POST("/wx/lock/open/scan/lanya", lockc.OpenScanLanya)
-
-	zijian := new(ZijianController)
-	r.GET("/zijian/shibai", zijian.Shibai)
-	r.GET("/zijian/chenggong", zijian.Chenggong)
-
-	charge := new(OwnerChargeController)
-	r.GET("/wx/addCharge", charge.AddCharge)
-	r.GET("/wx/addChargeTest", charge.AddChargeTest)
-	r.GET("/wx/isAddCharge", charge.IsAddCharge)
 }

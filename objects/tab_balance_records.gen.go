@@ -31,7 +31,7 @@ func newTabBalanceRecord(db *gorm.DB, opts ...gen.DOOption) tabBalanceRecord {
 	_tabBalanceRecord.ID = field.NewInt32(tableName, "id")
 	_tabBalanceRecord.Openid = field.NewString(tableName, "openid")
 	_tabBalanceRecord.Type = field.NewString(tableName, "type")
-	_tabBalanceRecord.Amount = field.NewFloat64(tableName, "amount")
+	_tabBalanceRecord.Amount = field.NewString(tableName, "amount")
 	_tabBalanceRecord.CreateTime = field.NewTime(tableName, "create_time")
 
 	_tabBalanceRecord.fillFieldMap()
@@ -39,16 +39,15 @@ func newTabBalanceRecord(db *gorm.DB, opts ...gen.DOOption) tabBalanceRecord {
 	return _tabBalanceRecord
 }
 
-// tabBalanceRecord 余额明细表
 type tabBalanceRecord struct {
 	tabBalanceRecordDo tabBalanceRecordDo
 
 	ALL        field.Asterisk
-	ID         field.Int32   // 主键id
-	Openid     field.String  // 用户唯一openid
-	Type       field.String  // 交易类型
-	Amount     field.Float64 // 交易金额
-	CreateTime field.Time    // 交易时间
+	ID         field.Int32  // 主键id
+	Openid     field.String // 用户唯一openid
+	Type       field.String // 交易类型
+	Amount     field.String // 交易金额
+	CreateTime field.Time   // 交易时间
 
 	fieldMap map[string]field.Expr
 }
@@ -68,7 +67,7 @@ func (t *tabBalanceRecord) updateTableName(table string) *tabBalanceRecord {
 	t.ID = field.NewInt32(table, "id")
 	t.Openid = field.NewString(table, "openid")
 	t.Type = field.NewString(table, "type")
-	t.Amount = field.NewFloat64(table, "amount")
+	t.Amount = field.NewString(table, "amount")
 	t.CreateTime = field.NewTime(table, "create_time")
 
 	t.fillFieldMap()

@@ -38,7 +38,6 @@ func newTabPriceTime(db *gorm.DB, opts ...gen.DOOption) tabPriceTime {
 	return _tabPriceTime
 }
 
-// tabPriceTime 时段电价
 type tabPriceTime struct {
 	tabPriceTimeDo tabPriceTimeDo
 

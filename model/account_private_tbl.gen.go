@@ -6,7 +6,7 @@ package model
 
 const TableNameAccountPrivateTbl = "account_private_tbl"
 
-// AccountPrivateTbl 私人账户信息表
+// AccountPrivateTbl mapped from table <account_private_tbl>
 type AccountPrivateTbl struct {
 	OrderID       string `gorm:"column:order_id;primaryKey;comment:订单号" json:"order_id"`           // 订单号
 	PayeeName     string `gorm:"column:payee_name;not null;comment:收款人" json:"payee_name"`         // 收款人

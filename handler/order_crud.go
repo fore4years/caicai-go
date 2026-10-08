@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 
 	"caicai-go/conf"
 	"caicai-go/model"
@@ -679,7 +680,7 @@ func (c *WithdrawalController) applyRefund(openid, rechargeOrderID string, refun
 		CreateTime:             time.Now(),
 		UpdateTime:             time.Now(),
 	}
-	if conf.Db.Create(&refundRecord).Error != nil {
+	if conf.Db.Omit("process_time").Create(&refundRecord).Error != nil {
 		return false, "退款申请保存失败"
 	}
 
@@ -728,28 +729,21 @@ func (c *WithdrawalController) processRefund(recordID string) (string, error) {
 		transactionID = refundRecord.RelatedRechargeOrderID
 	}
 
-	// 调用微信支付退款接口（桩）。金额单位：分。
+	// 调用微信支付退款接口。金额单位：分。
 	refundFen := refundRecord.WithdrawalAmount.Mul(decimal.NewFromInt(100)).IntPart()
 	totalFen := rechargeOrder.RechargeAmount.Mul(decimal.NewFromInt(100)).IntPart()
-	refundWxOrder(transactionID, refundRecord.RefundOrderID, int(refundFen), int(totalFen))
-	// 桩：当前恒按退款成功处理；接入真实微信支付 v3 后按返回状态分支（SUCCESS/PROCESSING/CHANGE/其它）。
-	refundStatus := "SUCCESS"
+	refundStatus, err := refundWxOrder(transactionID, refundRecord.RefundOrderID, int(refundFen), int(totalFen))
+	if err != nil {
+		return "", fmt.Errorf("微信退款失败: %w", err)
+	}
 
 	switch refundStatus {
 	case "SUCCESS":
-		// 退款成功处理
+		// 退款成功处理：充值订单退款信息与用户余额统一由 processBalanceRefund 处理，
+		// 避免 refundedAmount/remainingRefundAmount 被重复累加（Java 原逻辑存在重复累加 bug，此处修正）。
 		now := time.Now()
 		conf.Db.Model(&model.WithdrawalRecordTbl{}).Where("record_id = ?", refundRecord.RecordID).
 			Updates(map[string]interface{}{"withdrawal_status": withdrawalSuccess, "process_time": now})
-
-		// 更新充值订单的退款信息
-		rechargeOrder.RefundedAmount = rechargeOrder.RefundedAmount.Add(refundRecord.WithdrawalAmount)
-		rechargeOrder.RemainingRefundAmount = rechargeOrder.RemainingRefundAmount.Sub(refundRecord.WithdrawalAmount)
-		conf.Db.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", rechargeOrder.OrderID).
-			Updates(map[string]interface{}{
-				"refunded_amount":         rechargeOrder.RefundedAmount,
-				"remaining_refund_amount": rechargeOrder.RemainingRefundAmount,
-			})
 
 		return c.processBalanceRefund(&refundRecord, &rechargeOrder)
 
@@ -792,38 +786,46 @@ func (c *WithdrawalController) processBalanceRefund(refundRecord *model.Withdraw
 }
 
 // doBalanceRefund 余额充值订单退款的实际扣减逻辑。
+// 多步写（扣余额 + 退款记录 + 充值订单 + 余额明细）包裹在事务内，扣款用原子 UPDATE，保证事务与金额安全。
 func (c *WithdrawalController) doBalanceRefund(refundRecord *model.WithdrawalRecordTbl, rechargeOrder *model.RechargeOrderTbl) error {
-	// 1. 更新用户余额（减少余额）
-	var user model.UserTbl
-	if err := conf.Db.Where("openid = ?", refundRecord.Openid).First(&user).Error; err != nil {
-		return fmt.Errorf("用户不存在")
-	}
-
-	currentBalance := user.Balans
 	refundAmount := refundRecord.WithdrawalAmount
-	if refundAmount.GreaterThan(currentBalance) {
-		return fmt.Errorf("退款金额超过用户当前余额")
-	}
+	amt := refundAmount.StringFixed(2)
 
-	newBalance := currentBalance.Sub(refundAmount)
-	conf.Db.Model(&model.UserTbl{}).Where("openid = ?", refundRecord.Openid).
-		Updates(map[string]interface{}{"balans": newBalance})
+	return conf.Db.Transaction(func(tx *gorm.DB) error {
+		// 1. 扣减用户余额（原子 UPDATE，条件写进 WHERE 防止扣成负数）
+		res := tx.Exec(
+			"UPDATE user_tbl SET balans = balans - CAST(? AS DECIMAL(10,2)) WHERE openid = ? AND balans >= CAST(? AS DECIMAL(10,2))",
+			amt, refundRecord.Openid, amt,
+		)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected <= 0 {
+			return fmt.Errorf("退款金额超过用户当前余额")
+		}
 
-	// 2. 更新退款记录状态
-	conf.Db.Model(&model.WithdrawalRecordTbl{}).Where("record_id = ?", refundRecord.RecordID).
-		Updates(map[string]interface{}{"withdrawal_status": withdrawalSuccess, "process_time": time.Now()})
+		// 2. 更新退款记录状态
+		if err := tx.Model(&model.WithdrawalRecordTbl{}).Where("record_id = ?", refundRecord.RecordID).
+			Updates(map[string]interface{}{"withdrawal_status": withdrawalSuccess, "process_time": time.Now()}).Error; err != nil {
+			return err
+		}
 
-	// 3. 更新充值订单的退款信息
-	rechargeOrder.RefundedAmount = rechargeOrder.RefundedAmount.Add(refundAmount)
-	rechargeOrder.RemainingRefundAmount = rechargeOrder.RemainingRefundAmount.Sub(refundAmount)
-	conf.Db.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", rechargeOrder.OrderID).
-		Updates(map[string]interface{}{
-			"refunded_amount":         rechargeOrder.RefundedAmount,
-			"remaining_refund_amount": rechargeOrder.RemainingRefundAmount,
-		})
+		// 3. 更新充值订单的退款信息
+		rechargeOrder.RefundedAmount = rechargeOrder.RefundedAmount.Add(refundAmount)
+		rechargeOrder.RemainingRefundAmount = rechargeOrder.RemainingRefundAmount.Sub(refundAmount)
+		if err := tx.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", rechargeOrder.OrderID).
+			Updates(map[string]interface{}{
+				"refunded_amount":         rechargeOrder.RefundedAmount,
+				"remaining_refund_amount": rechargeOrder.RemainingRefundAmount,
+			}).Error; err != nil {
+			return err
+		}
 
-	// 4. 记录余额变动明细
-	saveBalanceRecord(refundRecord.Openid, "退费", refundAmount)
+		// 4. 记录余额变动明细
+		if err := tx.Create(&model.TabBalanceRecord{Openid: refundRecord.Openid, Type: "退费", Amount: refundAmount}).Error; err != nil {
+			return err
+		}
 
-	return nil
+		return nil
+	})
 }

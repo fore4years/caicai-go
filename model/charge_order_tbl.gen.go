@@ -4,11 +4,13 @@
 
 package model
 
-import "github.com/shopspring/decimal"
+import (
+	"github.com/shopspring/decimal"
+)
 
 const TableNameChargeOrderTbl = "charge_order_tbl"
 
-// ChargeOrderTbl 订单(未使用)
+// ChargeOrderTbl mapped from table <charge_order_tbl>
 type ChargeOrderTbl struct {
 	Orderid     string          `gorm:"column:orderid;primaryKey" json:"orderid"`
 	Openid      string          `gorm:"column:openid" json:"openid"`

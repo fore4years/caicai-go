@@ -44,7 +44,6 @@ func newTabProfitSharingConfig(db *gorm.DB, opts ...gen.DOOption) tabProfitShari
 	return _tabProfitSharingConfig
 }
 
-// tabProfitSharingConfig 分账配置表
 type tabProfitSharingConfig struct {
 	tabProfitSharingConfigDo tabProfitSharingConfigDo
 

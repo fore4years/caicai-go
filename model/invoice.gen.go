@@ -5,13 +5,14 @@
 package model
 
 import (
-	"github.com/shopspring/decimal"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const TableNameInvoice = "invoice"
 
-// Invoice 发票详情表
+// Invoice mapped from table <invoice>
 type Invoice struct {
 	ID          int32           `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键" json:"id"`        // 主键
 	InvoiceType string          `gorm:"column:invoice_type;comment:发票类型" json:"invoice_type"`                // 发票类型

@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"caicai-go/logger"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 
 	"caicai-go/conf"
 	"caicai-go/model"
@@ -15,11 +18,14 @@ import (
 // ChargeStationController（二轮车充电站，base /ChargeStation）
 // ReOrderPowerController（二轮车订单充电时段电量，base /receptacle/order/power）
 // 严格对齐 Java 端 ChargeStationController / ReOrderPowerController 及其
-// ServiceImpl + Mapper XML。point 用 ST_AsText 输出 WKT（对齐 Java JTS Point.toText()）。
+// ServiceImpl + Mapper XML。经纬度直接用 longitude/latitude 两个字段。
 // ============================================================================
 
-// chargeStationGeoCols 充电站地理查询列（point 输出 WKT）。
-const chargeStationGeoCols = "id, ST_AsText(point) AS point, place, name, openid, power_max, pid, create_time, update_time"
+// chargeStationGeoCols 充电站查询列（经纬度取 longitude/latitude）。
+const chargeStationGeoCols = "id, longitude, latitude, place, name, openid, power_max, pid, create_time, update_time"
+
+// chargeStationDistanceSQL 充电站经纬度到查询点的球面距离（米），Haversine 公式，参数顺序 lat, lat, lng。
+const chargeStationDistanceSQL = "(6371000 * 2 * ASIN(SQRT(POWER(SIN((RADIANS(latitude) - RADIANS(?)) / 2), 2) + COS(RADIANS(?)) * COS(RADIANS(latitude)) * POWER(SIN((RADIANS(longitude) - RADIANS(?)) / 2), 2))))"
 
 // ChargeStationController 对齐 Java controller.ChargeStationController。
 type ChargeStationController struct{}
@@ -59,12 +65,12 @@ func (c *ChargeStationController) GetByOpenid(ctx *gin.Context) {
 // Add POST /ChargeStation/add 对齐 Java add（@RequestBody ChargeStationDto）。
 func (c *ChargeStationController) Add(ctx *gin.Context) {
 	var req struct {
-		Place     string   `json:"place"`
-		Name      string   `json:"name"`
-		Pid       string   `json:"pid"`
-		PowerMax  string   `json:"powerMax"`
-		Latitude  *float64 `json:"latitude"`
-		Longitude *float64 `json:"longitude"`
+		Place     string `json:"place"`
+		Name      string `json:"name"`
+		Pid       string `json:"pid"`
+		PowerMax  string `json:"powerMax"`
+		Latitude  string `json:"latitude"`
+		Longitude string `json:"longitude"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
@@ -75,33 +81,68 @@ func (c *ChargeStationController) Add(ctx *gin.Context) {
 		return
 	}
 	// 对齐 productService.getByProductId(pid)：产品 id 已存在则不允许重复添加。
-	var n int64
-	conf.Db.Model(&model.TabProduct{}).Where("pid = ?", req.Pid).Count(&n)
-	if n > 0 {
-		ctx.JSON(http.StatusOK, ResultError(400, "此产品id已存在,请勿重复添加!"))
+	openid := ctx.GetString("openid")
+	var station model.ChargingStationTbl
+	err := conf.Db.Where("pid = ?", req.Pid).First(&station).Error
+	exists := err == nil
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
 
-	openid := ctx.GetString("openid")
-	powerMax, _ := strconv.Atoi(req.PowerMax)
+	if exists {
+		// ---------- 更新分支 ----------
+		// BeanUtils.copyProperties(dto, station)：只覆盖 DTO 非空字段
+		if req.Place != "" {
+			station.Place = req.Place
+		}
+		if req.Name != "" {
+			station.Name = req.Name
+		}
+		// powerMax：DTO 未传则保留原值
+		if req.PowerMax != "" {
+			if v, err := strconv.Atoi(req.PowerMax); err == nil {
+				station.PowerMax = int32(v)
+			}
+		}
+		// longitude/latitude 任一非空 → 更新经纬度
+		if req.Longitude != "" {
+			station.Longitude, _ = strconv.ParseFloat(req.Longitude, 64)
+		}
+		if req.Latitude != "" {
+			station.Latitude, _ = strconv.ParseFloat(req.Latitude, 64)
+		}
+		// pid 保持不变（Java 里 setPid(pid) 是显式保护）
+		station.Openid = openid
 
-	// 对齐 Java：longitude/latitude 任一非空才构造 point，否则 point 为 NULL。
-	var wkt interface{}
-	if req.Longitude != nil || req.Latitude != nil {
-		var lng, lat float64
-		if req.Longitude != nil {
-			lng = *req.Longitude
+		if err := conf.Db.Save(&station).Error; err != nil {
+			ctx.JSON(http.StatusOK, ResultSuccess(false))
+			return
 		}
-		if req.Latitude != nil {
-			lat = *req.Latitude
+		ctx.JSON(http.StatusOK, ResultSuccess(true))
+		return
+	}
+	// 新增
+	newStation := model.ChargingStationTbl{
+		Place:    req.Place,
+		Name:     req.Name,
+		Pid:      req.Pid,
+		Openid:   openid,
+		PowerMax: 3000, // Java: setPowerMax("3000") 默认值
+	}
+	if req.PowerMax != "" {
+		if v, err := strconv.Atoi(req.PowerMax); err == nil {
+			newStation.PowerMax = int32(v)
 		}
-		wkt = wktPoint(lng, lat)
+	}
+	if req.Longitude != "" {
+		newStation.Longitude, _ = strconv.ParseFloat(req.Longitude, 64)
+	}
+	if req.Latitude != "" {
+		newStation.Latitude, _ = strconv.ParseFloat(req.Latitude, 64)
 	}
 
-	if err := conf.Db.Exec(
-		"INSERT INTO charging_station_tbl (point, place, name, openid, pid, power_max) VALUES (ST_GeomFromText(?),?,?,?,?,?)",
-		wkt, req.Place, req.Name, openid, req.Pid, powerMax,
-	).Error; err != nil {
+	if err := conf.Db.Create(&newStation).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
@@ -117,7 +158,6 @@ func (c *ChargeStationController) GetByPoint(ctx *gin.Context) {
 	}
 	lng, _ := strconv.ParseFloat(lngStr, 64)
 	lat, _ := strconv.ParseFloat(latStr, 64)
-	wkt := wktPoint(lng, lat)
 	current, size := parsePage(ctx)
 
 	var total int64
@@ -125,9 +165,9 @@ func (c *ChargeStationController) GetByPoint(ctx *gin.Context) {
 
 	var rows []model.ChargingStationTbl
 	conf.Db.Raw(
-		"SELECT "+chargeStationGeoCols+", ST_Distance_Sphere(point, ST_GeomFromText(?)) AS distance FROM charging_station_tbl "+
-			"ORDER BY ST_Distance_Sphere(point, ST_GeomFromText(?)) ASC LIMIT ? OFFSET ?",
-		wkt, wkt, size, pageOffset(current, size),
+		"SELECT "+chargeStationGeoCols+", "+chargeStationDistanceSQL+" AS distance FROM charging_station_tbl "+
+			"ORDER BY "+chargeStationDistanceSQL+" ASC LIMIT ? OFFSET ?",
+		lat, lat, lng, lat, lat, lng, size, pageOffset(current, size),
 	).Scan(&rows)
 
 	list := make([]chargeStationDTO, 0, len(rows))
@@ -140,7 +180,10 @@ func (c *ChargeStationController) GetByPoint(ctx *gin.Context) {
 // GetStationList GET /ChargeStation/getStationList 对齐 Java getStationList（list()）。
 func (c *ChargeStationController) GetStationList(ctx *gin.Context) {
 	var rows []model.ChargingStationTbl
-	conf.Db.Raw("SELECT " + chargeStationGeoCols + " FROM charging_station_tbl").Scan(&rows)
+	tx := conf.Db.Raw("SELECT " + chargeStationGeoCols + " FROM charging_station_tbl").Scan(&rows)
+	if tx.Error != nil {
+		logger.Mylog.Err(tx.Error).Msg("查询失败")
+	}
 	list := make([]chargeStationDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, chargeStationToDTO(r))
@@ -264,30 +307,4 @@ func (c *ReOrderPowerController) GetElectronicByOrderid(ctx *gin.Context) {
 		"totalFee":   totalFee.Round(2),
 		"serviceFee": serviceFee.Round(2),
 	}))
-}
-
-// RegisterChargeStation 注册 ChargeStationController 与 ReOrderPowerController 全部路由。
-func RegisterChargeStation(r *gin.Engine) {
-	chargeStation := new(ChargeStationController)
-	reOrderPower := new(ReOrderPowerController)
-
-	cs := r.Group("/ChargeStation")
-	{
-		cs.GET("/getChargeStation", chargeStation.GetChargeStation)
-		cs.GET("/getById", chargeStation.GetById)
-		cs.GET("/getByOpenid", chargeStation.GetByOpenid)
-		cs.POST("/add", chargeStation.Add)
-		cs.GET("/getByPoint", chargeStation.GetByPoint)
-		cs.GET("/getStationList", chargeStation.GetStationList)
-	}
-
-	rop := r.Group("/receptacle/order/power")
-	{
-		rop.GET("/add", reOrderPower.Add)
-		rop.GET("/getById", reOrderPower.GetById)
-		rop.GET("/getAll", reOrderPower.GetAll)
-		rop.GET("/getValueByOrderid", reOrderPower.GetValueByOrderid)
-		rop.GET("/getFeesByOrderid", reOrderPower.GetFeesByOrderid)
-		rop.GET("/getElectronicByOrderid", reOrderPower.GetElectronicByOrderid)
-	}
 }

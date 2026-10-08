@@ -31,7 +31,7 @@ func newPackageRecordTbl(db *gorm.DB, opts ...gen.DOOption) packageRecordTbl {
 	_packageRecordTbl.OrderNo = field.NewString(tableName, "order_no")
 	_packageRecordTbl.Openid = field.NewString(tableName, "openid")
 	_packageRecordTbl.Phone = field.NewString(tableName, "phone")
-	_packageRecordTbl.Amount = field.NewFloat64(tableName, "amount")
+	_packageRecordTbl.Amount = field.NewString(tableName, "amount")
 	_packageRecordTbl.Days = field.NewInt32(tableName, "days")
 	_packageRecordTbl.Duration = field.NewInt32(tableName, "duration")
 	_packageRecordTbl.MaxPower = field.NewInt32(tableName, "max_power")
@@ -45,22 +45,21 @@ func newPackageRecordTbl(db *gorm.DB, opts ...gen.DOOption) packageRecordTbl {
 	return _packageRecordTbl
 }
 
-// packageRecordTbl 二轮车套餐充值记录表
 type packageRecordTbl struct {
 	packageRecordTblDo packageRecordTblDo
 
 	ALL           field.Asterisk
-	OrderNo       field.String  // 订单号
-	Openid        field.String  // 用户openid
-	Phone         field.String  // 手机号
-	Amount        field.Float64 // 充值金额
-	Days          field.Int32   // 充值天数
-	Duration      field.Int32   // 时长（分钟）（-1：不限时）
-	MaxPower      field.Int32   // 最大功率
-	Status        field.String  // 订单状态：pending-待支付, paid-已支付, completed-已完成, cancelled-已取消, expired-已过期
-	CreateTime    field.Time    // 充值时间
-	EndTime       field.Time    // 结束时间
-	TransactionID field.String  // 微信支付交易号
+	OrderNo       field.String // 订单号
+	Openid        field.String // 用户openid
+	Phone         field.String // 手机号
+	Amount        field.String // 充值金额
+	Days          field.Int32  // 充值天数
+	Duration      field.Int32  // 时长（分钟）（-1：不限时）
+	MaxPower      field.Int32  // 最大功率
+	Status        field.String // 订单状态：pending-待支付, paid-已支付, completed-已完成, cancelled-已取消, expired-已过期
+	CreateTime    field.Time   // 充值时间
+	EndTime       field.Time   // 结束时间
+	TransactionID field.String // 微信支付交易号
 
 	fieldMap map[string]field.Expr
 }
@@ -80,7 +79,7 @@ func (p *packageRecordTbl) updateTableName(table string) *packageRecordTbl {
 	p.OrderNo = field.NewString(table, "order_no")
 	p.Openid = field.NewString(table, "openid")
 	p.Phone = field.NewString(table, "phone")
-	p.Amount = field.NewFloat64(table, "amount")
+	p.Amount = field.NewString(table, "amount")
 	p.Days = field.NewInt32(table, "days")
 	p.Duration = field.NewInt32(table, "duration")
 	p.MaxPower = field.NewInt32(table, "max_power")

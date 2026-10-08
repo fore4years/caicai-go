@@ -46,7 +46,6 @@ func newFreeChargingUsersTbl(db *gorm.DB, opts ...gen.DOOption) freeChargingUser
 	return _freeChargingUsersTbl
 }
 
-// freeChargingUsersTbl 享受充电站免服务费人员信息表
 type freeChargingUsersTbl struct {
 	freeChargingUsersTblDo freeChargingUsersTblDo
 

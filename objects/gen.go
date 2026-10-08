@@ -49,6 +49,7 @@ var (
 	MessageTbl                   *messageTbl
 	NeighborShareUserTbl         *neighborShareUserTbl
 	OmEmployee                   *omEmployee
+	OnlineLockstatusTable        *onlineLockstatusTable
 	OpenLockTbl                  *openLockTbl
 	OrderPrivateTbl              *orderPrivateTbl
 	OrderTbl                     *orderTbl
@@ -134,6 +135,7 @@ func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	MessageTbl = &Q.MessageTbl
 	NeighborShareUserTbl = &Q.NeighborShareUserTbl
 	OmEmployee = &Q.OmEmployee
+	OnlineLockstatusTable = &Q.OnlineLockstatusTable
 	OpenLockTbl = &Q.OpenLockTbl
 	OrderPrivateTbl = &Q.OrderPrivateTbl
 	OrderTbl = &Q.OrderTbl
@@ -220,6 +222,7 @@ func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 		MessageTbl:                   newMessageTbl(db, opts...),
 		NeighborShareUserTbl:         newNeighborShareUserTbl(db, opts...),
 		OmEmployee:                   newOmEmployee(db, opts...),
+		OnlineLockstatusTable:        newOnlineLockstatusTable(db, opts...),
 		OpenLockTbl:                  newOpenLockTbl(db, opts...),
 		OrderPrivateTbl:              newOrderPrivateTbl(db, opts...),
 		OrderTbl:                     newOrderTbl(db, opts...),
@@ -307,6 +310,7 @@ type Query struct {
 	MessageTbl                   messageTbl
 	NeighborShareUserTbl         neighborShareUserTbl
 	OmEmployee                   omEmployee
+	OnlineLockstatusTable        onlineLockstatusTable
 	OpenLockTbl                  openLockTbl
 	OrderPrivateTbl              orderPrivateTbl
 	OrderTbl                     orderTbl
@@ -397,6 +401,7 @@ func (q *Query) clone(db *gorm.DB) *Query {
 		MessageTbl:                   q.MessageTbl.clone(db),
 		NeighborShareUserTbl:         q.NeighborShareUserTbl.clone(db),
 		OmEmployee:                   q.OmEmployee.clone(db),
+		OnlineLockstatusTable:        q.OnlineLockstatusTable.clone(db),
 		OpenLockTbl:                  q.OpenLockTbl.clone(db),
 		OrderPrivateTbl:              q.OrderPrivateTbl.clone(db),
 		OrderTbl:                     q.OrderTbl.clone(db),
@@ -492,6 +497,7 @@ func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 		MessageTbl:                   q.MessageTbl.replaceDB(db),
 		NeighborShareUserTbl:         q.NeighborShareUserTbl.replaceDB(db),
 		OmEmployee:                   q.OmEmployee.replaceDB(db),
+		OnlineLockstatusTable:        q.OnlineLockstatusTable.replaceDB(db),
 		OpenLockTbl:                  q.OpenLockTbl.replaceDB(db),
 		OrderPrivateTbl:              q.OrderPrivateTbl.replaceDB(db),
 		OrderTbl:                     q.OrderTbl.replaceDB(db),
@@ -577,6 +583,7 @@ type queryCtx struct {
 	MessageTbl                   IMessageTblDo
 	NeighborShareUserTbl         INeighborShareUserTblDo
 	OmEmployee                   IOmEmployeeDo
+	OnlineLockstatusTable        IOnlineLockstatusTableDo
 	OpenLockTbl                  IOpenLockTblDo
 	OrderPrivateTbl              IOrderPrivateTblDo
 	OrderTbl                     IOrderTblDo
@@ -662,6 +669,7 @@ func (q *Query) WithContext(ctx context.Context) *queryCtx {
 		MessageTbl:                   q.MessageTbl.WithContext(ctx),
 		NeighborShareUserTbl:         q.NeighborShareUserTbl.WithContext(ctx),
 		OmEmployee:                   q.OmEmployee.WithContext(ctx),
+		OnlineLockstatusTable:        q.OnlineLockstatusTable.WithContext(ctx),
 		OpenLockTbl:                  q.OpenLockTbl.WithContext(ctx),
 		OrderPrivateTbl:              q.OrderPrivateTbl.WithContext(ctx),
 		OrderTbl:                     q.OrderTbl.WithContext(ctx),

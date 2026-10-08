@@ -219,15 +219,3 @@ func (a *AdminPlaceApplyController) Sousuo(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, nil)
 }
-
-// RegisterAdminPlaceApply 注册 /system 下车位申请审核相关路由（对齐 Java placeApplyCon）。
-func RegisterAdminPlaceApply(r *gin.Engine) {
-	c := new(AdminPlaceApplyController)
-	r.Any("/system/getPlaceApplyMax", c.GetPlaceApplyMax)
-	r.Any("/system/getPlaceApplyPaging", c.GetPlaceApplyPaging)
-	r.Any("/system/getPlaceApplyById", c.GetPlaceApplyById)
-	r.Any("/system/doPlaceApply", c.DoPlaceApply)
-	r.Any("/system/paChange", c.PaChange)
-	r.Any("/system/mushDel", c.MushDel)
-	r.Any("/system/sousuo", c.Sousuo)
-}

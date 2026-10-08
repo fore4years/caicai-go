@@ -29,28 +29,27 @@ func newTabPrice(db *gorm.DB, opts ...gen.DOOption) tabPrice {
 	tableName := _tabPrice.tabPriceDo.TableName()
 	_tabPrice.ALL = field.NewAsterisk(tableName)
 	_tabPrice.ID = field.NewInt32(tableName, "id")
-	_tabPrice.Total = field.NewFloat64(tableName, "total")
-	_tabPrice.Total1 = field.NewFloat64(tableName, "total1")
-	_tabPrice.Total2 = field.NewFloat64(tableName, "total2")
+	_tabPrice.Total = field.NewString(tableName, "total")
+	_tabPrice.Total1 = field.NewString(tableName, "total1")
+	_tabPrice.Total2 = field.NewString(tableName, "total2")
 	_tabPrice.Name = field.NewString(tableName, "name")
-	_tabPrice.Service = field.NewFloat64(tableName, "service")
+	_tabPrice.Service = field.NewString(tableName, "service")
 
 	_tabPrice.fillFieldMap()
 
 	return _tabPrice
 }
 
-// tabPrice 电价
 type tabPrice struct {
 	tabPriceDo tabPriceDo
 
 	ALL     field.Asterisk
-	ID      field.Int32   // 电价id
-	Total   field.Float64 // 单价
-	Total1  field.Float64 // 单一制电价
-	Total2  field.Float64 // 两步制电价
-	Name    field.String  // 电价名称
-	Service field.Float64 // 服务费
+	ID      field.Int32  // 电价id
+	Total   field.String // 单价
+	Total1  field.String // 单一制电价
+	Total2  field.String // 两步制电价
+	Name    field.String // 电价名称
+	Service field.String // 服务费
 
 	fieldMap map[string]field.Expr
 }
@@ -68,11 +67,11 @@ func (t tabPrice) As(alias string) *tabPrice {
 func (t *tabPrice) updateTableName(table string) *tabPrice {
 	t.ALL = field.NewAsterisk(table)
 	t.ID = field.NewInt32(table, "id")
-	t.Total = field.NewFloat64(table, "total")
-	t.Total1 = field.NewFloat64(table, "total1")
-	t.Total2 = field.NewFloat64(table, "total2")
+	t.Total = field.NewString(table, "total")
+	t.Total1 = field.NewString(table, "total1")
+	t.Total2 = field.NewString(table, "total2")
 	t.Name = field.NewString(table, "name")
-	t.Service = field.NewFloat64(table, "service")
+	t.Service = field.NewString(table, "service")
 
 	t.fillFieldMap()
 

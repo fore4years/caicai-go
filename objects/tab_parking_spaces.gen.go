@@ -42,8 +42,8 @@ func newTabParkingSpace(db *gorm.DB, opts ...gen.DOOption) tabParkingSpace {
 	_tabParkingSpace.SpacesCode = field.NewString(tableName, "spaces_code")
 	_tabParkingSpace.Enable = field.NewBool(tableName, "enable")
 	_tabParkingSpace.Certificate = field.NewInt32(tableName, "certificate")
-	_tabParkingSpace.Service = field.NewFloat64(tableName, "service")
-	_tabParkingSpace.ServiceFee = field.NewFloat64(tableName, "service_fee")
+	_tabParkingSpace.Service = field.NewString(tableName, "service")
+	_tabParkingSpace.ServiceFee = field.NewString(tableName, "service_fee")
 	_tabParkingSpace.OvertimeFee = field.NewBool(tableName, "overtime_fee")
 	_tabParkingSpace.PriceMode = field.NewBool(tableName, "price_mode")
 
@@ -52,7 +52,6 @@ func newTabParkingSpace(db *gorm.DB, opts ...gen.DOOption) tabParkingSpace {
 	return _tabParkingSpace
 }
 
-// tabParkingSpace 车位表
 type tabParkingSpace struct {
 	tabParkingSpaceDo tabParkingSpaceDo
 
@@ -66,15 +65,15 @@ type tabParkingSpace struct {
 	LockID        field.String // 车位锁id
 	ChargingGunID field.Int32  // 充电枪id
 	OpenTime      field.Time
-	CloseTime     field.Time    // 关闭时间
-	ImageID       field.Int32   // 停车场照片id
-	SpacesCode    field.String  // 车位码
-	Enable        field.Bool    // 审核状态(true为已通过)
-	Certificate   field.Int32   // 产权证照片id
-	Service       field.Float64 // 服务费
-	ServiceFee    field.Float64 // 优惠后服务费
-	OvertimeFee   field.Bool    // 是否收取超时占位费(0:不收取,1:收取)
-	PriceMode     field.Bool    // 电价模式
+	CloseTime     field.Time   // 关闭时间
+	ImageID       field.Int32  // 停车场照片id
+	SpacesCode    field.String // 车位码
+	Enable        field.Bool   // 审核状态(true为已通过)
+	Certificate   field.Int32  // 产权证照片id
+	Service       field.String // 服务费
+	ServiceFee    field.String // 优惠后服务费
+	OvertimeFee   field.Bool   // 是否收取超时占位费(0:不收取,1:收取)
+	PriceMode     field.Bool   // 电价模式
 
 	fieldMap map[string]field.Expr
 }
@@ -105,8 +104,8 @@ func (t *tabParkingSpace) updateTableName(table string) *tabParkingSpace {
 	t.SpacesCode = field.NewString(table, "spaces_code")
 	t.Enable = field.NewBool(table, "enable")
 	t.Certificate = field.NewInt32(table, "certificate")
-	t.Service = field.NewFloat64(table, "service")
-	t.ServiceFee = field.NewFloat64(table, "service_fee")
+	t.Service = field.NewString(table, "service")
+	t.ServiceFee = field.NewString(table, "service_fee")
 	t.OvertimeFee = field.NewBool(table, "overtime_fee")
 	t.PriceMode = field.NewBool(table, "price_mode")
 

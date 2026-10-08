@@ -10,7 +10,7 @@ import (
 
 const TableNameTabVideoWatchRecord = "tab_video_watch_record"
 
-// TabVideoWatchRecord 视频观看记录表
+// TabVideoWatchRecord mapped from table <tab_video_watch_record>
 type TabVideoWatchRecord struct {
 	ID        int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:序号" json:"id"` // 序号
 	FileID    string    `gorm:"column:file_id;not null;comment:文件ID" json:"file_id"`          // 文件ID

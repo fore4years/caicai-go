@@ -10,7 +10,7 @@ import (
 
 const TableNameDriveruseTbl = "driveruse_tbl"
 
-// DriveruseTbl 预约次数表
+// DriveruseTbl mapped from table <driveruse_tbl>
 type DriveruseTbl struct {
 	Openid        string    `gorm:"column:openid;comment:用户id" json:"openid"`               // 用户id
 	ReserveNumber int32     `gorm:"column:reserveNumber;comment:预约次数" json:"reserveNumber"` // 预约次数

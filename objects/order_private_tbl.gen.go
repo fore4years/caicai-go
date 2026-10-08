@@ -37,7 +37,6 @@ func newOrderPrivateTbl(db *gorm.DB, opts ...gen.DOOption) orderPrivateTbl {
 	return _orderPrivateTbl
 }
 
-// orderPrivateTbl 私桩—订单关联表
 type orderPrivateTbl struct {
 	orderPrivateTblDo orderPrivateTblDo
 

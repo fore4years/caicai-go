@@ -43,7 +43,6 @@ func newFaultTbl(db *gorm.DB, opts ...gen.DOOption) faultTbl {
 	return _faultTbl
 }
 
-// faultTbl 故障上报
 type faultTbl struct {
 	faultTblDo faultTblDo
 

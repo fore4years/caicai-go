@@ -10,17 +10,18 @@ import (
 
 const TableNameChargingStationTbl = "charging_station_tbl"
 
-// ChargingStationTbl 二轮车充电站
+// ChargingStationTbl mapped from table <charging_station_tbl>
 type ChargingStationTbl struct {
 	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"` // 主键id
-	Point      string    `gorm:"column:point;comment:经纬度点" json:"point"`                         // 经纬度点
 	Place      string    `gorm:"column:place;comment:位置" json:"place"`                           // 位置
 	Name       string    `gorm:"column:name;comment:充电站名" json:"name"`                           // 充电站名
 	Openid     string    `gorm:"column:openid;comment:用户openid" json:"openid"`                   // 用户openid
 	PowerMax   int32     `gorm:"column:power_max;default:3000" json:"power_max"`
-	Pid        string    `gorm:"column:pid;primaryKey;comment:产品id" json:"pid"`                                               // 产品id
-	CreateTime time.Time `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:安装时间" json:"create_time"` // 安装时间
-	UpdateTime time.Time `gorm:"column:update_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
+	Pid        string    `gorm:"column:pid;primaryKey;comment:产品id" json:"pid"`                                // 产品id
+	CreateTime time.Time `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:安装时间" json:"create_time"` // 安装时间
+	UpdateTime time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
+	Longitude  float64   `gorm:"column:longitude;comment:经度" json:"longitude"`                                 // 经度
+	Latitude   float64   `gorm:"column:latitude;comment:纬度" json:"latitude"`                                   // 纬度
 }
 
 // TableName ChargingStationTbl's table name

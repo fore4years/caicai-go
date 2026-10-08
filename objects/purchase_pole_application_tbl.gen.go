@@ -42,7 +42,7 @@ func newPurchasePoleApplicationTbl(db *gorm.DB, opts ...gen.DOOption) purchasePo
 	_purchasePoleApplicationTbl.DetailedAddress = field.NewString(tableName, "detailed_address")
 	_purchasePoleApplicationTbl.ApplyTime = field.NewTime(tableName, "apply_time")
 	_purchasePoleApplicationTbl.OrderStatus = field.NewString(tableName, "order_status")
-	_purchasePoleApplicationTbl.ActualPayment = field.NewFloat64(tableName, "actual_payment")
+	_purchasePoleApplicationTbl.ActualPayment = field.NewString(tableName, "actual_payment")
 	_purchasePoleApplicationTbl.PayTime = field.NewTime(tableName, "pay_time")
 	_purchasePoleApplicationTbl.TransactionID = field.NewString(tableName, "transaction_id")
 	_purchasePoleApplicationTbl.RefundReason = field.NewString(tableName, "refund_reason")
@@ -54,7 +54,6 @@ func newPurchasePoleApplicationTbl(db *gorm.DB, opts ...gen.DOOption) purchasePo
 	return _purchasePoleApplicationTbl
 }
 
-// purchasePoleApplicationTbl 购桩申请表
 type purchasePoleApplicationTbl struct {
 	purchasePoleApplicationTblDo purchasePoleApplicationTblDo
 
@@ -73,7 +72,7 @@ type purchasePoleApplicationTbl struct {
 	DetailedAddress      field.String  // 详细地址
 	ApplyTime            field.Time    // 申请时间
 	OrderStatus          field.String  // 订单状态：待发货、已发货、待签收、已完成、已取消、已退款
-	ActualPayment        field.Float64 // 实付款金额
+	ActualPayment        field.String  // 实付款金额
 	PayTime              field.Time    // 支付时间
 	TransactionID        field.String  // 微信交易号
 	RefundReason         field.String  // 退款原因
@@ -109,7 +108,7 @@ func (p *purchasePoleApplicationTbl) updateTableName(table string) *purchasePole
 	p.DetailedAddress = field.NewString(table, "detailed_address")
 	p.ApplyTime = field.NewTime(table, "apply_time")
 	p.OrderStatus = field.NewString(table, "order_status")
-	p.ActualPayment = field.NewFloat64(table, "actual_payment")
+	p.ActualPayment = field.NewString(table, "actual_payment")
 	p.PayTime = field.NewTime(table, "pay_time")
 	p.TransactionID = field.NewString(table, "transaction_id")
 	p.RefundReason = field.NewString(table, "refund_reason")

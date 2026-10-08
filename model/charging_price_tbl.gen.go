@@ -4,11 +4,13 @@
 
 package model
 
-import "github.com/shopspring/decimal"
+import (
+	"github.com/shopspring/decimal"
+)
 
 const TableNameChargingPriceTbl = "charging_price_tbl"
 
-// ChargingPriceTbl 二轮车--电价
+// ChargingPriceTbl mapped from table <charging_price_tbl>
 type ChargingPriceTbl struct {
 	ID       int32           `gorm:"column:id;primaryKey;autoIncrement:true;comment:电价id" json:"id"` // 电价id
 	Total    decimal.Decimal `gorm:"column:total;not null;comment:单价" json:"total"`                  // 单价

@@ -29,24 +29,23 @@ func newPrivateChargingPriceTbl(db *gorm.DB, opts ...gen.DOOption) privateChargi
 	tableName := _privateChargingPriceTbl.privateChargingPriceTblDo.TableName()
 	_privateChargingPriceTbl.ALL = field.NewAsterisk(tableName)
 	_privateChargingPriceTbl.ID = field.NewInt32(tableName, "id")
-	_privateChargingPriceTbl.Total = field.NewFloat64(tableName, "total")
+	_privateChargingPriceTbl.Total = field.NewString(tableName, "total")
 	_privateChargingPriceTbl.Name = field.NewString(tableName, "name")
-	_privateChargingPriceTbl.Service = field.NewFloat64(tableName, "service")
+	_privateChargingPriceTbl.Service = field.NewString(tableName, "service")
 
 	_privateChargingPriceTbl.fillFieldMap()
 
 	return _privateChargingPriceTbl
 }
 
-// privateChargingPriceTbl 私桩--电价
 type privateChargingPriceTbl struct {
 	privateChargingPriceTblDo privateChargingPriceTblDo
 
 	ALL     field.Asterisk
-	ID      field.Int32   // 电价id
-	Total   field.Float64 // 单价
-	Name    field.String  // 电价名称
-	Service field.Float64 // 服务费
+	ID      field.Int32  // 电价id
+	Total   field.String // 单价
+	Name    field.String // 电价名称
+	Service field.String // 服务费
 
 	fieldMap map[string]field.Expr
 }
@@ -64,9 +63,9 @@ func (p privateChargingPriceTbl) As(alias string) *privateChargingPriceTbl {
 func (p *privateChargingPriceTbl) updateTableName(table string) *privateChargingPriceTbl {
 	p.ALL = field.NewAsterisk(table)
 	p.ID = field.NewInt32(table, "id")
-	p.Total = field.NewFloat64(table, "total")
+	p.Total = field.NewString(table, "total")
 	p.Name = field.NewString(table, "name")
-	p.Service = field.NewFloat64(table, "service")
+	p.Service = field.NewString(table, "service")
 
 	p.fillFieldMap()
 

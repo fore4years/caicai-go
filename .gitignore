@@ -33,3 +33,6 @@ go.work.sum
 
 # log
 log/*
+
+# conf
+conf.yaml

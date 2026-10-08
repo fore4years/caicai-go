@@ -44,7 +44,6 @@ func newReOrderElectronicTbl(db *gorm.DB, opts ...gen.DOOption) reOrderElectroni
 	return _reOrderElectronicTbl
 }
 
-// reOrderElectronicTbl 二轮车订单充电时段电量
 type reOrderElectronicTbl struct {
 	reOrderElectronicTblDo reOrderElectronicTblDo
 

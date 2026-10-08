@@ -39,7 +39,6 @@ func newReceptaclePowerTbl(db *gorm.DB, opts ...gen.DOOption) receptaclePowerTbl
 	return _receptaclePowerTbl
 }
 
-// receptaclePowerTbl 插座电量表
 type receptaclePowerTbl struct {
 	receptaclePowerTblDo receptaclePowerTblDo
 

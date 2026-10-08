@@ -38,7 +38,6 @@ func newConfigTbl(db *gorm.DB, opts ...gen.DOOption) configTbl {
 	return _configTbl
 }
 
-// configTbl 参数表
 type configTbl struct {
 	configTblDo configTblDo
 

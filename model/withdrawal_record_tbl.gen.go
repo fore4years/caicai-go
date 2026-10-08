@@ -5,13 +5,14 @@
 package model
 
 import (
-	"github.com/shopspring/decimal"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const TableNameWithdrawalRecordTbl = "withdrawal_record_tbl"
 
-// WithdrawalRecordTbl 退款记录表
+// WithdrawalRecordTbl mapped from table <withdrawal_record_tbl>
 type WithdrawalRecordTbl struct {
 	RecordID               string          `gorm:"column:record_id;primaryKey;comment:退款记录ID（主键）" json:"record_id"`                             // 退款记录ID（主键）
 	Openid                 string          `gorm:"column:openid;not null;comment:用户openid" json:"openid"`                                       // 用户openid
@@ -19,8 +20,8 @@ type WithdrawalRecordTbl struct {
 	RefundOrderID          string          `gorm:"column:refund_order_id;not null;comment:退款订单号" json:"refund_order_id"`                        // 退款订单号
 	RelatedRechargeOrderID string          `gorm:"column:related_recharge_order_id;not null;comment:关联的充值订单号" json:"related_recharge_order_id"` // 关联的充值订单号
 	WithdrawalStatus       string          `gorm:"column:withdrawal_status;not null;comment:提现状态（申请中、已处理、已拒绝）" json:"withdrawal_status"`        // 提现状态（申请中、已处理、已拒绝）
-	CreateTime             time.Time       `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
-	UpdateTime             time.Time       `gorm:"column:update_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"` // 更新时间
+	CreateTime             time.Time       `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"`                // 创建时间
+	UpdateTime             time.Time       `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"`                // 更新时间
 	ProcessTime            time.Time       `gorm:"column:process_time;comment:处理时间" json:"process_time"`                                        // 处理时间
 	RejectReason           string          `gorm:"column:reject_reason;comment:拒绝原因" json:"reject_reason"`                                      // 拒绝原因
 	WithdrawalType         string          `gorm:"column:withdrawal_type;comment:退款类型（提现、退款）" json:"withdrawal_type"`                           // 退款类型（提现、退款）

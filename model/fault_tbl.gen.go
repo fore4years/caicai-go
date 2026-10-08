@@ -10,7 +10,7 @@ import (
 
 const TableNameFaultTbl = "fault_tbl"
 
-// FaultTbl 故障上报
+// FaultTbl mapped from table <fault_tbl>
 type FaultTbl struct {
 	Faultid         string    `gorm:"column:faultid;primaryKey" json:"faultid"`
 	Openid          string    `gorm:"column:openid;comment:上报者id" json:"openid"`                    // 上报者id

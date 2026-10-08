@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -40,7 +41,7 @@ type TokenBean struct {
 type registerReq struct {
 	Phone    string `json:"phone"`
 	Code     string `json:"code"`
-	IDEntity string `json:"idEntity"`
+	IDEntity int    `json:"idEntity"`
 }
 
 // WeChatController 对应 Java WeChatController（/wechat）。
@@ -63,14 +64,29 @@ func getPhoneNumberByCode(code, token string) (string, bool) {
 		logger.Mylog.Err(err).Caller().Send()
 		return "", false
 	}
-	if errcode, ok := msg["errcode"].(float64); ok && errcode == 0 {
-		if phoneInfo, ok := msg["phone_info"].(map[string]interface{}); ok {
-			if phone, ok := phoneInfo["phoneNumber"].(string); ok {
-				return phone, true
-			}
-		}
+
+	errcode, _ := msg["errcode"].(float64)
+	errmsg, _ := msg["errmsg"].(string)
+	if errcode != 0 {
+		logger.Mylog.Error().
+			Float64("errcode", errcode).
+			Str("errmsg", errmsg).
+			Str("code", code).
+			Msg("获取手机号失败")
+		return "", false
 	}
-	return "", false
+
+	phoneInfo, ok := msg["phone_info"].(map[string]interface{})
+	if !ok {
+		logger.Mylog.Error().Msgf("phone_info 格式异常: %v", msg)
+		return "", false
+	}
+	phone, ok := phoneInfo["phoneNumber"].(string)
+	if !ok || phone == "" {
+		logger.Mylog.Error().Msgf("phoneNumber 缺失: %v", phoneInfo)
+		return "", false
+	}
+	return phone, true
 }
 
 // access_token 缓存（appid -> token）
@@ -164,7 +180,11 @@ func addOMUser(ctx *gin.Context, openid, phone string) (TokenBean, error) {
 		case "1":
 			_, _ = objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).Update(objects.UserTbl.Omid, openid)
 			user.Omid = openid
-			return getToken(user.Phone, user.Omid, user.Name), nil
+			//return getToken(user.Phone, user.Omid, user.Name), nil
+			return TokenBean{
+				Token:     jwtSign(user.Phone, user.Omid, user.Name, 30*24*time.Hour),
+				LongToken: jwtSign(user.Phone, user.Omid, user.Name, 3*30*24*time.Hour),
+			}, nil
 		case "0":
 			return TokenBean{}, fmt.Errorf("加急审核中,请耐心等待")
 		case "-1":
@@ -239,7 +259,7 @@ func (c *WeChatController) Register(ctx *gin.Context) {
 	}
 
 	checkAndSaveDriverUse(ctx, openid)
-	token, err := addUser(ctx, openid, phoneNumber, req.IDEntity)
+	token, err := addUser(ctx, openid, phoneNumber, strconv.Itoa(req.IDEntity))
 	if err != nil {
 		ctx.JSON(http.StatusOK, Result{Success: false, Code: 1, Msg: err.Error()})
 		return

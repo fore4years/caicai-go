@@ -30,7 +30,7 @@ func newWithdrawalRecordTbl(db *gorm.DB, opts ...gen.DOOption) withdrawalRecordT
 	_withdrawalRecordTbl.ALL = field.NewAsterisk(tableName)
 	_withdrawalRecordTbl.RecordID = field.NewString(tableName, "record_id")
 	_withdrawalRecordTbl.Openid = field.NewString(tableName, "openid")
-	_withdrawalRecordTbl.WithdrawalAmount = field.NewFloat64(tableName, "withdrawal_amount")
+	_withdrawalRecordTbl.WithdrawalAmount = field.NewString(tableName, "withdrawal_amount")
 	_withdrawalRecordTbl.RefundOrderID = field.NewString(tableName, "refund_order_id")
 	_withdrawalRecordTbl.RelatedRechargeOrderID = field.NewString(tableName, "related_recharge_order_id")
 	_withdrawalRecordTbl.WithdrawalStatus = field.NewString(tableName, "withdrawal_status")
@@ -47,24 +47,23 @@ func newWithdrawalRecordTbl(db *gorm.DB, opts ...gen.DOOption) withdrawalRecordT
 	return _withdrawalRecordTbl
 }
 
-// withdrawalRecordTbl 退款记录表
 type withdrawalRecordTbl struct {
 	withdrawalRecordTblDo withdrawalRecordTblDo
 
 	ALL                    field.Asterisk
-	RecordID               field.String  // 退款记录ID（主键）
-	Openid                 field.String  // 用户openid
-	WithdrawalAmount       field.Float64 // 退款金额
-	RefundOrderID          field.String  // 退款订单号
-	RelatedRechargeOrderID field.String  // 关联的充值订单号
-	WithdrawalStatus       field.String  // 提现状态（申请中、已处理、已拒绝）
-	CreateTime             field.Time    // 创建时间
-	UpdateTime             field.Time    // 更新时间
-	ProcessTime            field.Time    // 处理时间
-	RejectReason           field.String  // 拒绝原因
-	WithdrawalType         field.String  // 退款类型（提现、退款）
-	WxRefundID             field.String  // 微信退款单号
-	RefundStatusDesc       field.String  // 退款状态描述
+	RecordID               field.String // 退款记录ID（主键）
+	Openid                 field.String // 用户openid
+	WithdrawalAmount       field.String // 退款金额
+	RefundOrderID          field.String // 退款订单号
+	RelatedRechargeOrderID field.String // 关联的充值订单号
+	WithdrawalStatus       field.String // 提现状态（申请中、已处理、已拒绝）
+	CreateTime             field.Time   // 创建时间
+	UpdateTime             field.Time   // 更新时间
+	ProcessTime            field.Time   // 处理时间
+	RejectReason           field.String // 拒绝原因
+	WithdrawalType         field.String // 退款类型（提现、退款）
+	WxRefundID             field.String // 微信退款单号
+	RefundStatusDesc       field.String // 退款状态描述
 
 	fieldMap map[string]field.Expr
 }
@@ -83,7 +82,7 @@ func (w *withdrawalRecordTbl) updateTableName(table string) *withdrawalRecordTbl
 	w.ALL = field.NewAsterisk(table)
 	w.RecordID = field.NewString(table, "record_id")
 	w.Openid = field.NewString(table, "openid")
-	w.WithdrawalAmount = field.NewFloat64(table, "withdrawal_amount")
+	w.WithdrawalAmount = field.NewString(table, "withdrawal_amount")
 	w.RefundOrderID = field.NewString(table, "refund_order_id")
 	w.RelatedRechargeOrderID = field.NewString(table, "related_recharge_order_id")
 	w.WithdrawalStatus = field.NewString(table, "withdrawal_status")

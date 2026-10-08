@@ -8,7 +8,7 @@ const TableNamePlaceapplyTbl = "placeapply_tbl"
 
 // PlaceapplyTbl mapped from table <placeapply_tbl>
 type PlaceapplyTbl struct {
-	ID              string `gorm:"column:id" json:"id"`
+	ID              string `gorm:"column:id;primaryKey" json:"id"`
 	Ownerid         string `gorm:"column:ownerid;comment:业主id" json:"ownerid"`                 // 业主id
 	Name            string `gorm:"column:name;comment:业主姓名" json:"name"`                       // 业主姓名
 	IDNumber        string `gorm:"column:idNumber;comment:身份证号码" json:"idNumber"`              // 身份证号码

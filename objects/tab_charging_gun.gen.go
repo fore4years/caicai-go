@@ -30,7 +30,7 @@ func newTabChargingGun(db *gorm.DB, opts ...gen.DOOption) tabChargingGun {
 	_tabChargingGun.ALL = field.NewAsterisk(tableName)
 	_tabChargingGun.ID = field.NewInt32(tableName, "id")
 	_tabChargingGun.Name = field.NewString(tableName, "name")
-	_tabChargingGun.UnitPrice = field.NewFloat64(tableName, "unit_price")
+	_tabChargingGun.UnitPrice = field.NewString(tableName, "unit_price")
 	_tabChargingGun.MeterValue = field.NewInt32(tableName, "meter_value")
 	_tabChargingGun.State = field.NewString(tableName, "state")
 	_tabChargingGun.ProductID = field.NewString(tableName, "product_id")
@@ -44,21 +44,20 @@ func newTabChargingGun(db *gorm.DB, opts ...gen.DOOption) tabChargingGun {
 	return _tabChargingGun
 }
 
-// tabChargingGun 充电枪
 type tabChargingGun struct {
 	tabChargingGunDo tabChargingGunDo
 
 	ALL        field.Asterisk
-	ID         field.Int32   // 充电枪id
-	Name       field.String  // 充电枪名
-	UnitPrice  field.Float64 // 单价
-	MeterValue field.Int32   // 电表示数
-	State      field.String  // 当前状态
-	ProductID  field.String  // 产品id
-	Direction  field.String  // 设备方向
-	Model      field.Int32   // 设备型号(220V/380V)
-	Pwm        field.Int32   // pwm占空比
-	UpdateTime field.Time    // 电表更新时间
+	ID         field.Int32  // 充电枪id
+	Name       field.String // 充电枪名
+	UnitPrice  field.String // 单价
+	MeterValue field.Int32  // 电表示数
+	State      field.String // 当前状态
+	ProductID  field.String // 产品id
+	Direction  field.String // 设备方向
+	Model      field.Int32  // 设备型号(220V/380V)
+	Pwm        field.Int32  // pwm占空比
+	UpdateTime field.Time   // 电表更新时间
 
 	fieldMap map[string]field.Expr
 }
@@ -77,7 +76,7 @@ func (t *tabChargingGun) updateTableName(table string) *tabChargingGun {
 	t.ALL = field.NewAsterisk(table)
 	t.ID = field.NewInt32(table, "id")
 	t.Name = field.NewString(table, "name")
-	t.UnitPrice = field.NewFloat64(table, "unit_price")
+	t.UnitPrice = field.NewString(table, "unit_price")
 	t.MeterValue = field.NewInt32(table, "meter_value")
 	t.State = field.NewString(table, "state")
 	t.ProductID = field.NewString(table, "product_id")

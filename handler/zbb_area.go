@@ -104,14 +104,3 @@ func (c *ZbbAreaController) GetAll(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, ResultSuccessPage(total, list))
 }
-
-// RegisterZbbArea 注册 /ZbbAreaBean 路由。
-func RegisterZbbArea(r *gin.Engine) {
-	zbbArea := new(ZbbAreaController)
-	g := r.Group("/ZbbAreaBean")
-	{
-		g.GET("/getById", zbbArea.GetById)
-		g.POST("/add", zbbArea.Add)
-		g.GET("/getAll", zbbArea.GetAll)
-	}
-}

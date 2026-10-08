@@ -6,7 +6,7 @@ package model
 
 const TableNameAccountPublicTbl = "account_public_tbl"
 
-// AccountPublicTbl 公司账户信息表
+// AccountPublicTbl mapped from table <account_public_tbl>
 type AccountPublicTbl struct {
 	OrderID            string `gorm:"column:order_id;primaryKey;comment:订单号" json:"order_id"`                   // 订单号
 	PayeeCompany       string `gorm:"column:payee_company;not null;comment:收款单位" json:"payee_company"`          // 收款单位

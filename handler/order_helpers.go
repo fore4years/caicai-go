@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"caicai-go/conf"
 	"caicai-go/logger"
@@ -388,78 +390,89 @@ func currentChargingRate() decimal.Decimal {
 // ============================ 余额操作（对齐 UserServiceImpl / BalanceConsumptionServiceImpl） ============================
 
 // freezeBalance 冻结余额：可用余额 → 冻结余额。
+// 单条原子 UPDATE 完成「校验 balans>=amount → balans-amount → freeze_balans+amount」，
+// 条件写进 WHERE，避免读-改-写竞态与余额被扣成负数。
 func freezeBalance(openid string, amount decimal.Decimal) bool {
-	var user model.UserTbl
-	if conf.Db.Where("openid = ?", openid).First(&user).Error != nil {
-		return false
-	}
-	if user.Balans.LessThan(amount) {
-		return false
-	}
-	newBalans := user.Balans.Sub(amount)
-	newFreeze := user.FreezeBalans.Add(amount)
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).
-		Updates(map[string]interface{}{"balans": newBalans, "freeze_balans": newFreeze})
+	amt := amount.StringFixed(2)
+	res := conf.Db.Exec(
+		"UPDATE user_tbl SET balans = balans - CAST(? AS DECIMAL(10,2)), freeze_balans = freeze_balans + CAST(? AS DECIMAL(10,2)) WHERE openid = ? AND balans >= CAST(? AS DECIMAL(10,2))",
+		amt, amt, openid, amt,
+	)
 	return res.RowsAffected > 0
 }
 
 // consumeBalance 余额消费：按充值订单创建时间 FIFO 扣减 remaining_refund_amount，并释放冻结余额。
+// 多步写操作（用户余额 + 多条充值订单），包裹在事务内并加 FOR UPDATE 行锁，保证原子性与并发安全。
 func consumeBalance(openid string, amount decimal.Decimal) bool {
-	var user model.UserTbl
-	if conf.Db.Where("openid = ?", openid).First(&user).Error != nil {
-		return false
-	}
-	totalBalance := user.Balans.Add(user.FreezeBalans)
-	if totalBalance.LessThan(amount) {
-		return false
-	}
-
-	var rechargeOrders []model.RechargeOrderTbl
-	conf.Db.Where("openid = ? AND order_status = ?", openid, "已支付").
-		Order("create_time asc").Find(&rechargeOrders)
-
-	var rechargeTotal decimal.Decimal
-	for _, o := range rechargeOrders {
-		rechargeTotal = rechargeTotal.Add(o.RemainingRefundAmount)
-	}
-	otherSource := totalBalance.Sub(rechargeTotal)
-	if otherSource.IsNegative() {
-		otherSource = decimal.Zero
-	}
-	needFromRecharge := amount.Sub(otherSource)
-	if needFromRecharge.IsNegative() {
-		needFromRecharge = decimal.Zero
-	}
-
-	if needFromRecharge.IsPositive() {
-		remaining := needFromRecharge
-		for i := range rechargeOrders {
-			if !remaining.IsPositive() {
-				break
-			}
-			o := &rechargeOrders[i]
-			if !o.RemainingRefundAmount.IsPositive() {
-				continue
-			}
-			var deduct decimal.Decimal
-			if o.RemainingRefundAmount.GreaterThanOrEqual(remaining) {
-				deduct = remaining
-				o.RemainingRefundAmount = o.RemainingRefundAmount.Sub(deduct)
-				remaining = decimal.Zero
-			} else {
-				deduct = o.RemainingRefundAmount
-				o.RemainingRefundAmount = decimal.Zero
-				remaining = remaining.Sub(deduct)
-			}
-			conf.Db.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", o.OrderID).
-				Update("remaining_refund_amount", o.RemainingRefundAmount)
+	consumed := false
+	var newBalance decimal.Decimal
+	_ = conf.Db.Transaction(func(tx *gorm.DB) error {
+		var user model.UserTbl
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("openid = ?", openid).First(&user).Error; err != nil {
+			return nil // 用户不存在：无操作
 		}
-	}
+		totalBalance := user.Balans.Add(user.FreezeBalans)
+		if totalBalance.LessThan(amount) {
+			return nil // 余额不足：无操作
+		}
 
-	newBalance := totalBalance.Sub(amount)
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).
-		Updates(map[string]interface{}{"balans": newBalance, "freeze_balans": decimal.Zero})
-	if res.RowsAffected <= 0 {
+		var rechargeOrders []model.RechargeOrderTbl
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("openid = ? AND order_status = ?", openid, "已支付").
+			Order("create_time asc").Find(&rechargeOrders).Error; err != nil {
+			return err
+		}
+
+		var rechargeTotal decimal.Decimal
+		for _, o := range rechargeOrders {
+			rechargeTotal = rechargeTotal.Add(o.RemainingRefundAmount)
+		}
+		otherSource := totalBalance.Sub(rechargeTotal)
+		if otherSource.IsNegative() {
+			otherSource = decimal.Zero
+		}
+		needFromRecharge := amount.Sub(otherSource)
+		if needFromRecharge.IsNegative() {
+			needFromRecharge = decimal.Zero
+		}
+
+		if needFromRecharge.IsPositive() {
+			remaining := needFromRecharge
+			for i := range rechargeOrders {
+				if !remaining.IsPositive() {
+					break
+				}
+				o := &rechargeOrders[i]
+				if !o.RemainingRefundAmount.IsPositive() {
+					continue
+				}
+				var deduct decimal.Decimal
+				if o.RemainingRefundAmount.GreaterThanOrEqual(remaining) {
+					deduct = remaining
+					o.RemainingRefundAmount = o.RemainingRefundAmount.Sub(deduct)
+					remaining = decimal.Zero
+				} else {
+					deduct = o.RemainingRefundAmount
+					o.RemainingRefundAmount = decimal.Zero
+					remaining = remaining.Sub(deduct)
+				}
+				if err := tx.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", o.OrderID).
+					Update("remaining_refund_amount", o.RemainingRefundAmount).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		newBalance = totalBalance.Sub(amount)
+		if err := tx.Model(&model.UserTbl{}).Where("openid = ?", openid).
+			Updates(map[string]interface{}{"balans": newBalance, "freeze_balans": decimal.Zero}).Error; err != nil {
+			return err
+		}
+		consumed = true
+		return nil
+	})
+	if !consumed {
 		return false
 	}
 	logger.Mylog.Info().Msgf("余额消费完成: openid=%s, 消费金额=%s, 新余额=%s", openid, amount, newBalance)
@@ -467,18 +480,17 @@ func consumeBalance(openid string, amount decimal.Decimal) bool {
 }
 
 // completeOrderIsamountNot 完成订单（费用=0）：释放冻结余额。
+// 单条原子 UPDATE：balans = balans + freeze_balans, freeze_balans = 0。
 func completeOrderIsamountNot(openid string) bool {
-	var user model.UserTbl
-	if conf.Db.Where("openid = ?", openid).First(&user).Error != nil {
-		return false
-	}
-	newBalans := user.Balans.Add(user.FreezeBalans)
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).
-		Updates(map[string]interface{}{"balans": newBalans, "freeze_balans": decimal.Zero})
+	res := conf.Db.Exec(
+		"UPDATE user_tbl SET balans = balans + freeze_balans, freeze_balans = 0 WHERE openid = ?",
+		openid,
+	)
 	return res.RowsAffected > 0
 }
 
-// completeOrderIsamountNotNull 取消订单扣费（费用>0）：balans = balans - price + freeze_balans。
+// completeOrderIsamountNotNull 取消订单扣费（费用>0）：balans = balans - price + freeze_balans，freeze_balans=0。
+// 单条原子 UPDATE，金额 CAST 为 DECIMAL 保证精确，避免读-改-写竞态。
 func completeOrderIsamountNotNull(openid, price string) bool {
 	if price == "undefined" || price == "null" {
 		price = "0"
@@ -487,13 +499,11 @@ func completeOrderIsamountNotNull(openid, price string) bool {
 	if err != nil {
 		p = decimal.Zero
 	}
-	var user model.UserTbl
-	if conf.Db.Where("openid = ?", openid).First(&user).Error != nil {
-		return false
-	}
-	newBalans := user.Balans.Sub(p).Add(user.FreezeBalans).Round(2)
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).
-		Updates(map[string]interface{}{"balans": newBalans, "freeze_balans": decimal.Zero})
+	amt := p.StringFixed(2)
+	res := conf.Db.Exec(
+		"UPDATE user_tbl SET balans = balans - CAST(? AS DECIMAL(10,2)) + freeze_balans, freeze_balans = 0 WHERE openid = ?",
+		amt, openid,
+	)
 	return res.RowsAffected > 0
 }
 

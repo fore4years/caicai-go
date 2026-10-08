@@ -45,7 +45,6 @@ func newCommunityApplyTbl(db *gorm.DB, opts ...gen.DOOption) communityApplyTbl {
 	return _communityApplyTbl
 }
 
-// communityApplyTbl 小区申请表
 type communityApplyTbl struct {
 	communityApplyTblDo communityApplyTblDo
 

@@ -6,7 +6,7 @@ package model
 
 const TableNameHotelProductTbl = "hotel_product_tbl"
 
-// HotelProductTbl 酒店车位锁关联表
+// HotelProductTbl mapped from table <hotel_product_tbl>
 type HotelProductTbl struct {
 	ID         int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:id" json:"id"` // id
 	HotelID    int32  `gorm:"column:hotelId;comment:酒店id" json:"hotelId"`                   // 酒店id

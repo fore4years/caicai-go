@@ -6,7 +6,7 @@ package model
 
 const TableNameInvoiceTitle = "invoice_title"
 
-// InvoiceTitle 发票抬头
+// InvoiceTitle mapped from table <invoice_title>
 type InvoiceTitle struct {
 	ID          int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:id(自动递增)" json:"id"` // id(自动递增)
 	TitleName   string `gorm:"column:title_name;not null;comment:抬头名称" json:"title_name"`          // 抬头名称

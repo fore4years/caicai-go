@@ -42,7 +42,6 @@ func newNeighborShareUserTbl(db *gorm.DB, opts ...gen.DOOption) neighborShareUse
 	return _neighborShareUserTbl
 }
 
-// neighborShareUserTbl 私桩-共享用户表
 type neighborShareUserTbl struct {
 	neighborShareUserTblDo neighborShareUserTblDo
 

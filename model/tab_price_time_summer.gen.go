@@ -10,12 +10,12 @@ import (
 
 const TableNameTabPriceTimeSummer = "tab_price_time_summer"
 
-// TabPriceTimeSummer 夏季--时段电价
+// TabPriceTimeSummer mapped from table <tab_price_time_summer>
 type TabPriceTimeSummer struct {
-	ID        int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:价格时段id" json:"id"`    // 价格时段id
-	StartTime time.Time `gorm:"column:start_time;type:time;not null;comment:开始时间" json:"start_time"` // 开始时间
-	OverTime  time.Time `gorm:"column:over_time;type:time;not null;comment:结束时间" json:"over_time"`   // 结束时间
-	PriceID   int32     `gorm:"column:price_id;not null;comment:电价id" json:"price_id"`               // 电价id
+	ID        int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:价格时段id" json:"id"` // 价格时段id
+	StartTime time.Time `gorm:"column:start_time;not null;comment:开始时间" json:"start_time"`        // 开始时间
+	OverTime  time.Time `gorm:"column:over_time;not null;comment:结束时间" json:"over_time"`          // 结束时间
+	PriceID   int32     `gorm:"column:price_id;not null;comment:电价id" json:"price_id"`            // 电价id
 }
 
 // TableName TabPriceTimeSummer's table name

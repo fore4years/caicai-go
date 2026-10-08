@@ -46,7 +46,6 @@ func newAccountPublicTbl(db *gorm.DB, opts ...gen.DOOption) accountPublicTbl {
 	return _accountPublicTbl
 }
 
-// accountPublicTbl 公司账户信息表
 type accountPublicTbl struct {
 	accountPublicTblDo accountPublicTblDo
 

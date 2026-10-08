@@ -38,7 +38,7 @@ func AllModels() []interface{} {
 		&MessageTbl{},
 		&NeighborShareUserTbl{},
 		&OmEmployee{},
-		&OnlineLockstatus{},
+		&OnlineLockstatusTable{},
 		&OpenLockTbl{},
 		&OrderPrivateTbl{},
 		&OrderTbl{},

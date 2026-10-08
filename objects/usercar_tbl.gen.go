@@ -41,7 +41,6 @@ func newUsercarTbl(db *gorm.DB, opts ...gen.DOOption) usercarTbl {
 	return _usercarTbl
 }
 
-// usercarTbl 车俩表
 type usercarTbl struct {
 	usercarTblDo usercarTblDo
 

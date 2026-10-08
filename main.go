@@ -36,8 +36,13 @@ func main() {
 
 	gin.DefaultWriter = io.Discard
 	r := gin.New()
-	// 全局日志 + 鉴权（对齐 Java WebAppConfigurer 的 PathInterceptor + LoginInterceptor）
-	r.Use(gin.Recovery(), middleware.MiddleLog(logger.Mylog), middleware.Auth())
+	// 全局中间件：panic 恢复 + 鉴权（对齐 Java WebAppConfigurer 的 PathInterceptor + LoginInterceptor）。
+	// 请求路由日志仅在开发环境打印（正式环境 GIN_MODE=release 时不打印）。
+	r.Use(gin.Recovery())
+	if gin.Mode() != gin.ReleaseMode {
+		r.Use(middleware.MiddleLog(logger.Mylog))
+	}
+	r.Use(middleware.Auth())
 
 	router.RouterInit(r)
 

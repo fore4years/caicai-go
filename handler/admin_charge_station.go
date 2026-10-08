@@ -54,7 +54,8 @@ func chargingStateToDTO(s model.ChargingStateTbl) chargingStateDTO {
 // chargeStationDTO 对应 Java domain.ChargeStation（charging_station_tbl，驼峰）。
 type chargeStationDTO struct {
 	ID         int32          `json:"id"`
-	Point      string         `json:"point,omitempty"`
+	Longitude  float64        `json:"longitude,omitempty"`
+	Latitude   float64        `json:"latitude,omitempty"`
 	Place      string         `json:"place,omitempty"`
 	Name       string         `json:"name,omitempty"`
 	Openid     string         `json:"openid,omitempty"`
@@ -67,7 +68,8 @@ type chargeStationDTO struct {
 func chargeStationToDTO(s model.ChargingStationTbl) chargeStationDTO {
 	return chargeStationDTO{
 		ID:         s.ID,
-		Point:      s.Point,
+		Longitude:  s.Longitude,
+		Latitude:   s.Latitude,
 		Place:      s.Place,
 		Name:       s.Name,
 		Openid:     s.Openid,
@@ -165,8 +167,8 @@ func (a *AdminChargeStationController) Add(c *gin.Context) {
 	}
 	powerMax, _ := strconv.Atoi(req.PowerMax)
 	err := conf.Db.Exec(
-		"INSERT INTO charging_station_tbl (place, name, openid, pid, power_max) VALUES (?,?,?,?,?)",
-		req.Place, req.Name, req.Openid, req.Pid, powerMax,
+		"INSERT INTO charging_station_tbl (place, name, openid, pid, power_max, longitude, latitude) VALUES (?,?,?,?,?,?,?)",
+		req.Place, req.Name, req.Openid, req.Pid, powerMax, req.Longitude, req.Latitude,
 	).Error
 	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(false))
@@ -187,6 +189,8 @@ func (a *AdminChargeStationController) UpdateByPid(c *gin.Context) {
 		"name":      req.Name,
 		"place":     req.Place,
 		"power_max": powerMax,
+		"longitude": req.Longitude,
+		"latitude":  req.Latitude,
 	})
 	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }

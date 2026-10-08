@@ -10,7 +10,7 @@ import (
 
 const TableNameHotelTbl = "hotel_tbl"
 
-// HotelTbl 酒店注册信息表
+// HotelTbl mapped from table <hotel_tbl>
 type HotelTbl struct {
 	ID            int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键" json:"id"`      // 主键
 	Openid        string    `gorm:"column:openid;not null;comment:用户唯一标识符" json:"openid"`              // 用户唯一标识符

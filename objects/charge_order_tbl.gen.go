@@ -35,20 +35,19 @@ func newChargeOrderTbl(db *gorm.DB, opts ...gen.DOOption) chargeOrderTbl {
 	_chargeOrderTbl.BeginTime = field.NewString(tableName, "beginTime")
 	_chargeOrderTbl.OverTime = field.NewString(tableName, "overTime")
 	_chargeOrderTbl.State = field.NewString(tableName, "state")
-	_chargeOrderTbl.TotalPrice = field.NewFloat64(tableName, "totalPrice")
+	_chargeOrderTbl.TotalPrice = field.NewString(tableName, "totalPrice")
 	_chargeOrderTbl.CloseTime = field.NewString(tableName, "closeTime")
 	_chargeOrderTbl.PlateNum = field.NewString(tableName, "plate_num")
 	_chargeOrderTbl.StartKwh = field.NewFloat64(tableName, "start_kwh")
 	_chargeOrderTbl.EndKwh = field.NewFloat64(tableName, "end_kwh")
-	_chargeOrderTbl.ParkPrice = field.NewFloat64(tableName, "park_price")
-	_chargeOrderTbl.CouponPrice = field.NewFloat64(tableName, "coupon_price")
+	_chargeOrderTbl.ParkPrice = field.NewString(tableName, "park_price")
+	_chargeOrderTbl.CouponPrice = field.NewString(tableName, "coupon_price")
 
 	_chargeOrderTbl.fillFieldMap()
 
 	return _chargeOrderTbl
 }
 
-// chargeOrderTbl 订单(未使用)
 type chargeOrderTbl struct {
 	chargeOrderTblDo chargeOrderTblDo
 
@@ -60,13 +59,13 @@ type chargeOrderTbl struct {
 	BeginTime   field.String
 	OverTime    field.String
 	State       field.String
-	TotalPrice  field.Float64
+	TotalPrice  field.String
 	CloseTime   field.String
 	PlateNum    field.String
 	StartKwh    field.Float64
 	EndKwh      field.Float64
-	ParkPrice   field.Float64
-	CouponPrice field.Float64
+	ParkPrice   field.String
+	CouponPrice field.String
 
 	fieldMap map[string]field.Expr
 }
@@ -90,13 +89,13 @@ func (c *chargeOrderTbl) updateTableName(table string) *chargeOrderTbl {
 	c.BeginTime = field.NewString(table, "beginTime")
 	c.OverTime = field.NewString(table, "overTime")
 	c.State = field.NewString(table, "state")
-	c.TotalPrice = field.NewFloat64(table, "totalPrice")
+	c.TotalPrice = field.NewString(table, "totalPrice")
 	c.CloseTime = field.NewString(table, "closeTime")
 	c.PlateNum = field.NewString(table, "plate_num")
 	c.StartKwh = field.NewFloat64(table, "start_kwh")
 	c.EndKwh = field.NewFloat64(table, "end_kwh")
-	c.ParkPrice = field.NewFloat64(table, "park_price")
-	c.CouponPrice = field.NewFloat64(table, "coupon_price")
+	c.ParkPrice = field.NewString(table, "park_price")
+	c.CouponPrice = field.NewString(table, "coupon_price")
 
 	c.fillFieldMap()
 

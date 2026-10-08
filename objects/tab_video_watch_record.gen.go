@@ -39,7 +39,6 @@ func newTabVideoWatchRecord(db *gorm.DB, opts ...gen.DOOption) tabVideoWatchReco
 	return _tabVideoWatchRecord
 }
 
-// tabVideoWatchRecord 视频观看记录表
 type tabVideoWatchRecord struct {
 	tabVideoWatchRecordDo tabVideoWatchRecordDo
 

@@ -10,7 +10,7 @@ import (
 
 const TableNameUsermessageTbl = "usermessage_tbl"
 
-// UsermessageTbl 已废弃
+// UsermessageTbl mapped from table <usermessage_tbl>
 type UsermessageTbl struct {
 	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
 	Openid     string    `gorm:"column:openid" json:"openid"`
@@ -18,8 +18,8 @@ type UsermessageTbl struct {
 	MsgTime    string    `gorm:"column:msgTime" json:"msgTime"`
 	Status     string    `gorm:"column:status" json:"status"`
 	IsDelete   int32     `gorm:"column:isDelete;not null" json:"isDelete"`
-	CreateTime time.Time `gorm:"column:createTime;not null;type:timestamp;default:CURRENT_TIMESTAMP" json:"createTime"`
-	UpdateTime time.Time `gorm:"column:updateTime;not null;type:timestamp;default:CURRENT_TIMESTAMP" json:"updateTime"`
+	CreateTime time.Time `gorm:"column:createTime;not null;default:CURRENT_TIMESTAMP" json:"createTime"`
+	UpdateTime time.Time `gorm:"column:updateTime;not null;default:CURRENT_TIMESTAMP" json:"updateTime"`
 }
 
 // TableName UsermessageTbl's table name

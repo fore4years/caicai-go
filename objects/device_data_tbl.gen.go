@@ -49,7 +49,6 @@ func newDeviceDataTbl(db *gorm.DB, opts ...gen.DOOption) deviceDataTbl {
 	return _deviceDataTbl
 }
 
-// deviceDataTbl 设备信息表
 type deviceDataTbl struct {
 	deviceDataTblDo deviceDataTblDo
 

@@ -55,7 +55,6 @@ func newPlaceTbl(db *gorm.DB, opts ...gen.DOOption) placeTbl {
 	return _placeTbl
 }
 
-// placeTbl 业主车位信息表
 type placeTbl struct {
 	placeTblDo placeTblDo
 
