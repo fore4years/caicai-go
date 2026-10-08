@@ -12,11 +12,11 @@ const TableNameLedMacTbl = "led_mac_tbl"
 
 // LedMacTbl mapped from table <led_mac_tbl>
 type LedMacTbl struct {
-	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`               // 主键id
-	LedMac     string    `gorm:"column:led_mac;comment:led灯mac地址" json:"led_mac"`                              // led灯mac地址
-	Pid        string    `gorm:"column:pid;comment:车位锁id" json:"pid"`                                          // 车位锁id
-	CreateTime time.Time `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
-	UpdateTime time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
+	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                              // 主键id
+	LedMac     string    `gorm:"column:led_mac;comment:led灯mac地址" json:"led_mac"`                                             // led灯mac地址
+	Pid        string    `gorm:"column:pid;comment:车位锁id" json:"pid"`                                                         // 车位锁id
+	CreateTime time.Time `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
+	UpdateTime time.Time `gorm:"column:update_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
 }
 
 // TableName LedMacTbl's table name

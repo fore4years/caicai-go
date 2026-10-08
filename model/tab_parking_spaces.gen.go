@@ -22,8 +22,8 @@ type TabParkingSpace struct {
 	LotID         int32           `gorm:"column:lot_id;comment:停车场id" json:"lot_id"`                   // 停车场id
 	LockID        string          `gorm:"column:lock_id;comment:车位锁id" json:"lock_id"`                 // 车位锁id
 	ChargingGunID int32           `gorm:"column:charging_gun_id;comment:充电枪id" json:"charging_gun_id"` // 充电枪id
-	OpenTime      time.Time       `gorm:"column:open_time" json:"open_time"`
-	CloseTime     time.Time       `gorm:"column:close_time;default:2026-10-08 23:59:59.000;comment:关闭时间" json:"close_time"`         // 关闭时间
+	OpenTime      time.Time       `gorm:"column:open_time;type:time" json:"open_time"`
+	CloseTime     time.Time       `gorm:"column:close_time;type:time;default:23:59:59;comment:关闭时间" json:"close_time"`              // 关闭时间
 	ImageID       int32           `gorm:"column:image_id;comment:停车场照片id" json:"image_id"`                                          // 停车场照片id
 	SpacesCode    string          `gorm:"column:spaces_code;comment:车位码" json:"spaces_code"`                                        // 车位码
 	Enable        bool            `gorm:"column:enable;comment:审核状态(true为已通过)" json:"enable"`                                       // 审核状态(true为已通过)

@@ -22,7 +22,7 @@ type PackageRecordTbl struct {
 	Duration      int32           `gorm:"column:duration;comment:时长（分钟）（-1：不限时）" json:"duration"`                                                                             // 时长（分钟）（-1：不限时）
 	MaxPower      int32           `gorm:"column:max_power;comment:最大功率" json:"max_power"`                                                                                     // 最大功率
 	Status        string          `gorm:"column:status;not null;default:pending;comment:订单状态：pending-待支付, paid-已支付, completed-已完成, cancelled-已取消, expired-已过期" json:"status"` // 订单状态：pending-待支付, paid-已支付, completed-已完成, cancelled-已取消, expired-已过期
-	CreateTime    time.Time       `gorm:"column:create_time;not null;default:CURRENT_TIMESTAMP;comment:充值时间" json:"create_time"`                                              // 充值时间
+	CreateTime    time.Time       `gorm:"column:create_time;not null;type:timestamp;default:CURRENT_TIMESTAMP;comment:充值时间" json:"create_time"`                               // 充值时间
 	EndTime       time.Time       `gorm:"column:end_time;comment:结束时间" json:"end_time"`                                                                                       // 结束时间
 	TransactionID string          `gorm:"column:transaction_id;comment:微信支付交易号" json:"transaction_id"`                                                                        // 微信支付交易号
 }

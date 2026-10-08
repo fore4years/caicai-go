@@ -12,13 +12,13 @@ const TableNamePointTbl = "point_tbl"
 
 // PointTbl mapped from table <point_tbl>
 type PointTbl struct {
-	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`               // 主键id
-	UserOpenid int32     `gorm:"column:user_openid;not null;comment:用户openid" json:"user_openid"`              // 用户openid
-	Points     string    `gorm:"column:points;comment:积分数量" json:"points"`                                     // 积分数量
-	Source     string    `gorm:"column:source;comment:积分来源" json:"source"`                                     // 积分来源
-	Type       string    `gorm:"column:type;comment:积分类型" json:"type"`                                         // 积分类型
-	CreateTime time.Time `gorm:"column:create_time;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
-	UpdateTime time.Time `gorm:"column:update_time;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
+	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                              // 主键id
+	UserOpenid int32     `gorm:"column:user_openid;not null;comment:用户openid" json:"user_openid"`                             // 用户openid
+	Points     string    `gorm:"column:points;comment:积分数量" json:"points"`                                                    // 积分数量
+	Source     string    `gorm:"column:source;comment:积分来源" json:"source"`                                                    // 积分来源
+	Type       string    `gorm:"column:type;comment:积分类型" json:"type"`                                                        // 积分类型
+	CreateTime time.Time `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
+	UpdateTime time.Time `gorm:"column:update_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:修改时间" json:"update_time"` // 修改时间
 }
 
 // TableName PointTbl's table name
