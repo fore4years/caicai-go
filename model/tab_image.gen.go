@@ -6,10 +6,10 @@ package model
 
 const TableNameTabImage = "tab_image"
 
-// TabImage mapped from table <tab_image>
+// TabImage 图片表
 type TabImage struct {
-	ID    int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:图片id" json:"id"` // 图片id
-	Image []byte `gorm:"column:image;comment:图片" json:"image"`                           // 图片
+	ID    int32  `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:图片id" json:"id"` // 图片id
+	Image []byte `gorm:"column:image;type:longblob;comment:图片" json:"image"`                      // 图片
 }
 
 // TableName TabImage's table name

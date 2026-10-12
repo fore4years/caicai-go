@@ -41,6 +41,7 @@ func newImeiTab(db *gorm.DB, opts ...gen.DOOption) imeiTab {
 	return _imeiTab
 }
 
+// imeiTab IMEI信息表
 type imeiTab struct {
 	imeiTabDo imeiTabDo
 

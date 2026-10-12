@@ -42,6 +42,7 @@ func newTabProduct(db *gorm.DB, opts ...gen.DOOption) tabProduct {
 	return _tabProduct
 }
 
+// tabProduct 产品
 type tabProduct struct {
 	tabProductDo tabProductDo
 

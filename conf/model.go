@@ -27,3 +27,7 @@ type MysqlConf struct {
 type AppConf struct {
 	Port int16
 }
+
+type TcpConf struct {
+	Port int16
+}

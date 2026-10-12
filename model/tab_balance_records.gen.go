@@ -12,13 +12,13 @@ import (
 
 const TableNameTabBalanceRecord = "tab_balance_records"
 
-// TabBalanceRecord mapped from table <tab_balance_records>
+// TabBalanceRecord 余额明细表
 type TabBalanceRecord struct {
-	ID         int32           `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                              // 主键id
-	Openid     string          `gorm:"column:openid;not null;comment:用户唯一openid" json:"openid"`                                     // 用户唯一openid
-	Type       string          `gorm:"column:type;comment:交易类型" json:"type"`                                                        // 交易类型
-	Amount     decimal.Decimal `gorm:"column:amount;comment:交易金额" json:"amount"`                                                    // 交易金额
-	CreateTime time.Time       `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:交易时间" json:"create_time"` // 交易时间
+	ID         int32           `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                    // 主键id
+	Openid     string          `gorm:"column:openid;type:varchar(30);not null;comment:用户唯一openid" json:"openid"`                   // 用户唯一openid
+	Type       string          `gorm:"column:type;type:varchar(10);comment:交易类型" json:"type"`                                      // 交易类型
+	Amount     decimal.Decimal `gorm:"column:amount;type:decimal(10,2);comment:交易金额" json:"amount"`                                // 交易金额
+	CreateTime *time.Time      `gorm:"column:create_time;type:datetime;default:CURRENT_TIMESTAMP;comment:交易时间" json:"create_time"` // 交易时间
 }
 
 // TableName TabBalanceRecord's table name

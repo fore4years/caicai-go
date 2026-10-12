@@ -42,6 +42,7 @@ func newSaveyytimeTbl(db *gorm.DB, opts ...gen.DOOption) saveyytimeTbl {
 	return _saveyytimeTbl
 }
 
+// saveyytimeTbl 已废弃
 type saveyytimeTbl struct {
 	saveyytimeTblDo saveyytimeTblDo
 

@@ -10,14 +10,14 @@ import (
 
 const TableNameTabGateway = "tab_gateway"
 
-// TabGateway mapped from table <tab_gateway>
+// TabGateway 网关
 type TabGateway struct {
-	ID           int32     `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
-	Mac          string    `gorm:"column:mac;comment:网关mac地址" json:"mac"`                                                         // 网关mac地址
-	Iccid        string    `gorm:"column:iccid;comment:4G卡的ICCID" json:"iccid"`                                                   // 4G卡的ICCID
-	Name         string    `gorm:"column:name;comment:网关名称" json:"name"`                                                          // 网关名称
-	InstallPlace string    `gorm:"column:install_place;comment:网关安装位置" json:"install_place"`                                      // 网关安装位置
-	InstallTime  time.Time `gorm:"column:install_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:安装时间" json:"install_time"` // 安装时间
+	ID           int32      `gorm:"column:id;type:int;primaryKey;autoIncrement:true" json:"id"`
+	Mac          string     `gorm:"column:mac;type:varchar(100);comment:网关mac地址" json:"mac"`                                      // 网关mac地址
+	Iccid        string     `gorm:"column:iccid;type:varchar(100);comment:4G卡的ICCID" json:"iccid"`                                // 4G卡的ICCID
+	Name         string     `gorm:"column:name;type:varchar(20);comment:网关名称" json:"name"`                                        // 网关名称
+	InstallPlace string     `gorm:"column:install_place;type:varchar(255);comment:网关安装位置" json:"install_place"`                   // 网关安装位置
+	InstallTime  *time.Time `gorm:"column:install_time;type:datetime;default:CURRENT_TIMESTAMP;comment:安装时间" json:"install_time"` // 安装时间
 }
 
 // TableName TabGateway's table name

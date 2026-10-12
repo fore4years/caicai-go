@@ -6,20 +6,20 @@ package model
 
 const TableNameAccountPublicTbl = "account_public_tbl"
 
-// AccountPublicTbl mapped from table <account_public_tbl>
+// AccountPublicTbl 公司账户信息表
 type AccountPublicTbl struct {
-	OrderID            string `gorm:"column:order_id;primaryKey;comment:订单号" json:"order_id"`                   // 订单号
-	PayeeCompany       string `gorm:"column:payee_company;not null;comment:收款单位" json:"payee_company"`          // 收款单位
-	CompanyAccount     string `gorm:"column:company_account;not null;comment:收款账户" json:"company_account"`      // 收款账户
-	LegalPerson        string `gorm:"column:legal_person;not null;comment:法人姓名" json:"legal_person"`            // 法人姓名
-	LegalPhone         string `gorm:"column:legal_phone;not null;comment:法人手机号" json:"legal_phone"`             // 法人手机号
-	LegalIDType        string `gorm:"column:legal_id_type;not null;comment:法人证件类型" json:"legal_id_type"`        // 法人证件类型
-	LegalIDNo          string `gorm:"column:legal_id_no;not null;comment:法人身份证号码" json:"legal_id_no"`           // 法人身份证号码
-	BankName           string `gorm:"column:bank_name;not null;comment:开户银行" json:"bank_name"`                  // 开户银行
-	LegalIDFront       string `gorm:"column:legal_id_front;comment:收款单位法人代表身份证照片正面" json:"legal_id_front"`      // 收款单位法人代表身份证照片正面
-	LegalIDBack        string `gorm:"column:legal_id_back;comment:收款单位法人代表身份证照片反面" json:"legal_id_back"`        // 收款单位法人代表身份证照片反面
-	BusinessLicense    string `gorm:"column:business_license;comment:收款单位营业执照照片" json:"business_license"`       // 收款单位营业执照照片
-	AccountCertificate string `gorm:"column:account_certificate;comment:收款账户开户证明照片" json:"account_certificate"` // 收款账户开户证明照片
+	OrderID            string `gorm:"column:order_id;type:varchar(64);primaryKey;comment:订单号" json:"order_id"`                    // 订单号
+	PayeeCompany       string `gorm:"column:payee_company;type:varchar(200);not null;comment:收款单位" json:"payee_company"`          // 收款单位
+	CompanyAccount     string `gorm:"column:company_account;type:varchar(50);not null;comment:收款账户" json:"company_account"`       // 收款账户
+	LegalPerson        string `gorm:"column:legal_person;type:varchar(100);not null;comment:法人姓名" json:"legal_person"`            // 法人姓名
+	LegalPhone         string `gorm:"column:legal_phone;type:varchar(20);not null;comment:法人手机号" json:"legal_phone"`              // 法人手机号
+	LegalIDType        string `gorm:"column:legal_id_type;type:varchar(20);not null;comment:法人证件类型" json:"legal_id_type"`         // 法人证件类型
+	LegalIDNo          string `gorm:"column:legal_id_no;type:varchar(30);not null;comment:法人身份证号码" json:"legal_id_no"`            // 法人身份证号码
+	BankName           string `gorm:"column:bank_name;type:varchar(100);not null;comment:开户银行" json:"bank_name"`                  // 开户银行
+	LegalIDFront       string `gorm:"column:legal_id_front;type:varchar(255);comment:收款单位法人代表身份证照片正面" json:"legal_id_front"`      // 收款单位法人代表身份证照片正面
+	LegalIDBack        string `gorm:"column:legal_id_back;type:varchar(255);comment:收款单位法人代表身份证照片反面" json:"legal_id_back"`        // 收款单位法人代表身份证照片反面
+	BusinessLicense    string `gorm:"column:business_license;type:varchar(255);comment:收款单位营业执照照片" json:"business_license"`       // 收款单位营业执照照片
+	AccountCertificate string `gorm:"column:account_certificate;type:varchar(255);comment:收款账户开户证明照片" json:"account_certificate"` // 收款账户开户证明照片
 }
 
 // TableName AccountPublicTbl's table name

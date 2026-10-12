@@ -10,14 +10,14 @@ import (
 
 const TableNameChargingPriceTbl = "charging_price_tbl"
 
-// ChargingPriceTbl mapped from table <charging_price_tbl>
+// ChargingPriceTbl 二轮车--电价
 type ChargingPriceTbl struct {
-	ID       int32           `gorm:"column:id;primaryKey;autoIncrement:true;comment:电价id" json:"id"` // 电价id
-	Total    decimal.Decimal `gorm:"column:total;not null;comment:单价" json:"total"`                  // 单价
-	Name     string          `gorm:"column:name;comment:电价名称" json:"name"`                           // 电价名称
-	MinPower float64         `gorm:"column:min_power;comment:最小功率" json:"min_power"`                 // 最小功率
-	MaxPower float64         `gorm:"column:max_power;comment:最大功率" json:"max_power"`                 // 最大功率
-	Service  decimal.Decimal `gorm:"column:service;comment:服务费" json:"service"`                      // 服务费
+	ID       int32           `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:电价id" json:"id"` // 电价id
+	Total    decimal.Decimal `gorm:"column:total;type:decimal(10,4);not null;comment:单价" json:"total"`        // 单价
+	Name     string          `gorm:"column:name;type:varchar(1);comment:电价名称" json:"name"`                    // 电价名称
+	MinPower decimal.Decimal `gorm:"column:min_power;type:decimal(10,2);comment:最小功率" json:"min_power"`       // 最小功率
+	MaxPower decimal.Decimal `gorm:"column:max_power;type:decimal(10,2);comment:最大功率" json:"max_power"`       // 最大功率
+	Service  decimal.Decimal `gorm:"column:service;type:decimal(10,4);comment:服务费" json:"service"`            // 服务费
 }
 
 // TableName ChargingPriceTbl's table name

@@ -68,7 +68,7 @@ func (c *WxGuzhangController) GuzhangTijiao(ctx *gin.Context) {
 		Lockmac: lockmac,
 		Error:   errDesc,
 		Image:   image,
-		PutTime: time.Now(),
+		PutTime: timePtr(time.Now()),
 		State:   "待处理",
 	}
 	// Java submit 无论文件存储是否失败均返回 "ok"（IOException 被吞掉）。
@@ -179,7 +179,7 @@ func (c *CheweisuoController) dakai(userID, lockID string) string {
 		Orderid:   simpleUUID(),
 		Openid:    userID,
 		Lockid:    lockID,
-		BeginTime: time.Now(),
+		BeginTime: timePtr(time.Now()),
 		State:     orderStateConduct, // 进行中
 	}
 	conf.Db.Create(&order)
@@ -228,7 +228,7 @@ func createLockOrder(openid, lockid, orderid string) string {
 		Orderid:   orderid,
 		Openid:    openid,
 		Lockid:    lockid,
-		BeginTime: time.Now(),
+		BeginTime: timePtr(time.Now()),
 		State:     orderStateConduct, // 进行中
 	})
 	return orderid

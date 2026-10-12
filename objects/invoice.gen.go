@@ -36,8 +36,8 @@ func newInvoice(db *gorm.DB, opts ...gen.DOOption) invoice {
 	_invoice.FarmAddress = field.NewString(tableName, "farm_address")
 	_invoice.InvoiceCode = field.NewString(tableName, "invoice_code")
 	_invoice.InvoiceNum = field.NewString(tableName, "invoice_num")
-	_invoice.Amount = field.NewString(tableName, "amount")
-	_invoice.TaxAmount = field.NewString(tableName, "tax_amount")
+	_invoice.Amount = field.NewField(tableName, "amount")
+	_invoice.TaxAmount = field.NewField(tableName, "tax_amount")
 	_invoice.InvoiceID = field.NewInt32(tableName, "invoice_id")
 	_invoice.State = field.NewInt32(tableName, "state")
 	_invoice.Openid = field.NewString(tableName, "openid")
@@ -48,6 +48,7 @@ func newInvoice(db *gorm.DB, opts ...gen.DOOption) invoice {
 	return _invoice
 }
 
+// invoice 发票详情表
 type invoice struct {
 	invoiceDo invoiceDo
 
@@ -60,8 +61,8 @@ type invoice struct {
 	FarmAddress field.String // 销售方地址
 	InvoiceCode field.String // 发票代码
 	InvoiceNum  field.String // 发票号码
-	Amount      field.String // 合计金额
-	TaxAmount   field.String // 合计税额
+	Amount      field.Field  // 合计金额
+	TaxAmount   field.Field  // 合计税额
 	InvoiceID   field.Int32  // 发票抬头id（外键）
 	State       field.Int32  // 发票状态（0-未申请，1-已申请  2-已处理）
 	Openid      field.String // 用户id
@@ -90,8 +91,8 @@ func (i *invoice) updateTableName(table string) *invoice {
 	i.FarmAddress = field.NewString(table, "farm_address")
 	i.InvoiceCode = field.NewString(table, "invoice_code")
 	i.InvoiceNum = field.NewString(table, "invoice_num")
-	i.Amount = field.NewString(table, "amount")
-	i.TaxAmount = field.NewString(table, "tax_amount")
+	i.Amount = field.NewField(table, "amount")
+	i.TaxAmount = field.NewField(table, "tax_amount")
 	i.InvoiceID = field.NewInt32(table, "invoice_id")
 	i.State = field.NewInt32(table, "state")
 	i.Openid = field.NewString(table, "openid")

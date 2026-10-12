@@ -568,6 +568,18 @@ func RouterInit(r *gin.Engine) {
 		directive.GET("/startOpenTime", directiveController.StartOpenTime)
 		directive.GET("/getGunHolderStatus", directiveController.GetGunHolderStatus)
 		directive.GET("/openGunHolderSensor", directiveController.OpenGunHolderSensor)
+		directive.GET("/getVersion", directiveController.GetVersion)
+		directive.GET("/getTemperature", directiveController.GetTemperature)
+		directive.GET("/getPlaceLock", directiveController.GetPlaceLock)
+		directive.GET("/getICCID", directiveController.GetICCID)
+		directive.GET("/getGaugePower", directiveController.GetGaugePower)
+		directive.GET("/getGaugePowerAll", directiveController.GetGaugePowerAll)
+		directive.GET("/getBMS", directiveController.GetBMS)
+		directive.GET("/powerLimitOn", directiveController.PowerLimitOn)
+		directive.GET("/powerLimitOff", directiveController.PowerLimitOff)
+		directive.GET("/openFireAlarm", directiveController.OpenFireAlarm)
+		directive.GET("/getPrivateData", directiveController.GetPrivateData)
+		directive.GET("/getDoubleGunData", directiveController.GetDoubleGunData)
 	}
 
 	// 设备数据接收（Java DeviceDataController；/api/device 已在 Auth 白名单内）

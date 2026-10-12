@@ -10,21 +10,21 @@ import (
 
 const TableNameLockTbl = "lock_tbl"
 
-// LockTbl mapped from table <lock_tbl>
+// LockTbl 车位锁
 type LockTbl struct {
-	Lockid      string    `gorm:"column:lockid;primaryKey;comment:锁id" json:"lockid"` // 锁id
-	Lockmac     string    `gorm:"column:lockmac" json:"lockmac"`
-	ProductDate time.Time `gorm:"column:product_date" json:"product_date"`
-	Factory     string    `gorm:"column:factory" json:"factory"`
-	FixDate     time.Time `gorm:"column:fix_date" json:"fix_date"`
-	FixType     string    `gorm:"column:fix_type" json:"fix_type"`
-	Placeid     string    `gorm:"column:placeid;comment:车位id" json:"placeid"` // 车位id
-	State       string    `gorm:"column:state" json:"state"`
-	Sn          string    `gorm:"column:sn" json:"sn"`
-	Inductor    string    `gorm:"column:inductor" json:"inductor"`
-	InstallTime time.Time `gorm:"column:install_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:安装时间" json:"install_time"` // 安装时间
-	Name        string    `gorm:"column:name;comment:安装人员" json:"name"`                                                          // 安装人员
-	ProductID   string    `gorm:"column:product_id;comment:产品ID" json:"product_id"`                                              // 产品ID
+	Lockid      string     `gorm:"column:lockid;type:varchar(255);primaryKey;comment:锁id" json:"lockid"` // 锁id
+	Lockmac     string     `gorm:"column:lockmac;type:varchar(255)" json:"lockmac"`
+	ProductDate *time.Time `gorm:"column:product_date;type:datetime" json:"product_date"`
+	Factory     string     `gorm:"column:factory;type:varchar(255)" json:"factory"`
+	FixDate     *time.Time `gorm:"column:fix_date;type:datetime" json:"fix_date"`
+	FixType     string     `gorm:"column:fix_type;type:varchar(255)" json:"fix_type"`
+	Placeid     string     `gorm:"column:placeid;type:varchar(255);comment:车位id" json:"placeid"` // 车位id
+	State       string     `gorm:"column:state;type:varchar(255)" json:"state"`
+	Sn          string     `gorm:"column:sn;type:varchar(255)" json:"sn"`
+	Inductor    string     `gorm:"column:inductor;type:varchar(255)" json:"inductor"`
+	InstallTime *time.Time `gorm:"column:install_time;type:datetime;default:CURRENT_TIMESTAMP;comment:安装时间" json:"install_time"` // 安装时间
+	Name        string     `gorm:"column:name;type:varchar(255);comment:安装人员" json:"name"`                                       // 安装人员
+	ProductID   string     `gorm:"column:product_id;type:varchar(255);comment:产品ID" json:"product_id"`                           // 产品ID
 }
 
 // TableName LockTbl's table name

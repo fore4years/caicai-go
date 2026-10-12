@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"caicai-go/logger"
 	"net/http"
 	"strconv"
 	"strings"
@@ -99,7 +100,7 @@ type receptacleDTO struct {
 	ID         int32          `json:"id"`
 	Name       string         `json:"name,omitempty"`
 	Number     int32          `json:"number,omitempty"`
-	Status     int32          `json:"status,omitempty"`
+	Status     int32          `json:"status"`
 	Pid        string         `json:"pid,omitempty"`
 	CreateTime *LocalDateTime `json:"createTime,omitempty"`
 	UpdateTime *LocalDateTime `json:"updateTime,omitempty"`
@@ -472,21 +473,25 @@ func (c *ReceptacleController) BatchAdd(ctx *gin.Context) {
 	// body {pid, num}，对齐 Java ReceptacleDto。
 	var req struct {
 		Pid string `json:"pid"`
-		Num int    `json:"num"`
+		Num string `json:"num"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	if req.Num <= 0 {
+	num, _ := strconv.Atoi(req.Num)
+	if num <= 0 {
 		ctx.JSON(http.StatusOK, ResultError(400, "数量必须为正数"))
 		return
 	}
-	rows := make([]model.ReceptacleTbl, 0, req.Num)
-	for i := 1; i <= req.Num; i++ {
+	rows := make([]model.ReceptacleTbl, 0, num)
+	for i := 1; i <= num; i++ {
 		rows = append(rows, model.ReceptacleTbl{Pid: req.Pid, Number: int32(i), Status: 0, Name: strconv.Itoa(i) + "号插座"})
 	}
-	conf.Db.Create(&rows)
+	tx := conf.Db.Create(&rows)
+	if tx.Error != nil {
+		logger.Mylog.Err(tx.Error).Msg("添加插座失败")
+	}
 	ctx.JSON(http.StatusOK, ResultSuccess(true))
 }
 

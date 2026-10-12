@@ -38,6 +38,7 @@ func newTabPriceTimeWinter(db *gorm.DB, opts ...gen.DOOption) tabPriceTimeWinter
 	return _tabPriceTimeWinter
 }
 
+// tabPriceTimeWinter 冬季--时段电价
 type tabPriceTimeWinter struct {
 	tabPriceTimeWinterDo tabPriceTimeWinterDo
 

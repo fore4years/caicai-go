@@ -8,8 +8,8 @@ const TableNameChargeTbl = "charge_tbl"
 
 // ChargeTbl mapped from table <charge_tbl>
 type ChargeTbl struct {
-	Placeid string `gorm:"column:placeid;comment:车位id" json:"placeid"`      // 车位id
-	Charge  string `gorm:"column:charge;comment:未通过；待审核；已通过" json:"charge"` // 未通过；待审核；已通过
+	Placeid string `gorm:"column:placeid;type:varchar(255);comment:车位id" json:"placeid"`      // 车位id
+	Charge  string `gorm:"column:charge;type:varchar(255);comment:未通过；待审核；已通过" json:"charge"` // 未通过；待审核；已通过
 }
 
 // TableName ChargeTbl's table name

@@ -558,8 +558,8 @@ func (a *AdminProfitSharingController) Add(c *gin.Context) {
 		return
 	}
 	now := time.Now()
-	r.CreateTime = now
-	r.UpdateTime = now
+	r.CreateTime = timePtr(now)
+	r.UpdateTime = timePtr(now)
 	if err := conf.Db.Create(&r).Error; err != nil {
 		c.JSON(http.StatusOK, ResultError(500, "添加分账配置失败: "+err.Error()))
 		return
@@ -644,7 +644,7 @@ func purchasePoleToDTO(p model.PurchasePoleApplicationTbl) purchasePoleDTO {
 		PhoneNumber:          p.PhoneNumber,
 		SelectedPackage:      p.SelectedPackage,
 		SelectedColor:        p.SelectedColor,
-		InstallationDistance: p.InstallationDistance,
+		InstallationDistance: p.InstallationDistance.InexactFloat64(),
 		InstallationDate:     p.InstallationDate,
 		UsageScenario:        p.UsageScenario,
 		InstallationAddress:  p.InstallationAddress,

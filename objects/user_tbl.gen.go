@@ -43,8 +43,8 @@ func newUserTbl(db *gorm.DB, opts ...gen.DOOption) userTbl {
 	_userTbl.Avatar = field.NewBytes(tableName, "avatar")
 	_userTbl.IDCardEmblem = field.NewInt32(tableName, "id_card_emblem")
 	_userTbl.IDCardAvatar = field.NewInt32(tableName, "id_card_avatar")
-	_userTbl.Balans = field.NewString(tableName, "balans")
-	_userTbl.FreezeBalans = field.NewString(tableName, "freeze_balans")
+	_userTbl.Balans = field.NewField(tableName, "balans")
+	_userTbl.FreezeBalans = field.NewField(tableName, "freeze_balans")
 	_userTbl.IDEntity = field.NewString(tableName, "id_entity")
 	_userTbl.OmEnable = field.NewString(tableName, "om_enable")
 	_userTbl.IsSteer = field.NewString(tableName, "is_steer")
@@ -58,6 +58,7 @@ func newUserTbl(db *gorm.DB, opts ...gen.DOOption) userTbl {
 	return _userTbl
 }
 
+// userTbl 用户表
 type userTbl struct {
 	userTblDo userTblDo
 
@@ -77,8 +78,8 @@ type userTbl struct {
 	Avatar       field.Bytes  // 头像
 	IDCardEmblem field.Int32  // 身份证国徽面image_id
 	IDCardAvatar field.Int32  // 身份证头像面image_id
-	Balans       field.String // 用户余额
-	FreezeBalans field.String // 用户冻结金额
+	Balans       field.Field  // 用户余额
+	FreezeBalans field.Field  // 用户冻结金额
 	IDEntity     field.String // 身份标识 , 1驾驶人员,2业主,3酒店老板,4酒店管理人员
 	OmEnable     field.String // 运维身份审核,0未审核,1,审核通过,-1审核未通过
 	IsSteer      field.String // 首页用户引导状态(0,未读,1,已读)
@@ -117,8 +118,8 @@ func (u *userTbl) updateTableName(table string) *userTbl {
 	u.Avatar = field.NewBytes(table, "avatar")
 	u.IDCardEmblem = field.NewInt32(table, "id_card_emblem")
 	u.IDCardAvatar = field.NewInt32(table, "id_card_avatar")
-	u.Balans = field.NewString(table, "balans")
-	u.FreezeBalans = field.NewString(table, "freeze_balans")
+	u.Balans = field.NewField(table, "balans")
+	u.FreezeBalans = field.NewField(table, "freeze_balans")
 	u.IDEntity = field.NewString(table, "id_entity")
 	u.OmEnable = field.NewString(table, "om_enable")
 	u.IsSteer = field.NewString(table, "is_steer")

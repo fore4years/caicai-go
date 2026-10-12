@@ -99,20 +99,33 @@ func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 	}
 }
 
-// onDeviceMessage 处理上行设备数据：解析帧并按 cmd 缓存到 Redis（供查询用）。
+// onDeviceMessage 处理 MQTT 上行设备数据（topic = device/{imei}/report|event|alarm）。
+// MQTT 上报为 JSON（如 {"event":"relay_on","channel":1,"energy_kwh":...}）；非 JSON 时回退按二进制帧解析（兼容）。
 func onDeviceMessage(client mqtt.Client, msg mqtt.Message) {
-	deviceID, ctl, cmd, data, err := protocol.Decode(msg.Payload())
-	if err != nil {
-		logger.Mylog.Warn().Msgf("设备帧解析失败, topic: %s, err: %v", msg.Topic(), err)
+	payload := msg.Payload()
+	var report mqttDeviceReport
+	if err := json.Unmarshal(payload, &report); err == nil && report.Channel > 0 {
+		handleMqttReport(extractDeviceFromTopic(msg.Topic()), report)
 		return
 	}
-	_ = ctl
+	processDeviceFrame(payload, msg.Topic())
+}
+
+// processDeviceFrame 解析上行设备帧（MQTT 或 TCP 均复用），按 cmd 缓存 data 到 Redis（供查询用）。
+func processDeviceFrame(frame []byte, source string) {
+	deviceID, ctl, cmd, data, err := protocol.Decode(frame)
+	if err != nil {
+		logger.Mylog.Warn().Msgf("设备帧解析失败, source: %s, err: %v", source, err)
+		return
+	}
+	// 业务联动：按 cmd 缓存到对应用途的 Redis 键（功率/电流/电压/枪状态等）
+	handleDeviceUplink(deviceID, ctl, cmd, data)
 
 	if rdb != nil {
 		key := "device:" + deviceID + ":" + strconv.Itoa(int(cmd))
 		rdb.Set(context.Background(), key, data, 10*time.Minute)
 	}
-	logger.Mylog.Info().Msgf("收到设备数据, topic: %s, device: %s, cmd: 0x%02X, data: %q", msg.Topic(), deviceID, cmd, data)
+	logger.Mylog.Info().Msgf("收到设备数据, source: %s, device: %s, cmd: 0x%02X, data: %q", source, deviceID, cmd, data)
 }
 
 // onHeartbeat 心跳处理（MQTT JSON 约定：首次心跳即网关注册）。
@@ -137,6 +150,7 @@ func onHeartbeat(client mqtt.Client, msg mqtt.Message) {
 	// 1. 先查 Redis 缓存，已注册则直接跳过，避免每次心跳查库
 	if rdb != nil {
 		if ok, err := rdb.SIsMember(ctx, gatewayRegisteredKey, req.Imei).Result(); err == nil && ok {
+			logger.Mylog.Info().Msgf("网关IMEI %s 心跳: %s", req.Imei, string(msg.Payload()))
 			return
 		}
 	}
@@ -174,14 +188,62 @@ func publish(topic string, payload []byte) bool {
 	return true
 }
 
-// SendCommand 下发指令到指定设备（topic = device/{imei}/cmd）。
-func SendCommand(imei string, cmd, ctl byte, data []byte) bool {
-	topic := deviceTopicPrefix + imei + "/cmd"
-	if !publish(topic, protocol.EncodeCmd(cmd, ctl, data)) {
+// SendCommand 下发指令到指定设备。
+// 路由规则：设备已建立 TCP 连接（老设备）→ 走二进制帧；否则 → 走 MQTT JSON。
+// data 为单字节数据（如插座号/占空比）；无数据传 -1。
+func SendCommand(imei string, cmd int, data int) bool {
+	return sendCommand(imei, cmd, intDataToBytes(data))
+}
+
+// SendCommandBytes 下发带多字节数据的指令（如时段/网关地址等）。路由规则同 SendCommand。
+func SendCommandBytes(imei string, cmd int, data []byte) bool {
+	return sendCommand(imei, cmd, data)
+}
+
+// sendCommand 核心下发：优先 TCP 二进制帧，否则 MQTT JSON。
+func sendCommand(imei string, cmd int, data []byte) bool {
+	// 老设备：走 TCP 二进制协议（连接即设备身份，帧不带 nid 前缀，4G 帧）
+	if _, ok := tcpConns.Load(imei); ok {
+		frame := protocol.Encode(imei, byte(cmd), protocol.DirectionDefault, data)
+		if SendTCP(imei, frame) {
+			logger.Mylog.Info().Msgf("已通过 TCP 下发指令, device: %s, cmd: 0x%02X", imei, cmd)
+			return true
+		}
+	}
+
+	// 新设备：MQTT JSON
+	body := CmdBody{
+		Ctl:  0,
+		Cmd:  cmd,
+		Data: dataInt(data),
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		logger.Mylog.Err(err).Msg("指令 JSON 序列化失败")
 		return false
 	}
-	logger.Mylog.Info().Msgf("已下发指令, topic: %s, cmd: 0x%02X", topic, cmd)
+	topic := deviceTopicPrefix + imei + "/cmd"
+	if !publish(topic, payload) {
+		return false
+	}
+	logger.Mylog.Info().Msgf("已下发指令, topic: %s, payload: %s", topic, payload)
 	return true
+}
+
+// intDataToBytes 将单字节数据（int）转为字节切片；负数表示无数据。
+func intDataToBytes(data int) []byte {
+	if data < 0 {
+		return []byte{}
+	}
+	return []byte{byte(data)}
+}
+
+// dataInt 将字节数据转回 int（JSON 载荷用）；空数据返回 -1，多字节取首字节。
+func dataInt(data []byte) int {
+	if len(data) == 0 {
+		return -1
+	}
+	return int(data[0])
 }
 
 // SendHex 下发原始 hex 指令到指定设备（不经过 EncodeCmd，直接发原始字节）。
@@ -190,6 +252,10 @@ func SendHex(imei, hexStr string) bool {
 	if err != nil {
 		logger.Mylog.Err(err).Msgf("hex 解析失败: %s", hexStr)
 		return false
+	}
+	// 老设备走 TCP：直接发原始字节
+	if _, ok := tcpConns.Load(imei); ok {
+		return SendTCP(imei, data)
 	}
 	return publish(deviceTopicPrefix+imei+"/cmd", data)
 }
@@ -297,7 +363,7 @@ func StopLock(orderID string) bool {
 		return false
 	}
 
-	SendCommand(lg.deviceID(), protocol.OpClosePlaceLock, protocol.DirectionDefault, nil)
+	//SendCommand(lg.deviceID(), protocol.OpClosePlaceLock, protocol.DirectionDefault, nil)
 	logger.Mylog.Info().Msgf("已下发关锁指令, orderId: %s", orderID)
 	return true
 }
@@ -317,7 +383,7 @@ func StartLock(orderID string) bool {
 		return false
 	}
 
-	SendCommand(lg.deviceID(), protocol.OpOpenPlaceLock, protocol.DirectionDefault, nil)
+	//SendCommand(lg.deviceID(), protocol.OpOpenPlaceLock, protocol.DirectionDefault, nil)
 
 	now := time.Now()
 	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", lg.lock.Placeid).Update("state", "使用中")

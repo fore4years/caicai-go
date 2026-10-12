@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 
 	"caicai-go/conf"
 	"caicai-go/model"
@@ -35,8 +36,8 @@ func zbbAreaToDTO(a model.ZbbArea) zbbAreaDTO {
 		Pinyin:      a.Pinyin,
 		FirstLetter: a.FirstLetter,
 		FullLetter:  a.FullLetter,
-		Lat:         a.Lat,
-		Lng:         a.Lng,
+		Lat:         a.Lat.InexactFloat64(),
+		Lng:         a.Lng.InexactFloat64(),
 		Level:       a.Level,
 	}
 }
@@ -84,8 +85,8 @@ func (c *ZbbAreaController) Add(ctx *gin.Context) {
 		Pinyin:      req.Pinyin,
 		FirstLetter: req.FirstLetter,
 		FullLetter:  req.FullLetter,
-		Lat:         req.Lat,
-		Lng:         req.Lng,
+		Lat:         decimal.NewFromFloat(req.Lat),
+		Lng:         decimal.NewFromFloat(req.Lng),
 		Level:       req.Level,
 	}
 	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&a).Error == nil))

@@ -38,6 +38,7 @@ func newTabVideo(db *gorm.DB, opts ...gen.DOOption) tabVideo {
 	return _tabVideo
 }
 
+// tabVideo 视频信息表
 type tabVideo struct {
 	tabVideoDo tabVideoDo
 

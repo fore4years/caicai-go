@@ -36,8 +36,8 @@ func newZbbArea(db *gorm.DB, opts ...gen.DOOption) zbbArea {
 	_zbbArea.Pinyin = field.NewString(tableName, "pinyin")
 	_zbbArea.FirstLetter = field.NewString(tableName, "first_letter")
 	_zbbArea.FullLetter = field.NewString(tableName, "full_letter")
-	_zbbArea.Lat = field.NewFloat64(tableName, "lat")
-	_zbbArea.Lng = field.NewFloat64(tableName, "lng")
+	_zbbArea.Lat = field.NewField(tableName, "lat")
+	_zbbArea.Lng = field.NewField(tableName, "lng")
 	_zbbArea.Level = field.NewInt32(tableName, "level")
 
 	_zbbArea.fillFieldMap()
@@ -45,21 +45,22 @@ func newZbbArea(db *gorm.DB, opts ...gen.DOOption) zbbArea {
 	return _zbbArea
 }
 
+// zbbArea 区域表
 type zbbArea struct {
 	zbbAreaDo zbbAreaDo
 
 	ALL         field.Asterisk
 	ID          field.Int32
-	Pid         field.Int32   // 父id
-	Code        field.String  // 编码
-	Name        field.String  // 名称
-	Fullname    field.String  // 全名
-	Pinyin      field.String  // 拼音
-	FirstLetter field.String  // 首字母
-	FullLetter  field.String  // 首字母全拼
-	Lat         field.Float64 // 纬度
-	Lng         field.Float64 // 经度
-	Level       field.Int32   // 层级
+	Pid         field.Int32  // 父id
+	Code        field.String // 编码
+	Name        field.String // 名称
+	Fullname    field.String // 全名
+	Pinyin      field.String // 拼音
+	FirstLetter field.String // 首字母
+	FullLetter  field.String // 首字母全拼
+	Lat         field.Field  // 纬度
+	Lng         field.Field  // 经度
+	Level       field.Int32  // 层级
 
 	fieldMap map[string]field.Expr
 }
@@ -84,8 +85,8 @@ func (z *zbbArea) updateTableName(table string) *zbbArea {
 	z.Pinyin = field.NewString(table, "pinyin")
 	z.FirstLetter = field.NewString(table, "first_letter")
 	z.FullLetter = field.NewString(table, "full_letter")
-	z.Lat = field.NewFloat64(table, "lat")
-	z.Lng = field.NewFloat64(table, "lng")
+	z.Lat = field.NewField(table, "lat")
+	z.Lng = field.NewField(table, "lng")
 	z.Level = field.NewInt32(table, "level")
 
 	z.fillFieldMap()

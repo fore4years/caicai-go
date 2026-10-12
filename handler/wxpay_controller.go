@@ -22,8 +22,8 @@ import (
 //   - controller/WeChatPaymentController.java（base /pay）
 //   - controller/WxPayController.java（base /wx）
 //
-// 微信支付 v3 的真实 HTTP 调用（下单 / 查询 / 关单 / 完结 / 退款 / 回调验签解密）在 Go 里
-// 没有对等 SDK 基础设施，因此沿用 handler/wechat_pay.go 的桩风格：复用其中的
+// 微信支付 v3 的真实 HTTP 调用在 handler/wechat_pay.go（支付分 serviceorder）与
+// handler/wechatpay_client.go（普通商户模式：下单/退款/回调验签）中实现。此处复用
 // completeWxOrder / cancelWxOrder / subtractWxDefaultAmount / refundWxOrder / queryWxOrderState。
 // DB 层的余额写入（recharge）与金额计算（completeWxOrder 的电费明细）忠实还原。
 // ============================================================================
@@ -60,16 +60,35 @@ type rechargeRequest struct {
 
 // wxQueryOrderRes 对齐 Java domain.wechat.WxQueryOrderRes（支付分查询订单响应）。
 type wxQueryOrderRes struct {
-	Appid               string `json:"appid,omitempty"`
-	Mchid               string `json:"mchid,omitempty"`
-	ServiceID           string `json:"service_id,omitempty"`
-	OutOrderNo          string `json:"out_order_no,omitempty"`
-	ServiceIntroduction string `json:"service_introduction,omitempty"`
-	State               string `json:"state,omitempty"`
-	StateDescription    string `json:"state_description,omitempty"`
-	TotalAmount         int    `json:"total_amount,omitempty"`
-	OrderID             string `json:"order_id,omitempty"`
-	NeedCollection      bool   `json:"need_collection,omitempty"`
+	Appid               string           `json:"appid,omitempty"`
+	Mchid               string           `json:"mchid,omitempty"`
+	ServiceID           string           `json:"service_id,omitempty"`
+	OutOrderNo          string           `json:"out_order_no,omitempty"`
+	ServiceIntroduction string           `json:"service_introduction,omitempty"`
+	State               string           `json:"state,omitempty"`
+	StateDescription    string           `json:"state_description,omitempty"`
+	TotalAmount         int              `json:"total_amount,omitempty"`
+	OrderID             string           `json:"order_id,omitempty"`
+	NeedCollection      bool             `json:"need_collection,omitempty"`
+	Collection          *wxPayCollection `json:"collection,omitempty"`
+}
+
+// wxPayCollection 对齐 Java WxQueryOrderRes.CollectionDTO（收款信息）。
+type wxPayCollection struct {
+	State        string                  `json:"state,omitempty"`
+	TotalAmount  int                     `json:"total_amount,omitempty"`
+	PayingAmount int                     `json:"paying_amount,omitempty"`
+	PaidAmount   int                     `json:"paid_amount,omitempty"`
+	Details      []wxPayCollectionDetail `json:"details,omitempty"`
+}
+
+// wxPayCollectionDetail 对齐 Java WxQueryOrderRes.CollectionDTO.DetailsDTO（收款明细，含微信交易号）。
+type wxPayCollectionDetail struct {
+	Seq           int    `json:"seq,omitempty"`
+	Amount        int    `json:"amount,omitempty"`
+	PaidType      string `json:"paid_type,omitempty"`
+	PaidTime      string `json:"paid_time,omitempty"`
+	TransactionID string `json:"transaction_id,omitempty"`
 }
 
 // wxCancelOrderRes 对齐 Java domain.wechat.WxCancelOrderRes（支付分取消订单响应）。
@@ -188,8 +207,8 @@ func (w *WeChatPaymentController) Recharge(c *gin.Context) {
 		RemainingRefundAmount: amt,
 		MaxRefundAmount:       amt,
 		OrderStatus:           constant.OrderRecharging,
-		CreateTime:            time.Now(),
-		UpdateTime:            time.Now(),
+		CreateTime:            timePtr(time.Now()),
+		UpdateTime:            timePtr(time.Now()),
 	}
 	if err := conf.Db.Model(&model.RechargeOrderTbl{}).Omit("payment_time", "refund_time").Create(order).Error; err != nil {
 		logger.Mylog.Err(fmt.Errorf("创建订单失败, orderId=%s: %w", orderId, err))
@@ -332,17 +351,31 @@ func settleRechargeOrder(order *model.RechargeOrderTbl, transactionID string) er
 			Openid:     order.Openid,
 			Type:       "充值",
 			Amount:     order.RechargeAmount,
-			CreateTime: time.Now(),
+			CreateTime: timePtr(time.Now()),
 		}).Error
 	})
 }
 
-// OnWxCallbackNotify 微信支付分回调，对齐 Java WxPayController.onWxCallbackNotify。
+// OnWxCallbackNotify 微信支付分回调，对齐 Java WxPayImp.wechatCallback。
+// 验签解密通知报文，处理「支付成功（PAYSCORE.USER_PAID）」事件：保存微信交易号并触发分账。
 func (w *WxPayController) OnWxCallbackNotify(c *gin.Context) {
-	// Java 该方法与 WxPayImp.onWxCallbackNotify 均仅打印日志 / return null，无 DB 写入、
-	// 无订单状态流转。这里保持一致，仅返回 200 空 body。
-	logger.Mylog.Info().Msg("\n支付分回调通知成功啦！")
-	c.Status(http.StatusOK)
+	content := new(wxQueryOrderRes)
+	notifyReq, err := parseWxPayNotify(c.Request, content)
+	if err != nil {
+		logger.Mylog.Error().Err(err).Msg("微信支付分回调验签/解密失败")
+		c.String(http.StatusInternalServerError, "FAIL")
+		return
+	}
+
+	// 非支付成功事件直接 ACK。
+	if notifyReq.EventType != "PAYSCORE.USER_PAID" {
+		logger.Mylog.Info().Msgf("忽略非支付成功回调事件: %s", notifyReq.EventType)
+		c.String(http.StatusOK, "SUCCESS")
+		return
+	}
+
+	handlePayscorePaid(content)
+	c.String(http.StatusOK, "SUCCESS")
 }
 
 // QueryWxOrder 查询支付分订单，对齐 Java onQueryWxOrder。
@@ -351,7 +384,6 @@ func (w *WxPayController) QueryWxOrder(c *gin.Context) {
 	logger.Mylog.Info().Msgf("支付分:使用%s查询订单", outOrderNo)
 
 	// 对齐 Java WxPayImp.onQueryWxOrder：GET wxPayBaseURL + "?out_order_no=..&service_id=..&appid=.."。
-	// 真实 HTTP 查询被 stub；state 复用 queryWxOrderState（桩恒返回 CANCEL）。
 	state := queryWxOrderState(outOrderNo)
 	res := wxQueryOrderRes{
 		Appid:      wxPayAppID,
@@ -367,7 +399,7 @@ func (w *WxPayController) QueryWxOrder(c *gin.Context) {
 func (w *WxPayController) CancelWxOrder(c *gin.Context) {
 	outOrderNo := c.Query("outOrderNo")
 	// 对齐 Java WxPayImp.onCancelWxOrder：POST wxPayBaseURL+"/"+outOrderNo+"/cancel"，
-	// body {appid, service_id, reason:"无需付款"}。真实 HTTP 被 stub。
+	// body {appid, service_id, reason:"无需付款"}。
 	cancelWxOrder(outOrderNo)
 	c.JSON(http.StatusOK, ResultSuccess(wxCancelOrderRes{OutOrderNo: outOrderNo}))
 }
@@ -386,7 +418,6 @@ func (w *WxPayController) CompleteWxOrder(c *gin.Context) {
 	logger.Mylog.Info().Msgf("订单完成: outOrderNo=%s address=%s 费用明细=%s", outOrderNo, address, desc)
 
 	// 控制器将 amount 硬编码为 1（对齐 Java onCompleteWxOrder(outOrderNo, address, 1)）。
-	// POST wxPayBaseURL+"/"+outOrderNo+"/complete" 被 stub。
 	completeWxOrder(outOrderNo, 1)
 	c.JSON(http.StatusOK, ResultSuccess(wxCompleteOrderRes{OutOrderNo: outOrderNo}))
 }
@@ -418,7 +449,6 @@ func (w *WxPayController) SubtractDefaultAmount(c *gin.Context) {
 
 	// 对齐 Java WxPayImp.subtractDefaultAmount：POST wxPayBaseURL+"/"+outOrderNo+"/complete"，
 	// total_amount = amount（分），post_payments 描述「因当前时间距离预约时间较近,系统已自动按照扣费率扣除定金」。
-	// 真实 HTTP 调用被 stub。
 	subtractWxDefaultAmount(outOrderNo, amount)
 	c.JSON(http.StatusOK, ResultSuccess(wxCompleteOrderRes{OutOrderNo: outOrderNo}))
 }

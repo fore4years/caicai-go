@@ -6,27 +6,29 @@ package model
 
 import (
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const TableNameDeviceDataTbl = "device_data_tbl"
 
-// DeviceDataTbl mapped from table <device_data_tbl>
+// DeviceDataTbl 设备信息表
 type DeviceDataTbl struct {
-	ID         int64     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键ID" json:"id"`                              // 主键ID
-	Imei       string    `gorm:"column:imei;not null;comment:设备ID" json:"imei"`                                               // 设备ID
-	Ept        float64   `gorm:"column:ept;comment:总有功电能" json:"ept"`                                                         // 总有功电能
-	Ua         float64   `gorm:"column:ua;comment:A相电压" json:"ua"`                                                            // A相电压
-	Ub         float64   `gorm:"column:ub;comment:B相电压" json:"ub"`                                                            // B相电压
-	Uc         float64   `gorm:"column:uc;comment:C相电压" json:"uc"`                                                            // C相电压
-	Ia         float64   `gorm:"column:ia;comment:A相电流" json:"ia"`                                                            // A相电流
-	Ib         float64   `gorm:"column:ib;comment:B相电流" json:"ib"`                                                            // B相电流
-	Ic         float64   `gorm:"column:ic;comment:C相电流" json:"ic"`                                                            // C相电流
-	Pt         float64   `gorm:"column:pt;comment:总有功功率" json:"pt"`                                                           // 总有功功率
-	Pft        float64   `gorm:"column:pft;comment:总功率因数" json:"pft"`                                                         // 总功率因数
-	Qt         float64   `gorm:"column:qt;comment:总无功功率" json:"qt"`                                                           // 总无功功率
-	St         float64   `gorm:"column:st;comment:总视在功率" json:"st"`                                                           // 总视在功率
-	Ts         int64     `gorm:"column:ts;not null;comment:原始时间戳（秒）" json:"ts"`                                               // 原始时间戳（秒）
-	CreateTime time.Time `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
+	ID         int64           `gorm:"column:id;type:bigint;primaryKey;autoIncrement:true;comment:主键ID" json:"id"`                 // 主键ID
+	Imei       string          `gorm:"column:imei;type:varchar(32);not null;comment:设备ID" json:"imei"`                             // 设备ID
+	Ept        decimal.Decimal `gorm:"column:ept;type:decimal(10,2);comment:总有功电能" json:"ept"`                                     // 总有功电能
+	Ua         decimal.Decimal `gorm:"column:ua;type:decimal(10,2);comment:A相电压" json:"ua"`                                        // A相电压
+	Ub         decimal.Decimal `gorm:"column:ub;type:decimal(10,2);comment:B相电压" json:"ub"`                                        // B相电压
+	Uc         decimal.Decimal `gorm:"column:uc;type:decimal(10,2);comment:C相电压" json:"uc"`                                        // C相电压
+	Ia         decimal.Decimal `gorm:"column:ia;type:decimal(10,2);comment:A相电流" json:"ia"`                                        // A相电流
+	Ib         decimal.Decimal `gorm:"column:ib;type:decimal(10,2);comment:B相电流" json:"ib"`                                        // B相电流
+	Ic         decimal.Decimal `gorm:"column:ic;type:decimal(10,2);comment:C相电流" json:"ic"`                                        // C相电流
+	Pt         decimal.Decimal `gorm:"column:pt;type:decimal(20,6);comment:总有功功率" json:"pt"`                                       // 总有功功率
+	Pft        decimal.Decimal `gorm:"column:pft;type:decimal(20,6);comment:总功率因数" json:"pft"`                                     // 总功率因数
+	Qt         decimal.Decimal `gorm:"column:qt;type:decimal(20,6);comment:总无功功率" json:"qt"`                                       // 总无功功率
+	St         decimal.Decimal `gorm:"column:st;type:decimal(20,6);comment:总视在功率" json:"st"`                                       // 总视在功率
+	Ts         int64           `gorm:"column:ts;type:bigint;not null;comment:原始时间戳（秒）" json:"ts"`                                  // 原始时间戳（秒）
+	CreateTime *time.Time      `gorm:"column:create_time;type:datetime;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
 }
 
 // TableName DeviceDataTbl's table name

@@ -10,15 +10,15 @@ import (
 
 const TableNameOpenLockTbl = "openLock_tbl"
 
-// OpenLockTbl mapped from table <openLock_tbl>
+// OpenLockTbl 开箱锁信息记录表（只记录开锁成功）
 type OpenLockTbl struct {
-	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                                // 主键id
-	Openid     string    `gorm:"column:openid;comment:openid" json:"openid"`                                                    // openid
-	Name       string    `gorm:"column:name;comment:姓名" json:"name"`                                                            // 姓名
-	Phone      string    `gorm:"column:phone;comment:手机号" json:"phone"`                                                         // 手机号
-	ProductID  string    `gorm:"column:product_id;comment:产品id" json:"product_id"`                                              // 产品id
-	CreateTime time.Time `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:打开箱锁时间" json:"create_time"` // 打开箱锁时间
-	UpdateTime time.Time `gorm:"column:update_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"`   // 更新时间
+	ID         int32      `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:主键id" json:"id"`                      // 主键id
+	Openid     string     `gorm:"column:openid;type:varchar(255);comment:openid" json:"openid"`                                 // openid
+	Name       string     `gorm:"column:name;type:varchar(255);comment:姓名" json:"name"`                                         // 姓名
+	Phone      string     `gorm:"column:phone;type:varchar(255);comment:手机号" json:"phone"`                                      // 手机号
+	ProductID  string     `gorm:"column:product_id;type:varchar(255);comment:产品id" json:"product_id"`                           // 产品id
+	CreateTime *time.Time `gorm:"column:create_time;type:datetime;default:CURRENT_TIMESTAMP;comment:打开箱锁时间" json:"create_time"` // 打开箱锁时间
+	UpdateTime *time.Time `gorm:"column:update_time;type:datetime;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"`   // 更新时间
 }
 
 // TableName OpenLockTbl's table name

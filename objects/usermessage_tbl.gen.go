@@ -42,6 +42,7 @@ func newUsermessageTbl(db *gorm.DB, opts ...gen.DOOption) usermessageTbl {
 	return _usermessageTbl
 }
 
+// usermessageTbl 已废弃
 type usermessageTbl struct {
 	usermessageTblDo usermessageTblDo
 

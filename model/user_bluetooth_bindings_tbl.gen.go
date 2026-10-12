@@ -10,15 +10,15 @@ import (
 
 const TableNameUserBluetoothBindingsTbl = "user_bluetooth_bindings_tbl"
 
-// UserBluetoothBindingsTbl mapped from table <user_bluetooth_bindings_tbl>
+// UserBluetoothBindingsTbl 用户蓝牙设备绑定关系表
 type UserBluetoothBindingsTbl struct {
-	ID           int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键ID" json:"id"`                                             // 主键ID
-	Openid       string    `gorm:"column:openid;not null;comment:用户openid" json:"openid"`                                                      // 用户openid
-	BluetoothMac string    `gorm:"column:bluetooth_mac;not null;comment:蓝牙设备MAC地址" json:"bluetooth_mac"`                                       // 蓝牙设备MAC地址
-	IsDefault    bool      `gorm:"column:is_default;comment:是否默认设备(0:否,1:是)" json:"is_default"`                                                // 是否默认设备(0:否,1:是)
-	Status       bool      `gorm:"column:status;default:1;comment:绑定状态(0:已解绑,1:已绑定)" json:"status"`                                            // 绑定状态(0:已解绑,1:已绑定)
-	CreateTime   time.Time `gorm:"column:create_time;not null;type:timestamp;default:CURRENT_TIMESTAMP;comment:创建时间(绑定时间)" json:"create_time"` // 创建时间(绑定时间)
-	UpdateTime   time.Time `gorm:"column:update_time;not null;type:timestamp;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"`       // 更新时间
+	ID           int32      `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:主键ID" json:"id"`                                   // 主键ID
+	Openid       string     `gorm:"column:openid;type:varchar(64);not null;comment:用户openid" json:"openid"`                                    // 用户openid
+	BluetoothMac string     `gorm:"column:bluetooth_mac;type:varchar(20);not null;comment:蓝牙设备MAC地址" json:"bluetooth_mac"`                     // 蓝牙设备MAC地址
+	IsDefault    bool       `gorm:"column:is_default;type:tinyint(1);comment:是否默认设备(0:否,1:是)" json:"is_default"`                               // 是否默认设备(0:否,1:是)
+	Status       bool       `gorm:"column:status;type:tinyint(1);default:1;comment:绑定状态(0:已解绑,1:已绑定)" json:"status"`                           // 绑定状态(0:已解绑,1:已绑定)
+	CreateTime   *time.Time `gorm:"column:create_time;type:datetime;not null;default:CURRENT_TIMESTAMP;comment:创建时间(绑定时间)" json:"create_time"` // 创建时间(绑定时间)
+	UpdateTime   *time.Time `gorm:"column:update_time;type:datetime;not null;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"`       // 更新时间
 }
 
 // TableName UserBluetoothBindingsTbl's table name

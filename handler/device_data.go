@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 
 	"caicai-go/conf"
 	"caicai-go/model"
@@ -80,7 +81,7 @@ func (d *DeviceDataController) Receive(c *gin.Context) {
 		return
 	}
 
-	row := model.DeviceDataTbl{Imei: req.Imei, Ts: req.Ts, CreateTime: time.Now()}
+	row := model.DeviceDataTbl{Imei: req.Imei, Ts: req.Ts, CreateTime: timePtr(time.Now())}
 	for k, v := range inner {
 		if v == nil {
 			continue
@@ -89,7 +90,7 @@ func (d *DeviceDataController) Receive(c *gin.Context) {
 		if idx := strings.Index(k, ":"); idx >= 0 {
 			field = k[idx+1:]
 		}
-		val := parseFloat(v)
+		val := decimal.NewFromFloat(parseFloat(v))
 		switch field {
 		case "ept":
 			row.Ept = val

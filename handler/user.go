@@ -344,7 +344,7 @@ func (u *UserController) Submit(c *gin.Context) {
 	if err := objects.DriveruseTbl.WithContext(ctx).Create(&model.DriveruseTbl{
 		Openid:        openid,
 		ReserveNumber: 3,
-		EveryDay:      time.Now(),
+		EveryDay:      timePtr(time.Now()),
 	}); err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 	}
@@ -370,7 +370,7 @@ func saveDriverUse(ctx context.Context, openid string) {
 	if err := objects.DriveruseTbl.WithContext(ctx).Create(&model.DriveruseTbl{
 		Openid:        openid,
 		ReserveNumber: 3,
-		EveryDay:      time.Now(),
+		EveryDay:      timePtr(time.Now()),
 	}); err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 	}

@@ -138,7 +138,7 @@ func (c *DriverUseController) Save(ctx *gin.Context) {
 	rec := model.DriveruseTbl{
 		Openid:        openid,
 		ReserveNumber: 3,
-		EveryDay:      time.Now(),
+		EveryDay:      timePtr(time.Now()),
 	}
 	conf.Db.Create(&rec)
 	ctx.JSON(http.StatusOK, ResultSuccess(true))

@@ -49,7 +49,7 @@ func (c *VideoWatchRecordController) Save(ctx *gin.Context) {
 	}
 	// 对齐 Java VideoWatchRecordServiceImpl.saveVideoWatchRecord：状态置为已观看，观看时间置为当前。
 	v.Status = true
-	v.WatchTime = time.Now()
+	v.WatchTime = timePtr(time.Now())
 	if conf.Db.Create(&v).Error != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "视频观看记录保存失败"))
 		return
@@ -124,7 +124,7 @@ func (c *PackageRecordController) createPackageRecord(req packageRecordRequest) 
 		Order("create_time desc").First(&lastRecord)
 	if lastRecord.OrderNo != "" && !lastRecord.EndTime.IsZero() &&
 		lastRecord.EndTime.After(now) && lastRecord.Duration != 0 {
-		startTime = lastRecord.EndTime
+		startTime = timeOrZero(lastRecord.EndTime)
 		endTime = startTime.AddDate(0, 0, int(req.Days))
 	} else {
 		endTime = now.AddDate(0, 0, int(req.Days))
@@ -139,8 +139,8 @@ func (c *PackageRecordController) createPackageRecord(req packageRecordRequest) 
 		Duration:   req.Duration,
 		MaxPower:   req.MaxPower,
 		Status:     "pending",
-		CreateTime: startTime,
-		EndTime:    endTime,
+		CreateTime: timePtr(startTime),
+		EndTime:    timePtr(endTime),
 	}
 	if conf.Db.Create(&rec).Error != nil {
 		return ""
@@ -279,7 +279,7 @@ func (c *CommunityApplyController) Add(ctx *gin.Context) {
 		return
 	}
 	// 对齐 Java CommunityApplyServiceImpl.addCommunityApply：申请时间置为当前时间。
-	a.ApplyTime = time.Now()
+	a.ApplyTime = timePtr(time.Now())
 	if conf.Db.Create(&a).Error != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "添加小区申请失败"))
 		return

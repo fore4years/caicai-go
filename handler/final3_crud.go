@@ -699,7 +699,7 @@ func (c *HotelSelfController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultError(500, "酒店封面未上传"))
 		return
 	}
-	h.CreatTime = time.Now()
+	h.CreatTime = timePtr(time.Now())
 	res := conf.Db.Model(&model.HotelTbl{}).Where("id = ?", h.ID).Updates(h)
 	ctx.JSON(http.StatusOK, ResultSuccess(int(res.RowsAffected)))
 }
@@ -1028,7 +1028,7 @@ func (c *OwnerController) LockAdd(ctx *gin.Context) {
 	l := model.LockTbl{
 		Lockid:    lockid,
 		Lockmac:   lockmac,
-		FixDate:   time.Now(),
+		FixDate:   timePtr(time.Now()),
 		Placeid:   placeid,
 		State:     "正常",
 		ProductID: ctx.PostForm("productId"),

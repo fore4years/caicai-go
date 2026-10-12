@@ -8,12 +8,12 @@ const TableNameAppointmentTbl = "appointment_tbl"
 
 // AppointmentTbl mapped from table <appointment_tbl>
 type AppointmentTbl struct {
-	Openid      string `gorm:"column:openid" json:"openid"`
-	Lockid      string `gorm:"column:lockid" json:"lockid"`
-	ReserveTime string `gorm:"column:reserveTime" json:"reserveTime"`
-	Status      string `gorm:"column:status" json:"status"`
-	PlateNum    string `gorm:"column:plate_num" json:"plate_num"`
-	PalteColor  string `gorm:"column:palte_color" json:"palte_color"`
+	Openid      string `gorm:"column:openid;type:varchar(255)" json:"openid"`
+	Lockid      string `gorm:"column:lockid;type:varchar(255)" json:"lockid"`
+	ReserveTime string `gorm:"column:reserveTime;type:varchar(255)" json:"reserveTime"`
+	Status      string `gorm:"column:status;type:varchar(255)" json:"status"`
+	PlateNum    string `gorm:"column:plate_num;type:varchar(255)" json:"plate_num"`
+	PalteColor  string `gorm:"column:palte_color;type:varchar(255)" json:"palte_color"`
 }
 
 // TableName AppointmentTbl's table name

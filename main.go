@@ -34,6 +34,11 @@ func main() {
 	// 初始化设备通信基础设施（MQTT 下发 + 订阅上行主题 + Redis）
 	service.InitDevice(conf.Cfg.Mqtt, conf.Cfg.Redis)
 
+	// 启动 TCP 设备服务器（兼容仍使用自定义二进制协议的老设备）
+	if err := service.StartTCPServer(int(conf.Cfg.Tcp.Port)); err != nil {
+		logger.Mylog.Fatal().Err(err).Msg("TCP 设备服务器启动失败")
+	}
+
 	gin.DefaultWriter = io.Discard
 	r := gin.New()
 	// 全局中间件：panic 恢复 + 鉴权（对齐 Java WebAppConfigurer 的 PathInterceptor + LoginInterceptor）。

@@ -335,7 +335,7 @@ func receptacleByID(id int32) *model.ReceptacleTbl {
 	return &r
 }
 
-// receptacleByOrderid 根据订单查询二轮车插座（通过订单 lockid 关联插座名）。
+// receptacleByOrderid 根据订单查询二轮车插座（对齐 Java selectReceptacleByOrderid：number = order.lockid AND pid = order.pid）。
 func receptacleByOrderid(orderid string) *model.ReceptacleTbl {
 	var order model.OrderTbl
 	if conf.Db.Where("orderid = ?", orderid).First(&order).Error != nil {
@@ -345,7 +345,7 @@ func receptacleByOrderid(orderid string) *model.ReceptacleTbl {
 		return nil
 	}
 	var r model.ReceptacleTbl
-	if conf.Db.Where("name = ?", order.Lockid+"号").First(&r).Error != nil {
+	if conf.Db.Where("number = ? AND pid = ?", order.Lockid, order.Pid).First(&r).Error != nil {
 		return nil
 	}
 	return &r
@@ -401,75 +401,88 @@ func freezeBalance(openid string, amount decimal.Decimal) bool {
 	return res.RowsAffected > 0
 }
 
-// consumeBalance 余额消费：按充值订单创建时间 FIFO 扣减 remaining_refund_amount，并释放冻结余额。
-// 多步写操作（用户余额 + 多条充值订单），包裹在事务内并加 FOR UPDATE 行锁，保证原子性与并发安全。
+// consumeBalanceTx 在给定事务内执行余额消费：按充值订单创建时间 FIFO 扣减 remaining_refund_amount，
+// 并释放冻结余额。返回是否成功、扣减后的新余额及错误。用户不存在/余额不足返回 ok=false 且 err=nil
+// （无写入、无需回滚）；DB 错误返回 err（由外层事务回滚）。供需要把余额扣款与订单结算放进同一事务的调用方使用。
+func consumeBalanceTx(tx *gorm.DB, openid string, amount decimal.Decimal) (bool, decimal.Decimal, error) {
+	var user model.UserTbl
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("openid = ?", openid).First(&user).Error; err != nil {
+		return false, decimal.Zero, nil // 用户不存在：无操作
+	}
+	totalBalance := user.Balans.Add(user.FreezeBalans)
+	if totalBalance.LessThan(amount) {
+		return false, decimal.Zero, nil // 余额不足：无操作
+	}
+
+	var rechargeOrders []model.RechargeOrderTbl
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("openid = ? AND order_status = ?", openid, "已支付").
+		Order("create_time asc").Find(&rechargeOrders).Error; err != nil {
+		return false, decimal.Zero, err
+	}
+
+	var rechargeTotal decimal.Decimal
+	for _, o := range rechargeOrders {
+		rechargeTotal = rechargeTotal.Add(o.RemainingRefundAmount)
+	}
+	otherSource := totalBalance.Sub(rechargeTotal)
+	if otherSource.IsNegative() {
+		otherSource = decimal.Zero
+	}
+	needFromRecharge := amount.Sub(otherSource)
+	if needFromRecharge.IsNegative() {
+		needFromRecharge = decimal.Zero
+	}
+
+	if needFromRecharge.IsPositive() {
+		remaining := needFromRecharge
+		for i := range rechargeOrders {
+			if !remaining.IsPositive() {
+				break
+			}
+			o := &rechargeOrders[i]
+			if !o.RemainingRefundAmount.IsPositive() {
+				continue
+			}
+			var deduct decimal.Decimal
+			if o.RemainingRefundAmount.GreaterThanOrEqual(remaining) {
+				deduct = remaining
+				o.RemainingRefundAmount = o.RemainingRefundAmount.Sub(deduct)
+				remaining = decimal.Zero
+			} else {
+				deduct = o.RemainingRefundAmount
+				o.RemainingRefundAmount = decimal.Zero
+				remaining = remaining.Sub(deduct)
+			}
+			if err := tx.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", o.OrderID).
+				Update("remaining_refund_amount", o.RemainingRefundAmount).Error; err != nil {
+				return false, decimal.Zero, err
+			}
+		}
+	}
+
+	newBalance := totalBalance.Sub(amount)
+	if err := tx.Model(&model.UserTbl{}).Where("openid = ?", openid).
+		Updates(map[string]interface{}{"balans": newBalance, "freeze_balans": decimal.Zero}).Error; err != nil {
+		return false, decimal.Zero, err
+	}
+	return true, newBalance, nil
+}
+
+// consumeBalance 余额消费：包在独立事务内执行 consumeBalanceTx，保证原子性与并发安全。
 func consumeBalance(openid string, amount decimal.Decimal) bool {
 	consumed := false
 	var newBalance decimal.Decimal
 	_ = conf.Db.Transaction(func(tx *gorm.DB) error {
-		var user model.UserTbl
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("openid = ?", openid).First(&user).Error; err != nil {
-			return nil // 用户不存在：无操作
-		}
-		totalBalance := user.Balans.Add(user.FreezeBalans)
-		if totalBalance.LessThan(amount) {
-			return nil // 余额不足：无操作
-		}
-
-		var rechargeOrders []model.RechargeOrderTbl
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("openid = ? AND order_status = ?", openid, "已支付").
-			Order("create_time asc").Find(&rechargeOrders).Error; err != nil {
+		ok, nb, err := consumeBalanceTx(tx, openid, amount)
+		if err != nil {
 			return err
 		}
-
-		var rechargeTotal decimal.Decimal
-		for _, o := range rechargeOrders {
-			rechargeTotal = rechargeTotal.Add(o.RemainingRefundAmount)
+		if ok {
+			consumed = true
+			newBalance = nb
 		}
-		otherSource := totalBalance.Sub(rechargeTotal)
-		if otherSource.IsNegative() {
-			otherSource = decimal.Zero
-		}
-		needFromRecharge := amount.Sub(otherSource)
-		if needFromRecharge.IsNegative() {
-			needFromRecharge = decimal.Zero
-		}
-
-		if needFromRecharge.IsPositive() {
-			remaining := needFromRecharge
-			for i := range rechargeOrders {
-				if !remaining.IsPositive() {
-					break
-				}
-				o := &rechargeOrders[i]
-				if !o.RemainingRefundAmount.IsPositive() {
-					continue
-				}
-				var deduct decimal.Decimal
-				if o.RemainingRefundAmount.GreaterThanOrEqual(remaining) {
-					deduct = remaining
-					o.RemainingRefundAmount = o.RemainingRefundAmount.Sub(deduct)
-					remaining = decimal.Zero
-				} else {
-					deduct = o.RemainingRefundAmount
-					o.RemainingRefundAmount = decimal.Zero
-					remaining = remaining.Sub(deduct)
-				}
-				if err := tx.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", o.OrderID).
-					Update("remaining_refund_amount", o.RemainingRefundAmount).Error; err != nil {
-					return err
-				}
-			}
-		}
-
-		newBalance = totalBalance.Sub(amount)
-		if err := tx.Model(&model.UserTbl{}).Where("openid = ?", openid).
-			Updates(map[string]interface{}{"balans": newBalance, "freeze_balans": decimal.Zero}).Error; err != nil {
-			return err
-		}
-		consumed = true
 		return nil
 	})
 	if !consumed {

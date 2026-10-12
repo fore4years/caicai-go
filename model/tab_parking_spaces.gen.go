@@ -12,26 +12,26 @@ import (
 
 const TableNameTabParkingSpace = "tab_parking_spaces"
 
-// TabParkingSpace mapped from table <tab_parking_spaces>
+// TabParkingSpace 车位表
 type TabParkingSpace struct {
-	ID            int32           `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
-	Point         string          `gorm:"column:point;comment:经纬度点" json:"point"`                      // 经纬度点
-	Place         string          `gorm:"column:place;comment:位置" json:"place"`                        // 位置
-	Name          string          `gorm:"column:name;comment:车位名" json:"name"`                         // 车位名
-	Openid        string          `gorm:"column:openid;comment:所属用户openid" json:"openid"`              // 所属用户openid
-	LotID         int32           `gorm:"column:lot_id;comment:停车场id" json:"lot_id"`                   // 停车场id
-	LockID        string          `gorm:"column:lock_id;comment:车位锁id" json:"lock_id"`                 // 车位锁id
-	ChargingGunID int32           `gorm:"column:charging_gun_id;comment:充电枪id" json:"charging_gun_id"` // 充电枪id
+	ID            int32           `gorm:"column:id;type:int;primaryKey;autoIncrement:true" json:"id"`
+	Point         Point           `gorm:"column:point;type:point;comment:经纬度点" json:"point"`                    // 经纬度点
+	Place         string          `gorm:"column:place;type:varchar(255);comment:位置" json:"place"`               // 位置
+	Name          string          `gorm:"column:name;type:varchar(30);comment:车位名" json:"name"`                 // 车位名
+	Openid        string          `gorm:"column:openid;type:varchar(28);comment:所属用户openid" json:"openid"`      // 所属用户openid
+	LotID         int32           `gorm:"column:lot_id;type:int;comment:停车场id" json:"lot_id"`                   // 停车场id
+	LockID        string          `gorm:"column:lock_id;type:varchar(20);comment:车位锁id" json:"lock_id"`         // 车位锁id
+	ChargingGunID int32           `gorm:"column:charging_gun_id;type:int;comment:充电枪id" json:"charging_gun_id"` // 充电枪id
 	OpenTime      time.Time       `gorm:"column:open_time;type:time" json:"open_time"`
-	CloseTime     time.Time       `gorm:"column:close_time;type:time;default:23:59:59;comment:关闭时间" json:"close_time"`              // 关闭时间
-	ImageID       int32           `gorm:"column:image_id;comment:停车场照片id" json:"image_id"`                                          // 停车场照片id
-	SpacesCode    string          `gorm:"column:spaces_code;comment:车位码" json:"spaces_code"`                                        // 车位码
-	Enable        bool            `gorm:"column:enable;comment:审核状态(true为已通过)" json:"enable"`                                       // 审核状态(true为已通过)
-	Certificate   int32           `gorm:"column:certificate;comment:产权证照片id" json:"certificate"`                                    // 产权证照片id
-	Service       decimal.Decimal `gorm:"column:service;comment:服务费" json:"service"`                                                // 服务费
-	ServiceFee    decimal.Decimal `gorm:"column:service_fee;comment:优惠后服务费" json:"service_fee"`                                     // 优惠后服务费
-	OvertimeFee   bool            `gorm:"column:overtime_fee;not null;default:1;comment:是否收取超时占位费(0:不收取,1:收取)" json:"overtime_fee"` // 是否收取超时占位费(0:不收取,1:收取)
-	PriceMode     bool            `gorm:"column:price_mode;comment:电价模式" json:"price_mode"`                                         // 电价模式
+	CloseTime     time.Time       `gorm:"column:close_time;type:time;default:23:59:59;comment:关闭时间" json:"close_time"`                              // 关闭时间
+	ImageID       int32           `gorm:"column:image_id;type:int;comment:停车场照片id" json:"image_id"`                                                 // 停车场照片id
+	SpacesCode    string          `gorm:"column:spaces_code;type:varchar(12);comment:车位码" json:"spaces_code"`                                       // 车位码
+	Enable        bool            `gorm:"column:enable;type:tinyint(1);comment:审核状态(true为已通过)" json:"enable"`                                       // 审核状态(true为已通过)
+	Certificate   int32           `gorm:"column:certificate;type:int;comment:产权证照片id" json:"certificate"`                                           // 产权证照片id
+	Service       decimal.Decimal `gorm:"column:service;type:decimal(10,2);comment:服务费" json:"service"`                                             // 服务费
+	ServiceFee    decimal.Decimal `gorm:"column:service_fee;type:decimal(10,2);comment:优惠后服务费" json:"service_fee"`                                  // 优惠后服务费
+	OvertimeFee   bool            `gorm:"column:overtime_fee;type:tinyint(1);not null;default:1;comment:是否收取超时占位费(0:不收取,1:收取)" json:"overtime_fee"` // 是否收取超时占位费(0:不收取,1:收取)
+	PriceMode     bool            `gorm:"column:price_mode;type:tinyint(1);comment:电价模式" json:"price_mode"`                                         // 电价模式
 }
 
 // TableName TabParkingSpace's table name

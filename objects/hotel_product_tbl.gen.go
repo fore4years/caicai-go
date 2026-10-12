@@ -44,6 +44,7 @@ func newHotelProductTbl(db *gorm.DB, opts ...gen.DOOption) hotelProductTbl {
 	return _hotelProductTbl
 }
 
+// hotelProductTbl 酒店车位锁关联表
 type hotelProductTbl struct {
 	hotelProductTblDo hotelProductTblDo
 

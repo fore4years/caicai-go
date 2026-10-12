@@ -29,8 +29,8 @@ func newOrderTwiceTbl(db *gorm.DB, opts ...gen.DOOption) orderTwiceTbl {
 	tableName := _orderTwiceTbl.orderTwiceTblDo.TableName()
 	_orderTwiceTbl.ALL = field.NewAsterisk(tableName)
 	_orderTwiceTbl.Orderid = field.NewString(tableName, "orderid")
-	_orderTwiceTbl.PowerRate = field.NewString(tableName, "power_rate")
-	_orderTwiceTbl.ServiceRate = field.NewString(tableName, "service_rate")
+	_orderTwiceTbl.PowerRate = field.NewField(tableName, "power_rate")
+	_orderTwiceTbl.ServiceRate = field.NewField(tableName, "service_rate")
 	_orderTwiceTbl.CreateTime = field.NewTime(tableName, "create_time")
 	_orderTwiceTbl.UpdateTime = field.NewTime(tableName, "update_time")
 
@@ -39,13 +39,14 @@ func newOrderTwiceTbl(db *gorm.DB, opts ...gen.DOOption) orderTwiceTbl {
 	return _orderTwiceTbl
 }
 
+// orderTwiceTbl 二轮车订单-计费表
 type orderTwiceTbl struct {
 	orderTwiceTblDo orderTwiceTblDo
 
 	ALL         field.Asterisk
 	Orderid     field.String // 订单id
-	PowerRate   field.String // 电费
-	ServiceRate field.String // 服务费
+	PowerRate   field.Field  // 电费
+	ServiceRate field.Field  // 服务费
 	CreateTime  field.Time   // 创建时间
 	UpdateTime  field.Time   // 更新时间
 
@@ -65,8 +66,8 @@ func (o orderTwiceTbl) As(alias string) *orderTwiceTbl {
 func (o *orderTwiceTbl) updateTableName(table string) *orderTwiceTbl {
 	o.ALL = field.NewAsterisk(table)
 	o.Orderid = field.NewString(table, "orderid")
-	o.PowerRate = field.NewString(table, "power_rate")
-	o.ServiceRate = field.NewString(table, "service_rate")
+	o.PowerRate = field.NewField(table, "power_rate")
+	o.ServiceRate = field.NewField(table, "service_rate")
 	o.CreateTime = field.NewTime(table, "create_time")
 	o.UpdateTime = field.NewTime(table, "update_time")
 

@@ -628,8 +628,8 @@ func (w *WodeController) OverOrder(c *gin.Context) {
 
 	now := time.Now()
 	var totalPrice decimal.Decimal
-	if !order.BeginTime.IsZero() {
-		useTime := now.Sub(order.BeginTime)
+	if !isZeroTime(order.BeginTime) {
+		useTime := now.Sub(timeOrZero(order.BeginTime))
 		minutes := int(useTime.Minutes())
 		if minutes <= 30 {
 			totalPrice = decimal.Zero
@@ -649,7 +649,7 @@ func (w *WodeController) OverOrder(c *gin.Context) {
 			if len(parts) >= 2 {
 				closeTimeStr := order.BeginTime.Format("2006-01-02") + " " + parts[1] + ":00"
 				if closeT, err := time.ParseInLocation("2006-01-02 15:04:05", closeTimeStr, time.Local); err == nil {
-					okTime := closeT.Sub(order.BeginTime)
+					okTime := closeT.Sub(timeOrZero(order.BeginTime))
 					if useTime > okTime {
 						availableMinutes := int(okTime.Minutes())
 						useMinutes := minutes
@@ -675,8 +675,8 @@ func (w *WodeController) OverOrder(c *gin.Context) {
 	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", place.Placeid).Update("state", "可使用")
 
 	chargingTime := ""
-	if !order.BeginTime.IsZero() {
-		d := now.Sub(order.BeginTime)
+	if !isZeroTime(order.BeginTime) {
+		d := now.Sub(timeOrZero(order.BeginTime))
 		chargingTime = time.Time{}.Add(d).Format("15:04:05")
 	}
 	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", req.Orderid).Updates(map[string]interface{}{

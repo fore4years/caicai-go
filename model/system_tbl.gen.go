@@ -6,12 +6,12 @@ package model
 
 const TableNameSystemTbl = "system_tbl"
 
-// SystemTbl mapped from table <system_tbl>
+// SystemTbl 后台管理用户表
 type SystemTbl struct {
-	ID       string `gorm:"column:id;primaryKey;comment:管理员id" json:"id"`           // 管理员id
-	Account  string `gorm:"column:account;comment:账户" json:"account"`               // 账户
-	Password string `gorm:"column:password;comment:密码" json:"password"`             // 密码
-	IsAdmin  bool   `gorm:"column:is_admin;comment:是否为管理员：1-是，0-否" json:"is_admin"` // 是否为管理员：1-是，0-否
+	ID       string `gorm:"column:id;type:varchar(255);primaryKey;comment:管理员id" json:"id"`         // 管理员id
+	Account  string `gorm:"column:account;type:varchar(255);comment:账户" json:"account"`             // 账户
+	Password string `gorm:"column:password;type:varchar(255);comment:密码" json:"password"`           // 密码
+	IsAdmin  bool   `gorm:"column:is_admin;type:tinyint(1);comment:是否为管理员：1-是，0-否" json:"is_admin"` // 是否为管理员：1-是，0-否
 }
 
 // TableName SystemTbl's table name

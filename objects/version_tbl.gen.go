@@ -39,6 +39,7 @@ func newVersionTbl(db *gorm.DB, opts ...gen.DOOption) versionTbl {
 	return _versionTbl
 }
 
+// versionTbl 版本信息表
 type versionTbl struct {
 	versionTblDo versionTblDo
 

@@ -41,6 +41,7 @@ func newOpenLockTbl(db *gorm.DB, opts ...gen.DOOption) openLockTbl {
 	return _openLockTbl
 }
 
+// openLockTbl 开箱锁信息记录表（只记录开锁成功）
 type openLockTbl struct {
 	openLockTblDo openLockTblDo
 

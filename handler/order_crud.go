@@ -35,8 +35,8 @@ func tabOrderElectronicToDTO(e model.TabOrderElectronic) tabOrderElectronicDTO {
 	return tabOrderElectronicDTO{
 		ID:          e.ID,
 		OrderID:     e.OrderID,
-		StartValue:  e.StartValue,
-		OverValue:   e.OverValue,
+		StartValue:  e.StartValue.InexactFloat64(),
+		OverValue:   e.OverValue.InexactFloat64(),
 		PriceTimeID: e.PriceTimeID,
 		CreateTime:  timeToLocal(e.CreateTime),
 		UpdateTime:  timeToLocal(e.UpdateTime),
@@ -333,8 +333,8 @@ func (c *OrderElectronicController) GetPeriodFeesByOrderid(ctx *gin.Context) {
 			continue
 		}
 		vo := orderElectronicPeriodDTO{
-			CreateTime:       timeToLocal(createTime),
-			UpdateTime:       timeToLocal(updateTime),
+			CreateTime:       timeToLocal(timePtr(createTime)),
+			UpdateTime:       timeToLocal(timePtr(updateTime)),
 			PriceTotal:       roundNullableDecimal(priceTotal, 4),
 			TotalFee:         roundNullableDecimal(totalFee, 2),
 			ServiceUnitPrice: roundNullableDecimal(serviceUnitPrice, 4),
@@ -532,8 +532,8 @@ func (c *WithdrawalController) Apply(ctx *gin.Context) {
 		RelatedRechargeOrderID: req.RelatedRechargeOrderID,
 		WithdrawalStatus:       withdrawalApplying,
 		WithdrawalType:         "提现",
-		CreateTime:             time.Now(),
-		UpdateTime:             time.Now(),
+		CreateTime:             timePtr(time.Now()),
+		UpdateTime:             timePtr(time.Now()),
 	}
 	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&rec).Error == nil))
 }
@@ -677,8 +677,8 @@ func (c *WithdrawalController) applyRefund(openid, rechargeOrderID string, refun
 		RelatedRechargeOrderID: rechargeOrderID,
 		WithdrawalStatus:       withdrawalApplying,
 		WithdrawalType:         "退款",
-		CreateTime:             time.Now(),
-		UpdateTime:             time.Now(),
+		CreateTime:             timePtr(time.Now()),
+		UpdateTime:             timePtr(time.Now()),
 	}
 	if conf.Db.Omit("process_time").Create(&refundRecord).Error != nil {
 		return false, "退款申请保存失败"

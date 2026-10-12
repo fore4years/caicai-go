@@ -10,17 +10,17 @@ import (
 
 const TableNameFaultTbl = "fault_tbl"
 
-// FaultTbl mapped from table <fault_tbl>
+// FaultTbl 故障上报
 type FaultTbl struct {
-	Faultid         string    `gorm:"column:faultid;primaryKey" json:"faultid"`
-	Openid          string    `gorm:"column:openid;comment:上报者id" json:"openid"`                    // 上报者id
-	Lockmac         string    `gorm:"column:lockmac;comment:lockid" json:"lockmac"`                 // lockid
-	Error           string    `gorm:"column:error;comment:故障描述" json:"error"`                       // 故障描述
-	Image           string    `gorm:"column:image;comment:故障图片" json:"image"`                       // 故障图片
-	PutTime         time.Time `gorm:"column:putTime;comment:上报时间" json:"putTime"`                   // 上报时间
-	State           string    `gorm:"column:state;comment:状态" json:"state"`                         // 状态
-	MaintenanceTime time.Time `gorm:"column:Maintenance_time;comment:维护时间" json:"Maintenance_time"` // 维护时间
-	Name            string    `gorm:"column:name;comment:维护人员" json:"name"`                         // 维护人员
+	Faultid         string     `gorm:"column:faultid;type:varchar(255);primaryKey" json:"faultid"`
+	Openid          string     `gorm:"column:openid;type:varchar(255);comment:上报者id" json:"openid"`                // 上报者id
+	Lockmac         string     `gorm:"column:lockmac;type:varchar(255);comment:lockid" json:"lockmac"`             // lockid
+	Error           string     `gorm:"column:error;type:varchar(255);comment:故障描述" json:"error"`                   // 故障描述
+	Image           string     `gorm:"column:image;type:varchar(255);comment:故障图片" json:"image"`                   // 故障图片
+	PutTime         *time.Time `gorm:"column:putTime;type:datetime;comment:上报时间" json:"putTime"`                   // 上报时间
+	State           string     `gorm:"column:state;type:varchar(255);comment:状态" json:"state"`                     // 状态
+	MaintenanceTime *time.Time `gorm:"column:Maintenance_time;type:datetime;comment:维护时间" json:"Maintenance_time"` // 维护时间
+	Name            string     `gorm:"column:name;type:varchar(255);comment:维护人员" json:"name"`                     // 维护人员
 }
 
 // TableName FaultTbl's table name

@@ -30,7 +30,7 @@ func newWithdrawalRecordTbl(db *gorm.DB, opts ...gen.DOOption) withdrawalRecordT
 	_withdrawalRecordTbl.ALL = field.NewAsterisk(tableName)
 	_withdrawalRecordTbl.RecordID = field.NewString(tableName, "record_id")
 	_withdrawalRecordTbl.Openid = field.NewString(tableName, "openid")
-	_withdrawalRecordTbl.WithdrawalAmount = field.NewString(tableName, "withdrawal_amount")
+	_withdrawalRecordTbl.WithdrawalAmount = field.NewField(tableName, "withdrawal_amount")
 	_withdrawalRecordTbl.RefundOrderID = field.NewString(tableName, "refund_order_id")
 	_withdrawalRecordTbl.RelatedRechargeOrderID = field.NewString(tableName, "related_recharge_order_id")
 	_withdrawalRecordTbl.WithdrawalStatus = field.NewString(tableName, "withdrawal_status")
@@ -47,13 +47,14 @@ func newWithdrawalRecordTbl(db *gorm.DB, opts ...gen.DOOption) withdrawalRecordT
 	return _withdrawalRecordTbl
 }
 
+// withdrawalRecordTbl 退款记录表
 type withdrawalRecordTbl struct {
 	withdrawalRecordTblDo withdrawalRecordTblDo
 
 	ALL                    field.Asterisk
 	RecordID               field.String // 退款记录ID（主键）
 	Openid                 field.String // 用户openid
-	WithdrawalAmount       field.String // 退款金额
+	WithdrawalAmount       field.Field  // 退款金额
 	RefundOrderID          field.String // 退款订单号
 	RelatedRechargeOrderID field.String // 关联的充值订单号
 	WithdrawalStatus       field.String // 提现状态（申请中、已处理、已拒绝）
@@ -82,7 +83,7 @@ func (w *withdrawalRecordTbl) updateTableName(table string) *withdrawalRecordTbl
 	w.ALL = field.NewAsterisk(table)
 	w.RecordID = field.NewString(table, "record_id")
 	w.Openid = field.NewString(table, "openid")
-	w.WithdrawalAmount = field.NewString(table, "withdrawal_amount")
+	w.WithdrawalAmount = field.NewField(table, "withdrawal_amount")
 	w.RefundOrderID = field.NewString(table, "refund_order_id")
 	w.RelatedRechargeOrderID = field.NewString(table, "related_recharge_order_id")
 	w.WithdrawalStatus = field.NewString(table, "withdrawal_status")

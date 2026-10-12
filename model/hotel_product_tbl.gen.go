@@ -6,18 +6,18 @@ package model
 
 const TableNameHotelProductTbl = "hotel_product_tbl"
 
-// HotelProductTbl mapped from table <hotel_product_tbl>
+// HotelProductTbl 酒店车位锁关联表
 type HotelProductTbl struct {
-	ID         int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:id" json:"id"` // id
-	HotelID    int32  `gorm:"column:hotelId;comment:酒店id" json:"hotelId"`                   // 酒店id
-	ProductID  string `gorm:"column:productId;comment:车位锁id(对应product表)" json:"productId"`  // 车位锁id(对应product表)
-	UseState   string `gorm:"column:useState;comment:0未使用1使用中" json:"useState"`             // 0未使用1使用中
-	UseTime    string `gorm:"column:useTime;comment:使用时长" json:"useTime"`                   // 使用时长
-	CreateTime string `gorm:"column:createTime;comment:锁安装时长" json:"createTime"`            // 锁安装时长
-	UpdateTime string `gorm:"column:updateTime;comment:记录更新时间" json:"updateTime"`           // 记录更新时间
-	StartTime  string `gorm:"column:startTime;comment:开锁时间" json:"startTime"`               // 开锁时间
-	EndTime    string `gorm:"column:endTime;comment:关锁时间" json:"endTime"`                   // 关锁时间
-	Choose     string `gorm:"column:choose;comment:是否选中" json:"choose"`                     // 是否选中
+	ID         int32  `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:id" json:"id"`         // id
+	HotelID    int32  `gorm:"column:hotelId;type:int;comment:酒店id" json:"hotelId"`                           // 酒店id
+	ProductID  string `gorm:"column:productId;type:varchar(255);comment:车位锁id(对应product表)" json:"productId"` // 车位锁id(对应product表)
+	UseState   string `gorm:"column:useState;type:varchar(255);comment:0未使用1使用中" json:"useState"`            // 0未使用1使用中
+	UseTime    string `gorm:"column:useTime;type:varchar(255);comment:使用时长" json:"useTime"`                  // 使用时长
+	CreateTime string `gorm:"column:createTime;type:varchar(255);comment:锁安装时长" json:"createTime"`           // 锁安装时长
+	UpdateTime string `gorm:"column:updateTime;type:varchar(255);comment:记录更新时间" json:"updateTime"`          // 记录更新时间
+	StartTime  string `gorm:"column:startTime;type:varchar(255);comment:开锁时间" json:"startTime"`              // 开锁时间
+	EndTime    string `gorm:"column:endTime;type:varchar(255);comment:关锁时间" json:"endTime"`                  // 关锁时间
+	Choose     string `gorm:"column:choose;type:varchar(255);comment:是否选中" json:"choose"`                    // 是否选中
 }
 
 // TableName HotelProductTbl's table name

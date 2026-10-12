@@ -404,7 +404,7 @@ func (c *PurchasePoleApplicationController) Create(ctx *gin.Context) {
 		IDNumber:             req.IDNumber,
 		SelectedPackage:      req.SelectedPackage,
 		SelectedColor:        req.SelectedColor,
-		InstallationDistance: req.InstallationDistance,
+		InstallationDistance: decimal.NewFromFloat(req.InstallationDistance),
 		UsageScenario:        usageScenario,
 		InstallationAddress:  req.InstallationAddress,
 		DetailedAddress:      req.DetailedAddress,
@@ -413,7 +413,7 @@ func (c *PurchasePoleApplicationController) Create(ctx *gin.Context) {
 		InstallationDate:     req.InstallationDate,
 		PaymentType:          req.PaymentType,
 		OrderStatus:          orderStatus,
-		ApplyTime:            time.Now(),
+		ApplyTime:            timePtr(time.Now()),
 	}
 	if err := conf.Db.Create(&p).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "购桩申请创建失败"))

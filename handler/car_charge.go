@@ -150,7 +150,7 @@ func (c *CarDetailsController) Yuyue(ctx *gin.Context) {
 		today := time.Now().Format("2006-01-02")
 		if du.EveryDay.Format("2006-01-02") != today {
 			du.ReserveNumber = 3
-			du.EveryDay = time.Now()
+			du.EveryDay = timePtr(time.Now())
 		}
 		reserveNumber = du.ReserveNumber
 	}
@@ -175,8 +175,8 @@ func (c *CarDetailsController) Yuyue(ctx *gin.Context) {
 			Orderid:         orderid,
 			Openid:          openid,
 			Lockid:          lockid,
-			ReserveTime:     now,
-			BeginTime:       now,
+			ReserveTime:     timePtr(now),
+			BeginTime:       timePtr(now),
 			State:           "预约中",
 			SpacesID:        spacesID,
 			PlateNum:        plateNum,
@@ -640,7 +640,7 @@ func (c *ChargeListController) GetChargePayMsg(ctx *gin.Context) {
 	min := minutes % 60
 	totalTime := fmt.Sprintf("%d小时 %d分钟", hour, min)
 
-	totalKwh := fmt.Sprintf("%.2f", o.EndKwh-o.StartKwh)
+	totalKwh := fmt.Sprintf("%.2f", o.EndKwh.Sub(o.StartKwh).InexactFloat64())
 	shouldGetPrice := o.TotalPrice.Add(o.ParkPrice).StringFixed(2)
 	actualGetPrice := o.TotalPrice.Add(o.ParkPrice).Sub(o.CouponPrice).StringFixed(2)
 

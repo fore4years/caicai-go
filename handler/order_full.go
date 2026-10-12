@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 
 	"caicai-go/conf"
 	"caicai-go/logger"
@@ -213,7 +215,7 @@ func (o *OrderController) Add(c *gin.Context) {
 		SpacesID:    int32(queryInt(c, "spacesId", 0)),
 		PlateNum:    c.Query("plateNum"),
 		State:       orderStateBooking,
-		ReserveTime: time.Now(),
+		ReserveTime: timePtr(time.Now()),
 	}
 	if conf.Db.Create(&order).Error != nil {
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
@@ -256,13 +258,13 @@ func (o *OrderController) AddByLock(c *gin.Context) {
 		Lockid:          lockid,
 		Openid:          openid,
 		SpacesID:        spacesID,
-		ReserveTime:     time.Now(),
+		ReserveTime:     timePtr(time.Now()),
 		State:           orderStateConduct,
 		PlateNum:        c.Query("plateNum"),
 		ConsumptionType: consumeTypeCaiParking,
 		GiftAmount:      "暂未开放~",
 		StartMode:       "扫码",
-		BeginTime:       time.Now(),
+		BeginTime:       timePtr(time.Now()),
 		ChargingRates:   rate,
 	}
 	if conf.Db.Create(&order).Error != nil {
@@ -296,7 +298,7 @@ func (o *OrderController) AddByCharge(c *gin.Context) {
 		TotalPrice:  totalPrice,
 		Openid:      openid,
 		SpacesID:    spaces.ID,
-		ReserveTime: time.Now(),
+		ReserveTime: timePtr(time.Now()),
 		State:       orderStateBooking,
 	}
 	if conf.Db.Create(&order).Error != nil {
@@ -338,7 +340,7 @@ func (o *OrderController) AddByTwiceCharge(c *gin.Context) {
 	order := model.OrderTbl{
 		Orderid:             newOrderID(),
 		Openid:              openid,
-		ReserveTime:         time.Now(),
+		ReserveTime:         timePtr(time.Now()),
 		ConsumptionLocation: station.Name,
 		State:               orderStateConduct,
 		ConsumptionType:     consumeTypeTwice,
@@ -352,7 +354,8 @@ func (o *OrderController) AddByTwiceCharge(c *gin.Context) {
 	if chargeType == "TimeSelected" {
 		order.TwiceChargeTime = chargeTime
 	}
-	if conf.Db.Create(&order).Error != nil {
+	if tx := conf.Db.Create(&order); tx.Error != nil {
+		logger.Mylog.Err(tx.Error).Msg("预约失败")
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
 		return
 	}
@@ -396,7 +399,7 @@ func (o *OrderController) AddByPrivateCharge(c *gin.Context) {
 		Orderid:             newOrderID(),
 		Openid:              openid,
 		SpacesID:            privatePlaceID,
-		ReserveTime:         time.Now(),
+		ReserveTime:         timePtr(time.Now()),
 		ConsumptionLocation: privatePlace.Place,
 		ConsumptionType:     consumeTypeNeighbor,
 		GiftAmount:          "暂未开放~",
@@ -437,10 +440,10 @@ func (o *OrderController) Booking(c *gin.Context) {
 		Orderid:          newOrderID(),
 		Openid:           openid,
 		SpacesID:         spacesID,
-		ReserveTime:      time.Now(),
+		ReserveTime:      timePtr(time.Now()),
 		State:            orderStateBooking,
-		BookingStartTime: startTime,
-		BookingEndTime:   endTime,
+		BookingStartTime: timePtr(startTime),
+		BookingEndTime:   timePtr(endTime),
 		ConsumptionType:  consumeTypeYiXiang,
 		ChargingRates:    currentChargingRate(),
 		StartMode:        "扫码",
@@ -491,10 +494,10 @@ func (o *OrderController) BookingByYiXiang(c *gin.Context) {
 		Orderid:          newOrderID(),
 		Openid:           openid,
 		SpacesID:         spacesID,
-		ReserveTime:      time.Now(),
+		ReserveTime:      timePtr(time.Now()),
 		State:            orderStateBooking,
-		BookingStartTime: startTime,
-		BookingEndTime:   endTime,
+		BookingStartTime: timePtr(startTime),
+		BookingEndTime:   timePtr(endTime),
 		ConsumptionType:  consumeTypeYiXiang,
 		ChargingRates:    currentChargingRate(),
 		StartMode:        "扫码",
@@ -539,7 +542,7 @@ func (o *OrderController) NewBookingByYiXiang(c *gin.Context) {
 		Orderid:         newOrderID(),
 		Openid:          openid,
 		SpacesID:        spacesID,
-		ReserveTime:     time.Now(),
+		ReserveTime:     timePtr(time.Now()),
 		State:           orderStateBooking,
 		ConsumptionType: consumeTypeYiXiang,
 		ChargingRates:   currentChargingRate(),
@@ -639,14 +642,14 @@ func (o *OrderController) Close(c *gin.Context) {
 func normalCloseOrder(order *model.OrderTbl) {
 	gun := chargingGunByOrder(order.Orderid)
 	if gun != nil {
-		if order.OverTime.IsZero() && order.ChargingDegree == 0 {
-			if !service.SendCommand(gun.deviceID(), protocol.OpCloseEle, parseDirection(gun.gun.Direction), nil) {
+		if isZeroTime(order.OverTime) && order.ChargingDegree.IsZero() {
+			if !service.SendCommand(gun.deviceID(), protocol.OpCloseEle, -1) {
 				// Java 抛「拉闸失败」；这里保守继续
 				logger.Mylog.Warn().Msgf("拉闸失败, orderId: %s", order.Orderid)
 			}
 		}
 	}
-	if order.ChargeGunPull == 1 && order.ChargingDegree == 0 {
+	if order.ChargeGunPull == 1 && order.ChargingDegree.IsZero() {
 		// Java 抛「请先归还充电枪」；保守继续
 		logger.Mylog.Warn().Msgf("请先归还充电枪, 后结束订单~ orderId: %s", order.Orderid)
 	}
@@ -654,7 +657,7 @@ func normalCloseOrder(order *model.OrderTbl) {
 	updateBasicConsumptionForOrder(order.Orderid)
 
 	if lock := lockByOrder(order.Orderid); lock != nil {
-		service.SendCommand(lock.deviceID(), protocol.OpClosePlaceLock, protocol.DirectionDefault, nil)
+		service.SendCommand(lock.deviceID(), protocol.OpClosePlaceLock, -1)
 	}
 }
 
@@ -662,11 +665,11 @@ func normalCloseOrder(order *model.OrderTbl) {
 func linXiangCloseOrder(order *model.OrderTbl) {
 	gun := chargingGunByPrivateOrder(order.Orderid)
 	if gun != nil {
-		if order.OverTime.IsZero() && order.ChargingDegree == 0 {
-			service.SendCommand(gun.deviceID(), protocol.OpCloseEle, parseDirection(gun.gun.Direction), nil)
+		if isZeroTime(order.OverTime) && order.ChargingDegree.IsZero() {
+			service.SendCommand(gun.deviceID(), protocol.OpCloseEle, -1)
 		}
 	}
-	if order.ChargeGunPull == 1 && order.ChargingDegree == 0 {
+	if order.ChargeGunPull == 1 && order.ChargingDegree.IsZero() {
 		logger.Mylog.Warn().Msgf("请先归还充电枪后, 再结束订单~ orderId: %s", order.Orderid)
 	}
 	updateChargingDegreeForOrder(order.Orderid)
@@ -731,7 +734,7 @@ func (o *OrderController) UpdateOrderState(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(true))
 	case consumeTypeNeighbor:
 		gun := chargingGunByPrivateOrder(orderID)
-		if gun == nil || !service.SendCommand(gun.deviceID(), protocol.OpOpenCharge, protocol.DirectionDefault, nil) {
+		if gun == nil || !service.SendCommand(gun.deviceID(), protocol.OpOpenCharge, -1) {
 			c.JSON(http.StatusOK, ResultError(1, "开充电枪失败"))
 			return
 		}
@@ -764,7 +767,7 @@ func (o *OrderController) Start(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(1, "查无此订单"))
 		return
 	}
-	if !order.BookingStartTime.IsZero() {
+	if !isZeroTime(order.BookingStartTime) {
 		if order.BookingStartTime.Sub(time.Now()) > 30*time.Minute {
 			c.JSON(http.StatusOK, ResultError(1, "还没到您所预约的充电时间,我们支持提前半小时开始充电服务,请耐心等待!"))
 			return
@@ -790,7 +793,7 @@ func (o *OrderController) Start(c *gin.Context) {
 			c.JSON(http.StatusOK, ResultError(1, "未找到充电枪信息,请更换设备使用"))
 			return
 		}
-		if !service.SendCommand(gun.deviceID(), protocol.OpOpenCharge, parseDirection(gun.gun.Direction), nil) {
+		if !service.SendCommand(gun.deviceID(), protocol.OpOpenCharge, -1) {
 			c.JSON(http.StatusOK, ResultError(1, "解锁充电枪失败!"))
 			return
 		}
@@ -806,7 +809,7 @@ func (o *OrderController) Start(c *gin.Context) {
 			}
 		}
 		if lock := lockByOrder(orderID); lock != nil {
-			if !service.SendCommand(lock.deviceID(), protocol.OpOpenPlaceLock, protocol.DirectionDefault, nil) {
+			if !service.SendCommand(lock.deviceID(), protocol.OpOpenPlaceLock, -1) {
 				c.JSON(http.StatusOK, ResultError(1, "开车位锁失败"))
 				return
 			}
@@ -822,10 +825,11 @@ func (o *OrderController) Start(c *gin.Context) {
 func (o *OrderController) Stop(c *gin.Context) {
 	orderID := c.Query("orderId")
 	if lock := lockByOrder(orderID); lock != nil {
-		service.SendCommand(lock.deviceID(), protocol.OpClosePlaceLock, protocol.DirectionDefault, nil)
+		//service.SendCommand(lock.deviceID(), protocol.OpClosePlaceLock, -1)
+		service.ClosePlaceLock(lock.deviceID())
 	}
 	if gun := chargingGunByOrder(orderID); gun != nil {
-		service.SendCommand(gun.deviceID(), protocol.OpCloseEle, parseDirection(gun.gun.Direction), nil)
+		service.SendCommand(gun.deviceID(), protocol.OpCloseEle, -1)
 	}
 	c.JSON(http.StatusOK, ResultSuccess(true))
 }
@@ -849,13 +853,12 @@ func openRelayForPrivateCharging(orderID string) {
 	if gun == nil {
 		return
 	}
-	service.SendCommand(gun.deviceID(), protocol.OpOpenGauge, protocol.DirectionDefault, nil)
+	service.OpenGauge(gun.deviceID(), 0)
 }
 
 func (o *OrderController) CloseTwiceOrder(c *gin.Context) {
 	orderID := c.Query("orderId")
-	closeTwiceOrderInternal(orderID, true)
-	c.JSON(http.StatusOK, ResultSuccess(true))
+	c.JSON(http.StatusOK, ResultSuccess(closeTwiceOrder(orderID)))
 }
 
 func (o *OrderController) AsyncCloseTwiceGauge(c *gin.Context) {
@@ -866,8 +869,7 @@ func (o *OrderController) AsyncCloseTwiceGauge(c *gin.Context) {
 
 func (o *OrderController) CloseTwiceOrderWithoutGauge(c *gin.Context) {
 	orderID := c.Query("orderId")
-	closeTwiceOrderInternal(orderID, false)
-	c.JSON(http.StatusOK, ResultSuccess(true))
+	c.JSON(http.StatusOK, ResultSuccess(closeTwiceOrderWithoutGauge(orderID)))
 }
 
 func (o *OrderController) SetOrderStateIsWaitReturnGun(c *gin.Context) {
@@ -883,7 +885,7 @@ func (o *OrderController) SetOrderStateIsWaitReturnGun(c *gin.Context) {
 	}
 	gun := chargingGunByPrivateOrder(orderID)
 	if gun != nil {
-		service.SendCommand(gun.deviceID(), protocol.OpCloseEle, parseDirection(gun.gun.Direction), nil)
+		service.SendCommand(gun.deviceID(), protocol.OpCloseEle, -1)
 		updateChargingDegreeForOrder(orderID)
 		orderPrivate := orderPrivateByOrderid(orderID)
 		if orderPrivate != nil {
@@ -908,7 +910,7 @@ func (o *OrderController) ManualDetectionIsReturnGun(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	if !order.OverTime.IsZero() {
+	if !isZeroTime(order.OverTime) {
 		res := conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
 			"close_time": time.Now(),
 			"state":      orderStateWaitPay,
@@ -922,7 +924,7 @@ func (o *OrderController) ManualDetectionIsReturnGun(c *gin.Context) {
 func (o *OrderController) ByOrderIdSendCloseEleAndMessage(c *gin.Context) {
 	orderID := c.Query("orderId")
 	if gun := chargingGunByOrder(orderID); gun != nil {
-		if !service.SendCommand(gun.deviceID(), protocol.OpCloseEle, parseDirection(gun.gun.Direction), nil) {
+		if !service.SendCommand(gun.deviceID(), protocol.OpCloseEle, -1) {
 			c.JSON(http.StatusOK, ResultError(1, "拉闸失败"))
 			return
 		}
@@ -987,7 +989,7 @@ func (o *OrderController) QueryPayScore(c *gin.Context) {
 		switch state {
 		case wxPayStateDone, wxPayStateDoing:
 			gun := chargingGunByPrivateOrder(orderID)
-			if gun == nil || !service.SendCommand(gun.deviceID(), protocol.OpOpenCharge, protocol.DirectionDefault, nil) {
+			if gun == nil || !service.SendCommand(gun.deviceID(), protocol.OpOpenCharge, -1) {
 				c.JSON(http.StatusOK, ResultError(1, "开充电枪失败"))
 				return
 			}
@@ -1240,19 +1242,19 @@ func isAfterNextMidnight(t time.Time) bool {
 // calculateOvertimeFee 计算驿享充电超时占位费（对齐 Java calculateOvertimeFee）。
 func calculateOvertimeFee(order model.OrderTbl, fee decimal.Decimal, orderID string) decimal.Decimal {
 	var chargeEndTime time.Time
-	if !order.FullTime.IsZero() {
-		chargeEndTime = order.FullTime
-	} else if !order.GunDisconnectTime.IsZero() {
-		chargeEndTime = order.GunDisconnectTime
+	if !isZeroTime(order.FullTime) {
+		chargeEndTime = timeOrZero(order.FullTime)
+	} else if !isZeroTime(order.GunDisconnectTime) {
+		chargeEndTime = timeOrZero(order.GunDisconnectTime)
 	} else {
 		return fee
 	}
 	var leaveTime time.Time
-	if !order.LeaveTime.IsZero() {
-		leaveTime = order.LeaveTime
+	if !isZeroTime(order.LeaveTime) {
+		leaveTime = timeOrZero(order.LeaveTime)
 	} else {
 		if lockByOrder(orderID) == nil {
-			leaveTime = order.OverTime
+			leaveTime = timeOrZero(order.OverTime)
 		} else {
 			return fee // 正在检测车辆是否正确驶离
 		}
@@ -1295,29 +1297,29 @@ func calculateNeighborOvertimeFee(order *model.OrderTbl) decimal.Decimal {
 	}
 	// 桩主需要换停车位且收取超时占位费
 	if chargingBean.ExchangePlace && chargingBean.OvertimeFee {
-		if order.OverTime.IsZero() || (order.NeighborRelocateTime.IsZero() && order.MoveCarTime.IsZero()) {
+		if isZeroTime(order.OverTime) || (isZeroTime(order.NeighborRelocateTime) && isZeroTime(order.MoveCarTime)) {
 			return decimal.Zero
 		}
 		var relocateTime time.Time
-		if !order.NeighborRelocateTime.IsZero() && !order.MoveCarTime.IsZero() {
-			if order.NeighborRelocateTime.Before(order.MoveCarTime) {
-				relocateTime = order.NeighborRelocateTime
+		if !isZeroTime(order.NeighborRelocateTime) && !isZeroTime(order.MoveCarTime) {
+			if timeOrZero(order.NeighborRelocateTime).Before(timeOrZero(order.MoveCarTime)) {
+				relocateTime = timeOrZero(order.NeighborRelocateTime)
 			} else {
-				relocateTime = order.MoveCarTime
+				relocateTime = timeOrZero(order.MoveCarTime)
 			}
-		} else if !order.NeighborRelocateTime.IsZero() {
-			relocateTime = order.NeighborRelocateTime
+		} else if !isZeroTime(order.NeighborRelocateTime) {
+			relocateTime = timeOrZero(order.NeighborRelocateTime)
 		} else {
-			relocateTime = order.MoveCarTime
+			relocateTime = timeOrZero(order.MoveCarTime)
 		}
-		return neighborOvertimeFeeFromTime(relocateTime, order.OverTime)
+		return neighborOvertimeFeeFromTime(relocateTime, timeOrZero(order.OverTime))
 	}
 	// 桩主不需要换停车位但收取超时占位费：以充满时间为起始
 	if chargingBean.OvertimeFee {
-		if order.FullTime.IsZero() || order.OverTime.IsZero() {
+		if isZeroTime(order.FullTime) || isZeroTime(order.OverTime) {
 			return decimal.Zero
 		}
-		return neighborOvertimeFeeFromTime(order.FullTime, order.OverTime)
+		return neighborOvertimeFeeFromTime(timeOrZero(order.FullTime), timeOrZero(order.OverTime))
 	}
 	return decimal.Zero
 }
@@ -1357,11 +1359,11 @@ func updateBasicConsumptionForOrder(orderID string) {
 	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
 		return
 	}
-	if order.ChargeGunPull == 0 && order.OverTime.IsZero() {
-		beginTime := order.BeginTime
+	if order.ChargeGunPull == 0 && isZeroTime(order.OverTime) {
+		beginTime := timeOrZero(order.BeginTime)
 		var nowTime time.Time
-		if !order.LeaveTime.IsZero() {
-			nowTime = order.LeaveTime
+		if !isZeroTime(order.LeaveTime) {
+			nowTime = timeOrZero(order.LeaveTime)
 		} else {
 			if lockByOrder(orderID) == nil {
 				conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("basic_consumption", fee.Round(2))
@@ -1380,13 +1382,13 @@ func updateBasicConsumptionForOrder(orderID string) {
 		}
 		fee = chargeFee.Add(fee)
 	} else if fee.IsZero() {
-		beginTime := order.BeginTime
+		beginTime := timeOrZero(order.BeginTime)
 		var nowTime time.Time
-		if !order.LeaveTime.IsZero() {
-			nowTime = order.LeaveTime
+		if !isZeroTime(order.LeaveTime) {
+			nowTime = timeOrZero(order.LeaveTime)
 		} else {
 			if lockByOrder(orderID) == nil {
-				nowTime = order.OverTime
+				nowTime = timeOrZero(order.OverTime)
 			} else {
 				return // 正在检测车辆是否正确驶离
 			}
@@ -1402,7 +1404,7 @@ func updateBasicConsumptionForOrder(orderID string) {
 		}
 		fee = chargeFee.Add(fee)
 	} else {
-		if order.ConsumptionType != consumeTypeNeighbor && (!order.FullTime.IsZero() || !order.GunDisconnectTime.IsZero()) {
+		if order.ConsumptionType != consumeTypeNeighbor && (!isZeroTime(order.FullTime) || !isZeroTime(order.GunDisconnectTime)) {
 			if order.ConsumptionType == consumeTypeYiXiang && order.SpacesID != 0 {
 				if spaces := spacesByID(order.SpacesID); spaces != nil && !spaces.OvertimeFee {
 					// 车位设置不收取超时占位费
@@ -1418,7 +1420,7 @@ func updateBasicConsumptionForOrder(orderID string) {
 }
 
 // ============ 二轮车计费 ============
-
+// reOrderPowerValue 计算订单期间充电量
 func reOrderPowerValue(orderID string) decimal.Decimal {
 	var v decimal.Decimal
 	conf.Db.Raw("SELECT COALESCE((MAX(over_value)-MIN(start_value)),0) FROM re_order_electronic_tbl WHERE order_id = ?", orderID).Row().Scan(&v)
@@ -1442,9 +1444,32 @@ func reOrderPowerMaxPower(orderID string) float64 {
 }
 
 func serviceFeeByPowerRange(maxPower float64) decimal.Decimal {
+	if maxPower <= 0 {
+		return maxServiceFee()
+	}
 	var v decimal.Decimal
-	conf.Db.Raw("SELECT service FROM charging_price_tbl WHERE ? >= min_power AND ? <= max_power LIMIT 1", maxPower, maxPower).Row().Scan(&v)
+	if conf.Db.Raw("SELECT service FROM charging_price_tbl WHERE ? >= min_power AND ? <= max_power LIMIT 1", maxPower, maxPower).Row().Scan(&v) != nil {
+		return maxServiceFee()
+	}
 	return v
+}
+
+// maxServiceFee 返回充电价格表中的最高服务费率（对齐 Java getMaxServiceFee，表空默认 0.4）。
+func maxServiceFee() decimal.Decimal {
+	var v decimal.Decimal
+	if conf.Db.Raw("SELECT COALESCE(MAX(service), 0.4) FROM charging_price_tbl").Row().Scan(&v) != nil {
+		return decimal.RequireFromString("0.4")
+	}
+	return v
+}
+
+// ceilHours 充电时长分钟数向上取整为小时数（不足 1 小时按 1 小时），对齐 Java chargingHours 计算。
+func ceilHours(minutes int64) int64 {
+	h := minutes / 60
+	if minutes%60 > 0 || h == 0 {
+		h++
+	}
+	return h
 }
 
 // userIsFreeServiceByOrder 判断订单用户是否享受免服务费（对齐 FreeChargingUserServiceImpl.getUserIsNotFreeByOrderId）。
@@ -1477,7 +1502,8 @@ func closeGauge(orderID string) {
 	if product == nil {
 		return
 	}
-	service.SendCommand(product.Imei, protocol.OpCloseGauge, protocol.DirectionDefault, []byte(strings.Split(receptacle.Name, "号")[0]))
+	rid, _ := strconv.Atoi(strings.Split(receptacle.Name, "号")[0])
+	service.CloseGauge(product.Imei, rid)
 }
 
 // openGauge 二轮车开闸（对齐 Java OpenGAUGE，含开始时间/状态/插座状态更新）。
@@ -1494,12 +1520,25 @@ func openGauge(orderID string) bool {
 	if product == nil {
 		return false
 	}
-	rid := strings.Split(receptacle.Name, "号")[0]
-	if !service.SendCommand(product.Imei, protocol.OpOpenGauge, protocol.DirectionDefault, []byte(rid)) {
+	rid, _ := strconv.Atoi(strings.Split(receptacle.Name, "号")[0])
+	if !service.OpenGauge(product.Imei, rid) {
 		return false
 	}
-	if rp := receptaclePowerByPidAndRid(product.Pid, rid); rp != nil {
-		conf.Db.Create(&model.ReOrderElectronicTbl{OrderID: orderID, StartValue: rp.MeterValue, OverValue: rp.MeterValue})
+	// 始终创建订单电量记录（对齐 Java reOrderPowerService.add 的幂等插入）。
+	// start_value 取插座当前累计电量表底（对齐 Java OpenGAUGE：getPowerByRidAndPid → add(orderId, meterValue)），
+	// over_value 初始等于 start_value，之后由设备上报的累计电量覆盖。
+	// price_time_id 关联 tab_price_time 当前时段，供计费时关联电价。
+	var count int64
+	conf.Db.Model(&model.ReOrderElectronicTbl{}).Where("order_id = ?", orderID).Count(&count)
+	if count == 0 {
+		startValue := decimal.Zero
+		if rp := receptaclePowerByPidAndRid(product.Pid, strconv.Itoa(rid)); rp != nil {
+			startValue = rp.MeterValue
+		}
+		conf.Db.Exec(
+			"INSERT INTO re_order_electronic_tbl (order_id, start_value, over_value, price_time_id) VALUES (?, ?, ?, (SELECT id FROM tab_price_time WHERE start_time < CURTIME() AND over_time >= CURTIME() LIMIT 1))",
+			orderID, startValue, startValue,
+		)
 	}
 	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
 		"begin_time": time.Now(),
@@ -1509,15 +1548,28 @@ func openGauge(orderID string) bool {
 	return true
 }
 
-// closeTwiceOrderInternal 结束二轮车充电订单（对齐 Java closeTwiceOrder / closeTwiceOrderWithoutGauge）。
-func closeTwiceOrderInternal(orderID string, withGauge bool) {
+// closeTwiceOrder 结束二轮车充电订单（带关闸），对齐 Java closeTwiceOrder。
+func closeTwiceOrder(orderID string) bool {
+	return settleTwiceOrder(orderID, true)
+}
+
+// closeTwiceOrderWithoutGauge 结束二轮车充电订单（不关闸，关闸由 asyncCloseTwiceGauge 异步执行），
+// 对齐 Java closeTwiceOrderWithoutGauge（套餐时长不足时对超出部分按比例计费）。
+func closeTwiceOrderWithoutGauge(orderID string) bool {
+	return settleTwiceOrder(orderID, false)
+}
+
+// settleTwiceOrder 二轮车订单结算：计算电费/服务费 → 关闸 → 扣款 → 落库（整体事务）。
+func settleTwiceOrder(orderID string, withGauge bool) bool {
 	var order model.OrderTbl
 	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
-		return
+		return false
 	}
-	meterValue := reOrderPowerValue(orderID)
 
-	// 套餐抵扣
+	meterValue := reOrderPowerValue(orderID).Round(2)
+	now := time.Now()
+
+	// 套餐抵扣判断
 	hasValidPackage := false
 	var chargingMinutes int64
 	var packageRecord *model.PackageRecordTbl
@@ -1531,8 +1583,8 @@ func closeTwiceOrderInternal(orderID string, withGauge bool) {
 			hasValidPackage = true
 		} else if pr.Duration > 0 {
 			hasValidPackage = true
-			if !order.BeginTime.IsZero() {
-				chargingMinutes = int64(time.Since(order.BeginTime).Minutes())
+			if !isZeroTime(order.BeginTime) {
+				chargingMinutes = int64(time.Since(timeOrZero(order.BeginTime)).Minutes())
 				if chargingMinutes < 1 {
 					chargingMinutes = 1
 				}
@@ -1541,16 +1593,45 @@ func closeTwiceOrderInternal(orderID string, withGauge bool) {
 	}
 
 	var fee, calculatedServiceFee, powerRate decimal.Decimal
+	var newPackageDuration *int32 // 非 nil 表示需在事务内更新套餐剩余时长
 	if hasValidPackage {
-		fee = decimal.Zero
-		calculatedServiceFee = decimal.Zero
-		powerRate = decimal.Zero
-		if packageRecord.Duration > 0 {
-			remaining := packageRecord.Duration - int32(chargingMinutes)
+		switch {
+		case packageRecord.Duration == -1:
+			// 无限时长套餐：免费，不扣时长
+			fee, calculatedServiceFee, powerRate = decimal.Zero, decimal.Zero, decimal.Zero
+		case packageRecord.Duration > 0:
+			remaining := int64(packageRecord.Duration) - chargingMinutes
 			if remaining < 0 {
-				remaining = 0
+				// 超出套餐时长
+				if !withGauge {
+					// closeTwiceOrderWithoutGauge：超出部分按比例计费
+					overtimeMinutes := -remaining
+					totalPowerFee := reOrderPowerNoServiceFees(orderID)
+					var overtimePowerFee decimal.Decimal
+					if chargingMinutes > 0 && totalPowerFee.IsPositive() {
+						overtimePowerFee = totalPowerFee.Mul(decimal.NewFromInt(overtimeMinutes)).
+							Div(decimal.NewFromInt(chargingMinutes)).Round(2)
+					}
+					calculatedServiceFee = serviceFeeByPowerRange(reOrderPowerMaxPower(orderID)).
+						Mul(decimal.NewFromInt(ceilHours(overtimeMinutes)))
+					if reOrderPowerValue(orderID).IsZero() && totalPowerFee.IsZero() {
+						calculatedServiceFee = decimal.Zero
+						overtimePowerFee = decimal.Zero
+					}
+					powerRate = overtimePowerFee
+					fee = overtimePowerFee.Add(calculatedServiceFee)
+				} else {
+					// closeTwiceOrder（带关闸）：超出部分免费，时长钳制为 0
+					fee, calculatedServiceFee, powerRate = decimal.Zero, decimal.Zero, decimal.Zero
+				}
+				zero := int32(0)
+				newPackageDuration = &zero
+			} else {
+				// 套餐时长足够：免费，扣除时长
+				fee, calculatedServiceFee, powerRate = decimal.Zero, decimal.Zero, decimal.Zero
+				rem := int32(remaining)
+				newPackageDuration = &rem
 			}
-			conf.Db.Model(&model.PackageRecordTbl{}).Where("order_no = ?", packageRecord.OrderNo).Update("duration", remaining)
 		}
 	} else if userIsFreeServiceByOrder(orderID) {
 		fee = reOrderPowerNoServiceFees(orderID)
@@ -1558,17 +1639,14 @@ func closeTwiceOrderInternal(orderID string, withGauge bool) {
 		powerRate = fee
 	} else {
 		betweenMinute := int64(0)
-		if !order.BeginTime.IsZero() {
-			betweenMinute = int64(time.Since(order.BeginTime).Minutes())
+		if !isZeroTime(order.BeginTime) {
+			betweenMinute = int64(time.Since(timeOrZero(order.BeginTime)).Minutes())
 		}
-		maxPower := reOrderPowerMaxPower(orderID)
-		dynamicServiceFee := serviceFeeByPowerRange(maxPower)
-		chargingHours := betweenMinute / 60
-		if betweenMinute%60 > 0 || chargingHours == 0 {
-			chargingHours++
-		}
-		calculatedServiceFee = dynamicServiceFee.Mul(decimal.NewFromInt(chargingHours))
+		calculatedServiceFee = serviceFeeByPowerRange(reOrderPowerMaxPower(orderID)).
+			Mul(decimal.NewFromInt(ceilHours(betweenMinute)))
+		logger.Mylog.Info().Msgf("calculatedServiceFee ========>>> %v", calculatedServiceFee)
 		fee = reOrderPowerNoServiceFees(orderID)
+		logger.Mylog.Info().Msgf("Fee ========>>> %v", fee)
 		powerRate = fee
 		if reOrderPowerValue(orderID).IsZero() && powerRate.IsZero() {
 			calculatedServiceFee = decimal.Zero
@@ -1576,40 +1654,82 @@ func closeTwiceOrderInternal(orderID string, withGauge bool) {
 		fee = fee.Add(calculatedServiceFee)
 	}
 
-	conf.Db.Create(&model.OrderTwiceTbl{Orderid: orderID, ServiceRate: calculatedServiceFee, PowerRate: powerRate})
-
+	// 关闸（带关闸的路由）
 	if withGauge {
 		closeGauge(orderID)
 	}
 
-	state := queryWxOrderState(orderID)
-	if state != wxPayStateCancel {
-		amount := fee.Mul(decimal.NewFromInt(100)).IntPart()
-		completeWxOrder(orderID, int(amount))
-	} else if fee.IsPositive() {
-		consumeBalance(order.Openid, fee)
-		saveBalanceRecord(order.Openid, "充电消费", fee)
-	} else {
-		completeOrderIsamountNot(order.Openid)
-	}
-
+	// 插座状态与充电时长（落库前备好）
+	var receptacleID int32
 	if receptacle := receptacleByOrderid(orderID); receptacle != nil {
-		conf.Db.Model(&model.ReceptacleTbl{}).Where("id = ?", receptacle.ID).Update("status", 0)
+		receptacleID = receptacle.ID
+	}
+	var chargingTime string
+	if !isZeroTime(order.BeginTime) {
+		chargingTime = time.Time{}.Add(time.Since(timeOrZero(order.BeginTime))).Format("15:04:05")
 	}
 
-	// 关闸时间 + 充电时长
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("over_time", time.Now())
-	if !order.BeginTime.IsZero() {
-		d := time.Since(order.BeginTime)
-		chargingTime := time.Time{}.Add(d).Format("15:04:05")
-		conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("charging_time", chargingTime)
-	}
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
-		"state":             orderStateFinished,
-		"close_time":        time.Now(),
-		"charging_degree":   meterValue,
-		"basic_consumption": fee,
+	// 落库 + 扣款（整体事务，对齐 Java transactionManager，任何一步失败整体回滚）
+	err := conf.Db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&model.OrderTwiceTbl{
+			Orderid:     orderID,
+			ServiceRate: calculatedServiceFee.Round(2),
+			PowerRate:   powerRate.Round(2),
+		}).Error; err != nil {
+			return err
+		}
+		if newPackageDuration != nil {
+			if err := tx.Model(&model.PackageRecordTbl{}).Where("order_no = ?", packageRecord.OrderNo).
+				Update("duration", *newPackageDuration).Error; err != nil {
+				return err
+			}
+		}
+
+		state := queryWxOrderState(orderID)
+		if state != wxPayStateCancel {
+			completeWxOrder(orderID, int(fee.Mul(decimal.NewFromInt(100)).IntPart()))
+		} else if fee.IsPositive() {
+			ok, _, cerr := consumeBalanceTx(tx, order.Openid, fee)
+			if cerr != nil {
+				return cerr
+			}
+			if !ok {
+				return errors.New("余额不足")
+			}
+			if err := tx.Create(&model.TabBalanceRecord{Openid: order.Openid, Type: "充电消费", Amount: fee}).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Exec("UPDATE user_tbl SET balans = balans + freeze_balans, freeze_balans = 0 WHERE openid = ?", order.Openid).Error; err != nil {
+				return err
+			}
+		}
+
+		if receptacleID != 0 {
+			if err := tx.Model(&model.ReceptacleTbl{}).Where("id = ?", receptacleID).Update("status", 0).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := tx.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("over_time", now).Error; err != nil {
+			return err
+		}
+		if chargingTime != "" {
+			if err := tx.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("charging_time", chargingTime).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
+			"state":             orderStateFinished,
+			"close_time":        now,
+			"charging_degree":   meterValue,
+			"basic_consumption": fee.Round(2),
+		}).Error; err != nil {
+			return err
+		}
+		return nil
 	})
+	return err == nil
 }
 
 // latestValidPackage 查询用户最早购买且未过期的套餐（对齐 Java PackageRecordService.getLatestValidPackage）。

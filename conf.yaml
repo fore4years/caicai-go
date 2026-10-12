@@ -21,3 +21,6 @@ mysql:
 
 app:
   port: 8888
+
+tcp:
+  port: 10012

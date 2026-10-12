@@ -8,8 +8,8 @@ const TableNameLocalchepaiTbl = "localchepai_tbl"
 
 // LocalchepaiTbl mapped from table <localchepai_tbl>
 type LocalchepaiTbl struct {
-	PlateNum   string `gorm:"column:plate_num" json:"plate_num"`
-	PlateColor string `gorm:"column:plate_color" json:"plate_color"`
+	PlateNum   string `gorm:"column:plate_num;type:varchar(255)" json:"plate_num"`
+	PlateColor string `gorm:"column:plate_color;type:varchar(255)" json:"plate_color"`
 }
 
 // TableName LocalchepaiTbl's table name

@@ -10,16 +10,16 @@ import (
 
 const TableNameUsermessageTbl = "usermessage_tbl"
 
-// UsermessageTbl mapped from table <usermessage_tbl>
+// UsermessageTbl 已废弃
 type UsermessageTbl struct {
-	ID         int32     `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
-	Openid     string    `gorm:"column:openid" json:"openid"`
-	Message    string    `gorm:"column:message" json:"message"`
-	MsgTime    string    `gorm:"column:msgTime" json:"msgTime"`
-	Status     string    `gorm:"column:status" json:"status"`
-	IsDelete   int32     `gorm:"column:isDelete;not null" json:"isDelete"`
-	CreateTime time.Time `gorm:"column:createTime;not null;type:timestamp;default:CURRENT_TIMESTAMP" json:"createTime"`
-	UpdateTime time.Time `gorm:"column:updateTime;not null;type:timestamp;default:CURRENT_TIMESTAMP" json:"updateTime"`
+	ID         int32      `gorm:"column:id;type:int;primaryKey;autoIncrement:true" json:"id"`
+	Openid     string     `gorm:"column:openid;type:varchar(255)" json:"openid"`
+	Message    string     `gorm:"column:message;type:varchar(1024)" json:"message"`
+	MsgTime    string     `gorm:"column:msgTime;type:varchar(255)" json:"msgTime"`
+	Status     string     `gorm:"column:status;type:varchar(255)" json:"status"`
+	IsDelete   int32      `gorm:"column:isDelete;type:tinyint;not null" json:"isDelete"`
+	CreateTime *time.Time `gorm:"column:createTime;type:timestamp;not null;default:CURRENT_TIMESTAMP" json:"createTime"`
+	UpdateTime *time.Time `gorm:"column:updateTime;type:timestamp;not null;default:CURRENT_TIMESTAMP" json:"updateTime"`
 }
 
 // TableName UsermessageTbl's table name

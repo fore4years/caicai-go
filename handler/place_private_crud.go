@@ -17,7 +17,7 @@ import (
 // privatePlaceDTO 对应 Java domain.PrivatePlace（驼峰）。
 type privatePlaceDTO struct {
 	ID            int32          `json:"id,omitempty"`
-	Point         string         `json:"point,omitempty"`
+	Point         model.Point    `json:"point,omitempty"`
 	Place         string         `json:"place,omitempty"`
 	Openid        string         `json:"openid,omitempty"`
 	ChargingGunID int32          `json:"chargingGunId,omitempty"`
@@ -408,10 +408,10 @@ func (c *FreeChargingUserController) Save(ctx *gin.Context) {
 		Reviser:           req.Reviser,
 	}
 	if req.StartDate != nil {
-		rec.StartDate = parseTimeLoose(*req.StartDate)
+		rec.StartDate = timePtr(parseTimeLoose(*req.StartDate))
 	}
 	if req.EndDate != nil {
-		rec.EndDate = parseTimeLoose(*req.EndDate)
+		rec.EndDate = timePtr(parseTimeLoose(*req.EndDate))
 	}
 
 	if err := conf.Db.Create(&rec).Error; err != nil {
@@ -578,8 +578,8 @@ func neighborShareList(ownerID, status string) []neighborShareDtoDTO {
 			ChargingPileID: r.ChargingPileID,
 			Status:         r.Status,
 			Phone:          r.Phone,
-			CreateTime:     timeToLocal(r.CreateTime),
-			UpdateTime:     timeToLocal(r.UpdateTime),
+			CreateTime:     timeToLocal(timePtr(r.CreateTime)),
+			UpdateTime:     timeToLocal(timePtr(r.UpdateTime)),
 			Name:           r.Name,
 			NickName:       r.NickName,
 		})

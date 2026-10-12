@@ -35,14 +35,14 @@ func newPurchasePoleApplicationTbl(db *gorm.DB, opts ...gen.DOOption) purchasePo
 	_purchasePoleApplicationTbl.PhoneNumber = field.NewString(tableName, "phone_number")
 	_purchasePoleApplicationTbl.SelectedPackage = field.NewString(tableName, "selected_package")
 	_purchasePoleApplicationTbl.SelectedColor = field.NewString(tableName, "selected_color")
-	_purchasePoleApplicationTbl.InstallationDistance = field.NewFloat64(tableName, "installation_distance")
+	_purchasePoleApplicationTbl.InstallationDistance = field.NewField(tableName, "installation_distance")
 	_purchasePoleApplicationTbl.InstallationDate = field.NewString(tableName, "installation_date")
 	_purchasePoleApplicationTbl.UsageScenario = field.NewString(tableName, "usage_scenario")
 	_purchasePoleApplicationTbl.InstallationAddress = field.NewString(tableName, "installation_address")
 	_purchasePoleApplicationTbl.DetailedAddress = field.NewString(tableName, "detailed_address")
 	_purchasePoleApplicationTbl.ApplyTime = field.NewTime(tableName, "apply_time")
 	_purchasePoleApplicationTbl.OrderStatus = field.NewString(tableName, "order_status")
-	_purchasePoleApplicationTbl.ActualPayment = field.NewString(tableName, "actual_payment")
+	_purchasePoleApplicationTbl.ActualPayment = field.NewField(tableName, "actual_payment")
 	_purchasePoleApplicationTbl.PayTime = field.NewTime(tableName, "pay_time")
 	_purchasePoleApplicationTbl.TransactionID = field.NewString(tableName, "transaction_id")
 	_purchasePoleApplicationTbl.RefundReason = field.NewString(tableName, "refund_reason")
@@ -54,30 +54,31 @@ func newPurchasePoleApplicationTbl(db *gorm.DB, opts ...gen.DOOption) purchasePo
 	return _purchasePoleApplicationTbl
 }
 
+// purchasePoleApplicationTbl 购桩申请表
 type purchasePoleApplicationTbl struct {
 	purchasePoleApplicationTblDo purchasePoleApplicationTblDo
 
 	ALL                  field.Asterisk
-	OrderNumber          field.String  // 订单号
-	Openid               field.String  // 用户openid
-	Name                 field.String  // 姓名
-	IDNumber             field.String  // 身份证号码
-	PhoneNumber          field.String  // 电话号码
-	SelectedPackage      field.String  // 选购套餐
-	SelectedColor        field.String  // 选购颜色
-	InstallationDistance field.Float64 // 安装距离（米）
-	InstallationDate     field.String  // 安装时间
-	UsageScenario        field.String  // 使用场景
-	InstallationAddress  field.String  // 安装地址
-	DetailedAddress      field.String  // 详细地址
-	ApplyTime            field.Time    // 申请时间
-	OrderStatus          field.String  // 订单状态：待发货、已发货、待签收、已完成、已取消、已退款
-	ActualPayment        field.String  // 实付款金额
-	PayTime              field.Time    // 支付时间
-	TransactionID        field.String  // 微信交易号
-	RefundReason         field.String  // 退款原因
-	RefundTime           field.Time    // 退款时间
-	PaymentType          field.String  // 收款账户
+	OrderNumber          field.String // 订单号
+	Openid               field.String // 用户openid
+	Name                 field.String // 姓名
+	IDNumber             field.String // 身份证号码
+	PhoneNumber          field.String // 电话号码
+	SelectedPackage      field.String // 选购套餐
+	SelectedColor        field.String // 选购颜色
+	InstallationDistance field.Field  // 安装距离（米）
+	InstallationDate     field.String // 安装时间
+	UsageScenario        field.String // 使用场景
+	InstallationAddress  field.String // 安装地址
+	DetailedAddress      field.String // 详细地址
+	ApplyTime            field.Time   // 申请时间
+	OrderStatus          field.String // 订单状态：待发货、已发货、待签收、已完成、已取消、已退款
+	ActualPayment        field.Field  // 实付款金额
+	PayTime              field.Time   // 支付时间
+	TransactionID        field.String // 微信交易号
+	RefundReason         field.String // 退款原因
+	RefundTime           field.Time   // 退款时间
+	PaymentType          field.String // 收款账户
 
 	fieldMap map[string]field.Expr
 }
@@ -101,14 +102,14 @@ func (p *purchasePoleApplicationTbl) updateTableName(table string) *purchasePole
 	p.PhoneNumber = field.NewString(table, "phone_number")
 	p.SelectedPackage = field.NewString(table, "selected_package")
 	p.SelectedColor = field.NewString(table, "selected_color")
-	p.InstallationDistance = field.NewFloat64(table, "installation_distance")
+	p.InstallationDistance = field.NewField(table, "installation_distance")
 	p.InstallationDate = field.NewString(table, "installation_date")
 	p.UsageScenario = field.NewString(table, "usage_scenario")
 	p.InstallationAddress = field.NewString(table, "installation_address")
 	p.DetailedAddress = field.NewString(table, "detailed_address")
 	p.ApplyTime = field.NewTime(table, "apply_time")
 	p.OrderStatus = field.NewString(table, "order_status")
-	p.ActualPayment = field.NewString(table, "actual_payment")
+	p.ActualPayment = field.NewField(table, "actual_payment")
 	p.PayTime = field.NewTime(table, "pay_time")
 	p.TransactionID = field.NewString(table, "transaction_id")
 	p.RefundReason = field.NewString(table, "refund_reason")

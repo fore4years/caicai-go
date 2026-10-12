@@ -10,22 +10,22 @@ import (
 
 const TableNameChargeOrderTbl = "charge_order_tbl"
 
-// ChargeOrderTbl mapped from table <charge_order_tbl>
+// ChargeOrderTbl 订单(未使用)
 type ChargeOrderTbl struct {
-	Orderid     string          `gorm:"column:orderid;primaryKey" json:"orderid"`
-	Openid      string          `gorm:"column:openid" json:"openid"`
-	Lockid      string          `gorm:"column:lockid" json:"lockid"`
-	ReserveTime string          `gorm:"column:reserveTime" json:"reserveTime"`
-	BeginTime   string          `gorm:"column:beginTime" json:"beginTime"`
-	OverTime    string          `gorm:"column:overTime" json:"overTime"`
-	State       string          `gorm:"column:state" json:"state"`
-	TotalPrice  decimal.Decimal `gorm:"column:totalPrice" json:"totalPrice"`
-	CloseTime   string          `gorm:"column:closeTime" json:"closeTime"`
-	PlateNum    string          `gorm:"column:plate_num" json:"plate_num"`
-	StartKwh    float64         `gorm:"column:start_kwh" json:"start_kwh"`
-	EndKwh      float64         `gorm:"column:end_kwh" json:"end_kwh"`
-	ParkPrice   decimal.Decimal `gorm:"column:park_price;default:0.00" json:"park_price"`
-	CouponPrice decimal.Decimal `gorm:"column:coupon_price;default:0.00" json:"coupon_price"`
+	Orderid     string          `gorm:"column:orderid;type:varchar(255);primaryKey" json:"orderid"`
+	Openid      string          `gorm:"column:openid;type:varchar(255)" json:"openid"`
+	Lockid      string          `gorm:"column:lockid;type:varchar(255)" json:"lockid"`
+	ReserveTime string          `gorm:"column:reserveTime;type:varchar(255)" json:"reserveTime"`
+	BeginTime   string          `gorm:"column:beginTime;type:varchar(255)" json:"beginTime"`
+	OverTime    string          `gorm:"column:overTime;type:varchar(255)" json:"overTime"`
+	State       string          `gorm:"column:state;type:varchar(255)" json:"state"`
+	TotalPrice  decimal.Decimal `gorm:"column:totalPrice;type:decimal(10,2)" json:"totalPrice"`
+	CloseTime   string          `gorm:"column:closeTime;type:varchar(255)" json:"closeTime"`
+	PlateNum    string          `gorm:"column:plate_num;type:varchar(255)" json:"plate_num"`
+	StartKwh    decimal.Decimal `gorm:"column:start_kwh;type:decimal(10,2)" json:"start_kwh"`
+	EndKwh      decimal.Decimal `gorm:"column:end_kwh;type:decimal(10,2)" json:"end_kwh"`
+	ParkPrice   decimal.Decimal `gorm:"column:park_price;type:decimal(10,2);default:0.00" json:"park_price"`
+	CouponPrice decimal.Decimal `gorm:"column:coupon_price;type:decimal(10,2);default:0.00" json:"coupon_price"`
 }
 
 // TableName ChargeOrderTbl's table name

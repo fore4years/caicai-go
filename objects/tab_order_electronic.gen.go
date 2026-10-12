@@ -30,8 +30,8 @@ func newTabOrderElectronic(db *gorm.DB, opts ...gen.DOOption) tabOrderElectronic
 	_tabOrderElectronic.ALL = field.NewAsterisk(tableName)
 	_tabOrderElectronic.ID = field.NewInt32(tableName, "id")
 	_tabOrderElectronic.OrderID = field.NewString(tableName, "order_id")
-	_tabOrderElectronic.StartValue = field.NewFloat64(tableName, "start_value")
-	_tabOrderElectronic.OverValue = field.NewFloat64(tableName, "over_value")
+	_tabOrderElectronic.StartValue = field.NewField(tableName, "start_value")
+	_tabOrderElectronic.OverValue = field.NewField(tableName, "over_value")
 	_tabOrderElectronic.PriceTimeID = field.NewInt32(tableName, "price_time_id")
 	_tabOrderElectronic.CreateTime = field.NewTime(tableName, "create_time")
 	_tabOrderElectronic.UpdateTime = field.NewTime(tableName, "update_time")
@@ -41,17 +41,18 @@ func newTabOrderElectronic(db *gorm.DB, opts ...gen.DOOption) tabOrderElectronic
 	return _tabOrderElectronic
 }
 
+// tabOrderElectronic 四轮车订单充电时段电量
 type tabOrderElectronic struct {
 	tabOrderElectronicDo tabOrderElectronicDo
 
 	ALL         field.Asterisk
 	ID          field.Int32
-	OrderID     field.String  // 订单id
-	StartValue  field.Float64 // 开始时电表值
-	OverValue   field.Float64 // 结束时电表值
-	PriceTimeID field.Int32   // 充电时间段id
-	CreateTime  field.Time    // 创建时间
-	UpdateTime  field.Time    // 更新时间
+	OrderID     field.String // 订单id
+	StartValue  field.Field  // 开始时电表值
+	OverValue   field.Field  // 结束时电表值
+	PriceTimeID field.Int32  // 充电时间段id
+	CreateTime  field.Time   // 创建时间
+	UpdateTime  field.Time   // 更新时间
 
 	fieldMap map[string]field.Expr
 }
@@ -70,8 +71,8 @@ func (t *tabOrderElectronic) updateTableName(table string) *tabOrderElectronic {
 	t.ALL = field.NewAsterisk(table)
 	t.ID = field.NewInt32(table, "id")
 	t.OrderID = field.NewString(table, "order_id")
-	t.StartValue = field.NewFloat64(table, "start_value")
-	t.OverValue = field.NewFloat64(table, "over_value")
+	t.StartValue = field.NewField(table, "start_value")
+	t.OverValue = field.NewField(table, "over_value")
 	t.PriceTimeID = field.NewInt32(table, "price_time_id")
 	t.CreateTime = field.NewTime(table, "create_time")
 	t.UpdateTime = field.NewTime(table, "update_time")

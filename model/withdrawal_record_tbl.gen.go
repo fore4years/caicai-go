@@ -12,21 +12,21 @@ import (
 
 const TableNameWithdrawalRecordTbl = "withdrawal_record_tbl"
 
-// WithdrawalRecordTbl mapped from table <withdrawal_record_tbl>
+// WithdrawalRecordTbl 退款记录表
 type WithdrawalRecordTbl struct {
-	RecordID               string          `gorm:"column:record_id;primaryKey;comment:退款记录ID（主键）" json:"record_id"`                             // 退款记录ID（主键）
-	Openid                 string          `gorm:"column:openid;not null;comment:用户openid" json:"openid"`                                       // 用户openid
-	WithdrawalAmount       decimal.Decimal `gorm:"column:withdrawal_amount;not null;default:0.00;comment:退款金额" json:"withdrawal_amount"`        // 退款金额
-	RefundOrderID          string          `gorm:"column:refund_order_id;not null;comment:退款订单号" json:"refund_order_id"`                        // 退款订单号
-	RelatedRechargeOrderID string          `gorm:"column:related_recharge_order_id;not null;comment:关联的充值订单号" json:"related_recharge_order_id"` // 关联的充值订单号
-	WithdrawalStatus       string          `gorm:"column:withdrawal_status;not null;comment:提现状态（申请中、已处理、已拒绝）" json:"withdrawal_status"`        // 提现状态（申请中、已处理、已拒绝）
-	CreateTime             time.Time       `gorm:"column:create_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"` // 创建时间
-	UpdateTime             time.Time       `gorm:"column:update_time;type:timestamp;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"` // 更新时间
-	ProcessTime            time.Time       `gorm:"column:process_time;comment:处理时间" json:"process_time"`                                        // 处理时间
-	RejectReason           string          `gorm:"column:reject_reason;comment:拒绝原因" json:"reject_reason"`                                      // 拒绝原因
-	WithdrawalType         string          `gorm:"column:withdrawal_type;comment:退款类型（提现、退款）" json:"withdrawal_type"`                           // 退款类型（提现、退款）
-	WxRefundID             string          `gorm:"column:wx_refund_id;comment:微信退款单号" json:"wx_refund_id"`                                      // 微信退款单号
-	RefundStatusDesc       string          `gorm:"column:refund_status_desc;comment:退款状态描述" json:"refund_status_desc"`                          // 退款状态描述
+	RecordID               string          `gorm:"column:record_id;type:varchar(50);primaryKey;comment:退款记录ID（主键）" json:"record_id"`                             // 退款记录ID（主键）
+	Openid                 string          `gorm:"column:openid;type:varchar(28);not null;comment:用户openid" json:"openid"`                                       // 用户openid
+	WithdrawalAmount       decimal.Decimal `gorm:"column:withdrawal_amount;type:decimal(10,2);not null;default:0.00;comment:退款金额" json:"withdrawal_amount"`      // 退款金额
+	RefundOrderID          string          `gorm:"column:refund_order_id;type:varchar(50);not null;comment:退款订单号" json:"refund_order_id"`                        // 退款订单号
+	RelatedRechargeOrderID string          `gorm:"column:related_recharge_order_id;type:varchar(50);not null;comment:关联的充值订单号" json:"related_recharge_order_id"` // 关联的充值订单号
+	WithdrawalStatus       string          `gorm:"column:withdrawal_status;type:varchar(20);not null;comment:提现状态（申请中、已处理、已拒绝）" json:"withdrawal_status"`        // 提现状态（申请中、已处理、已拒绝）
+	CreateTime             *time.Time      `gorm:"column:create_time;type:datetime;default:CURRENT_TIMESTAMP;comment:创建时间" json:"create_time"`                   // 创建时间
+	UpdateTime             *time.Time      `gorm:"column:update_time;type:datetime;default:CURRENT_TIMESTAMP;comment:更新时间" json:"update_time"`                   // 更新时间
+	ProcessTime            *time.Time      `gorm:"column:process_time;type:datetime;comment:处理时间" json:"process_time"`                                           // 处理时间
+	RejectReason           string          `gorm:"column:reject_reason;type:varchar(200);comment:拒绝原因" json:"reject_reason"`                                     // 拒绝原因
+	WithdrawalType         string          `gorm:"column:withdrawal_type;type:varchar(20);comment:退款类型（提现、退款）" json:"withdrawal_type"`                           // 退款类型（提现、退款）
+	WxRefundID             string          `gorm:"column:wx_refund_id;type:varchar(50);comment:微信退款单号" json:"wx_refund_id"`                                      // 微信退款单号
+	RefundStatusDesc       string          `gorm:"column:refund_status_desc;type:varchar(200);comment:退款状态描述" json:"refund_status_desc"`                         // 退款状态描述
 }
 
 // TableName WithdrawalRecordTbl's table name

@@ -68,8 +68,8 @@ type chargeStationDTO struct {
 func chargeStationToDTO(s model.ChargingStationTbl) chargeStationDTO {
 	return chargeStationDTO{
 		ID:         s.ID,
-		Longitude:  s.Longitude,
-		Latitude:   s.Latitude,
+		Longitude:  s.Point.Lng(),
+		Latitude:   s.Point.Lat(),
 		Place:      s.Place,
 		Name:       s.Name,
 		Openid:     s.Openid,

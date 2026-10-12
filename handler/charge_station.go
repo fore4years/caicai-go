@@ -106,11 +106,10 @@ func (c *ChargeStationController) Add(ctx *gin.Context) {
 			}
 		}
 		// longitude/latitude 任一非空 → 更新经纬度
-		if req.Longitude != "" {
-			station.Longitude, _ = strconv.ParseFloat(req.Longitude, 64)
-		}
-		if req.Latitude != "" {
-			station.Latitude, _ = strconv.ParseFloat(req.Latitude, 64)
+		if req.Longitude != "" || req.Latitude != "" {
+			lng, _ := strconv.ParseFloat(req.Longitude, 64)
+			lat, _ := strconv.ParseFloat(req.Latitude, 64)
+			station.Point = model.NewPoint(lng, lat)
 		}
 		// pid 保持不变（Java 里 setPid(pid) 是显式保护）
 		station.Openid = openid
@@ -135,11 +134,10 @@ func (c *ChargeStationController) Add(ctx *gin.Context) {
 			newStation.PowerMax = int32(v)
 		}
 	}
-	if req.Longitude != "" {
-		newStation.Longitude, _ = strconv.ParseFloat(req.Longitude, 64)
-	}
-	if req.Latitude != "" {
-		newStation.Latitude, _ = strconv.ParseFloat(req.Latitude, 64)
+	if req.Longitude != "" || req.Latitude != "" {
+		lng, _ := strconv.ParseFloat(req.Longitude, 64)
+		lat, _ := strconv.ParseFloat(req.Latitude, 64)
+		newStation.Point = model.NewPoint(lng, lat)
 	}
 
 	if err := conf.Db.Create(&newStation).Error; err != nil {
@@ -215,8 +213,8 @@ func reOrderPowerToDTO(r model.ReOrderElectronicTbl) reOrderPowerDTO {
 	return reOrderPowerDTO{
 		ID:          r.ID,
 		OrderID:     r.OrderID,
-		StartValue:  r.StartValue,
-		OverValue:   r.OverValue,
+		StartValue:  r.StartValue.InexactFloat64(),
+		OverValue:   r.OverValue.InexactFloat64(),
 		PriceTimeID: r.PriceTimeID,
 		Power:       r.Power,
 		Count:       r.Count,
@@ -306,5 +304,13 @@ func (c *ReOrderPowerController) GetElectronicByOrderid(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{
 		"totalFee":   totalFee.Round(2),
 		"serviceFee": serviceFee.Round(2),
+	}))
+}
+
+func (c *ReOrderPowerController) GetMaxPowerByOrderid(context *gin.Context) {
+	var maxPower decimal.Decimal
+	conf.Db.Raw("SELECT COALESCE(max_power,0) FROM re_order_electronic_tbl WHERE order_id = ? LIMIT 1", context.Query("orderid")).Row().Scan(&maxPower)
+	context.JSON(http.StatusOK, ResultSuccess(gin.H{
+		"maxPower": maxPower.Round(2),
 	}))
 }

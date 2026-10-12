@@ -29,7 +29,7 @@ func newTabParkingSpace(db *gorm.DB, opts ...gen.DOOption) tabParkingSpace {
 	tableName := _tabParkingSpace.tabParkingSpaceDo.TableName()
 	_tabParkingSpace.ALL = field.NewAsterisk(tableName)
 	_tabParkingSpace.ID = field.NewInt32(tableName, "id")
-	_tabParkingSpace.Point = field.NewString(tableName, "point")
+	_tabParkingSpace.Point = field.NewField(tableName, "point")
 	_tabParkingSpace.Place = field.NewString(tableName, "place")
 	_tabParkingSpace.Name = field.NewString(tableName, "name")
 	_tabParkingSpace.Openid = field.NewString(tableName, "openid")
@@ -42,8 +42,8 @@ func newTabParkingSpace(db *gorm.DB, opts ...gen.DOOption) tabParkingSpace {
 	_tabParkingSpace.SpacesCode = field.NewString(tableName, "spaces_code")
 	_tabParkingSpace.Enable = field.NewBool(tableName, "enable")
 	_tabParkingSpace.Certificate = field.NewInt32(tableName, "certificate")
-	_tabParkingSpace.Service = field.NewString(tableName, "service")
-	_tabParkingSpace.ServiceFee = field.NewString(tableName, "service_fee")
+	_tabParkingSpace.Service = field.NewField(tableName, "service")
+	_tabParkingSpace.ServiceFee = field.NewField(tableName, "service_fee")
 	_tabParkingSpace.OvertimeFee = field.NewBool(tableName, "overtime_fee")
 	_tabParkingSpace.PriceMode = field.NewBool(tableName, "price_mode")
 
@@ -52,12 +52,13 @@ func newTabParkingSpace(db *gorm.DB, opts ...gen.DOOption) tabParkingSpace {
 	return _tabParkingSpace
 }
 
+// tabParkingSpace 车位表
 type tabParkingSpace struct {
 	tabParkingSpaceDo tabParkingSpaceDo
 
 	ALL           field.Asterisk
 	ID            field.Int32
-	Point         field.String // 经纬度点
+	Point         field.Field  // 经纬度点
 	Place         field.String // 位置
 	Name          field.String // 车位名
 	Openid        field.String // 所属用户openid
@@ -70,8 +71,8 @@ type tabParkingSpace struct {
 	SpacesCode    field.String // 车位码
 	Enable        field.Bool   // 审核状态(true为已通过)
 	Certificate   field.Int32  // 产权证照片id
-	Service       field.String // 服务费
-	ServiceFee    field.String // 优惠后服务费
+	Service       field.Field  // 服务费
+	ServiceFee    field.Field  // 优惠后服务费
 	OvertimeFee   field.Bool   // 是否收取超时占位费(0:不收取,1:收取)
 	PriceMode     field.Bool   // 电价模式
 
@@ -91,7 +92,7 @@ func (t tabParkingSpace) As(alias string) *tabParkingSpace {
 func (t *tabParkingSpace) updateTableName(table string) *tabParkingSpace {
 	t.ALL = field.NewAsterisk(table)
 	t.ID = field.NewInt32(table, "id")
-	t.Point = field.NewString(table, "point")
+	t.Point = field.NewField(table, "point")
 	t.Place = field.NewString(table, "place")
 	t.Name = field.NewString(table, "name")
 	t.Openid = field.NewString(table, "openid")
@@ -104,8 +105,8 @@ func (t *tabParkingSpace) updateTableName(table string) *tabParkingSpace {
 	t.SpacesCode = field.NewString(table, "spaces_code")
 	t.Enable = field.NewBool(table, "enable")
 	t.Certificate = field.NewInt32(table, "certificate")
-	t.Service = field.NewString(table, "service")
-	t.ServiceFee = field.NewString(table, "service_fee")
+	t.Service = field.NewField(table, "service")
+	t.ServiceFee = field.NewField(table, "service_fee")
 	t.OvertimeFee = field.NewBool(table, "overtime_fee")
 	t.PriceMode = field.NewBool(table, "price_mode")
 

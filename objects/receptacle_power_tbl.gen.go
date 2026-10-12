@@ -31,7 +31,7 @@ func newReceptaclePowerTbl(db *gorm.DB, opts ...gen.DOOption) receptaclePowerTbl
 	_receptaclePowerTbl.ID = field.NewInt32(tableName, "id")
 	_receptaclePowerTbl.ReceptacleID = field.NewInt32(tableName, "receptacle_id")
 	_receptaclePowerTbl.Pid = field.NewString(tableName, "pid")
-	_receptaclePowerTbl.MeterValue = field.NewFloat64(tableName, "meter_value")
+	_receptaclePowerTbl.MeterValue = field.NewField(tableName, "meter_value")
 	_receptaclePowerTbl.UpdateTime = field.NewTime(tableName, "update_time")
 
 	_receptaclePowerTbl.fillFieldMap()
@@ -39,15 +39,16 @@ func newReceptaclePowerTbl(db *gorm.DB, opts ...gen.DOOption) receptaclePowerTbl
 	return _receptaclePowerTbl
 }
 
+// receptaclePowerTbl 插座电量表
 type receptaclePowerTbl struct {
 	receptaclePowerTblDo receptaclePowerTblDo
 
 	ALL          field.Asterisk
-	ID           field.Int32   // 主键id
-	ReceptacleID field.Int32   // 插座id
-	Pid          field.String  // 充电站id
-	MeterValue   field.Float64 // 电表示数
-	UpdateTime   field.Time    // 电表更新时间
+	ID           field.Int32  // 主键id
+	ReceptacleID field.Int32  // 插座id
+	Pid          field.String // 充电站id
+	MeterValue   field.Field  // 电表示数
+	UpdateTime   field.Time   // 电表更新时间
 
 	fieldMap map[string]field.Expr
 }
@@ -67,7 +68,7 @@ func (r *receptaclePowerTbl) updateTableName(table string) *receptaclePowerTbl {
 	r.ID = field.NewInt32(table, "id")
 	r.ReceptacleID = field.NewInt32(table, "receptacle_id")
 	r.Pid = field.NewString(table, "pid")
-	r.MeterValue = field.NewFloat64(table, "meter_value")
+	r.MeterValue = field.NewField(table, "meter_value")
 	r.UpdateTime = field.NewTime(table, "update_time")
 
 	r.fillFieldMap()

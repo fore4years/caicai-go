@@ -254,7 +254,7 @@ func orderToDTO(o model.OrderTbl) OrderDTO {
 		GiftAmount:           o.GiftAmount,
 		TwiceChargeTime:      o.TwiceChargeTime,
 		Pid:                  o.Pid,
-		ChargingDegree:       o.ChargingDegree,
+		ChargingDegree:       o.ChargingDegree.InexactFloat64(),
 		FullTime:             timeToString(o.FullTime),
 		LeaveTime:            timeToString(o.LeaveTime),
 		ChargeGunPull:        o.ChargeGunPull,

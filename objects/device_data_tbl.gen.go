@@ -30,17 +30,17 @@ func newDeviceDataTbl(db *gorm.DB, opts ...gen.DOOption) deviceDataTbl {
 	_deviceDataTbl.ALL = field.NewAsterisk(tableName)
 	_deviceDataTbl.ID = field.NewInt64(tableName, "id")
 	_deviceDataTbl.Imei = field.NewString(tableName, "imei")
-	_deviceDataTbl.Ept = field.NewFloat64(tableName, "ept")
-	_deviceDataTbl.Ua = field.NewFloat64(tableName, "ua")
-	_deviceDataTbl.Ub = field.NewFloat64(tableName, "ub")
-	_deviceDataTbl.Uc = field.NewFloat64(tableName, "uc")
-	_deviceDataTbl.Ia = field.NewFloat64(tableName, "ia")
-	_deviceDataTbl.Ib = field.NewFloat64(tableName, "ib")
-	_deviceDataTbl.Ic = field.NewFloat64(tableName, "ic")
-	_deviceDataTbl.Pt = field.NewFloat64(tableName, "pt")
-	_deviceDataTbl.Pft = field.NewFloat64(tableName, "pft")
-	_deviceDataTbl.Qt = field.NewFloat64(tableName, "qt")
-	_deviceDataTbl.St = field.NewFloat64(tableName, "st")
+	_deviceDataTbl.Ept = field.NewField(tableName, "ept")
+	_deviceDataTbl.Ua = field.NewField(tableName, "ua")
+	_deviceDataTbl.Ub = field.NewField(tableName, "ub")
+	_deviceDataTbl.Uc = field.NewField(tableName, "uc")
+	_deviceDataTbl.Ia = field.NewField(tableName, "ia")
+	_deviceDataTbl.Ib = field.NewField(tableName, "ib")
+	_deviceDataTbl.Ic = field.NewField(tableName, "ic")
+	_deviceDataTbl.Pt = field.NewField(tableName, "pt")
+	_deviceDataTbl.Pft = field.NewField(tableName, "pft")
+	_deviceDataTbl.Qt = field.NewField(tableName, "qt")
+	_deviceDataTbl.St = field.NewField(tableName, "st")
 	_deviceDataTbl.Ts = field.NewInt64(tableName, "ts")
 	_deviceDataTbl.CreateTime = field.NewTime(tableName, "create_time")
 
@@ -49,25 +49,26 @@ func newDeviceDataTbl(db *gorm.DB, opts ...gen.DOOption) deviceDataTbl {
 	return _deviceDataTbl
 }
 
+// deviceDataTbl 设备信息表
 type deviceDataTbl struct {
 	deviceDataTblDo deviceDataTblDo
 
 	ALL        field.Asterisk
-	ID         field.Int64   // 主键ID
-	Imei       field.String  // 设备ID
-	Ept        field.Float64 // 总有功电能
-	Ua         field.Float64 // A相电压
-	Ub         field.Float64 // B相电压
-	Uc         field.Float64 // C相电压
-	Ia         field.Float64 // A相电流
-	Ib         field.Float64 // B相电流
-	Ic         field.Float64 // C相电流
-	Pt         field.Float64 // 总有功功率
-	Pft        field.Float64 // 总功率因数
-	Qt         field.Float64 // 总无功功率
-	St         field.Float64 // 总视在功率
-	Ts         field.Int64   // 原始时间戳（秒）
-	CreateTime field.Time    // 创建时间
+	ID         field.Int64  // 主键ID
+	Imei       field.String // 设备ID
+	Ept        field.Field  // 总有功电能
+	Ua         field.Field  // A相电压
+	Ub         field.Field  // B相电压
+	Uc         field.Field  // C相电压
+	Ia         field.Field  // A相电流
+	Ib         field.Field  // B相电流
+	Ic         field.Field  // C相电流
+	Pt         field.Field  // 总有功功率
+	Pft        field.Field  // 总功率因数
+	Qt         field.Field  // 总无功功率
+	St         field.Field  // 总视在功率
+	Ts         field.Int64  // 原始时间戳（秒）
+	CreateTime field.Time   // 创建时间
 
 	fieldMap map[string]field.Expr
 }
@@ -86,17 +87,17 @@ func (d *deviceDataTbl) updateTableName(table string) *deviceDataTbl {
 	d.ALL = field.NewAsterisk(table)
 	d.ID = field.NewInt64(table, "id")
 	d.Imei = field.NewString(table, "imei")
-	d.Ept = field.NewFloat64(table, "ept")
-	d.Ua = field.NewFloat64(table, "ua")
-	d.Ub = field.NewFloat64(table, "ub")
-	d.Uc = field.NewFloat64(table, "uc")
-	d.Ia = field.NewFloat64(table, "ia")
-	d.Ib = field.NewFloat64(table, "ib")
-	d.Ic = field.NewFloat64(table, "ic")
-	d.Pt = field.NewFloat64(table, "pt")
-	d.Pft = field.NewFloat64(table, "pft")
-	d.Qt = field.NewFloat64(table, "qt")
-	d.St = field.NewFloat64(table, "st")
+	d.Ept = field.NewField(table, "ept")
+	d.Ua = field.NewField(table, "ua")
+	d.Ub = field.NewField(table, "ub")
+	d.Uc = field.NewField(table, "uc")
+	d.Ia = field.NewField(table, "ia")
+	d.Ib = field.NewField(table, "ib")
+	d.Ic = field.NewField(table, "ic")
+	d.Pt = field.NewField(table, "pt")
+	d.Pft = field.NewField(table, "pft")
+	d.Qt = field.NewField(table, "qt")
+	d.St = field.NewField(table, "st")
 	d.Ts = field.NewInt64(table, "ts")
 	d.CreateTime = field.NewTime(table, "create_time")
 

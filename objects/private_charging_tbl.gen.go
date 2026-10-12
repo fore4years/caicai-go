@@ -45,7 +45,7 @@ func newPrivateChargingTbl(db *gorm.DB, opts ...gen.DOOption) privateChargingTbl
 	_privateChargingTbl.OneClickOpening = field.NewInt32(tableName, "one_click_opening")
 	_privateChargingTbl.ShareTime = field.NewString(tableName, "share_time")
 	_privateChargingTbl.ExchangePlace = field.NewBool(tableName, "exchange_place")
-	_privateChargingTbl.Fee = field.NewString(tableName, "fee")
+	_privateChargingTbl.Fee = field.NewField(tableName, "fee")
 	_privateChargingTbl.OfficialUse = field.NewBool(tableName, "official_use")
 	_privateChargingTbl.OvertimeFee = field.NewBool(tableName, "overtime_fee")
 	_privateChargingTbl.LedID = field.NewInt32(tableName, "led_id")
@@ -58,6 +58,7 @@ func newPrivateChargingTbl(db *gorm.DB, opts ...gen.DOOption) privateChargingTbl
 	return _privateChargingTbl
 }
 
+// privateChargingTbl 私桩用户表
 type privateChargingTbl struct {
 	privateChargingTblDo privateChargingTblDo
 
@@ -79,7 +80,7 @@ type privateChargingTbl struct {
 	OneClickOpening    field.Int32  // 一键开放
 	ShareTime          field.String // 共享时段
 	ExchangePlace      field.Bool   // 是否调换车位（0 - 不需要调换车位，1 - 需要调换车位）
-	Fee                field.String // 服务费率(元/度)
+	Fee                field.Field  // 服务费率(元/度)
 	OfficialUse        field.Bool   // 是否正式投入使用（0-否，1-是）
 	OvertimeFee        field.Bool   // 是否收取超时停车费（0-否，1-是）
 	LedID              field.Int32  // 车位牌设备id
@@ -119,7 +120,7 @@ func (p *privateChargingTbl) updateTableName(table string) *privateChargingTbl {
 	p.OneClickOpening = field.NewInt32(table, "one_click_opening")
 	p.ShareTime = field.NewString(table, "share_time")
 	p.ExchangePlace = field.NewBool(table, "exchange_place")
-	p.Fee = field.NewString(table, "fee")
+	p.Fee = field.NewField(table, "fee")
 	p.OfficialUse = field.NewBool(table, "official_use")
 	p.OvertimeFee = field.NewBool(table, "overtime_fee")
 	p.LedID = field.NewInt32(table, "led_id")

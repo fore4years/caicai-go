@@ -10,14 +10,14 @@ import (
 
 const TableNameTabPrice = "tab_price"
 
-// TabPrice mapped from table <tab_price>
+// TabPrice 电价
 type TabPrice struct {
-	ID      int32           `gorm:"column:id;primaryKey;autoIncrement:true;comment:电价id" json:"id"` // 电价id
-	Total   decimal.Decimal `gorm:"column:total;not null;comment:单价" json:"total"`                  // 单价
-	Total1  decimal.Decimal `gorm:"column:total1;comment:单一制电价" json:"total1"`                      // 单一制电价
-	Total2  decimal.Decimal `gorm:"column:total2;comment:两步制电价" json:"total2"`                      // 两步制电价
-	Name    string          `gorm:"column:name;comment:电价名称" json:"name"`                           // 电价名称
-	Service decimal.Decimal `gorm:"column:service;comment:服务费" json:"service"`                      // 服务费
+	ID      int32           `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:电价id" json:"id"` // 电价id
+	Total   decimal.Decimal `gorm:"column:total;type:decimal(10,4);not null;comment:单价" json:"total"`        // 单价
+	Total1  decimal.Decimal `gorm:"column:total1;type:decimal(10,2);comment:单一制电价" json:"total1"`            // 单一制电价
+	Total2  decimal.Decimal `gorm:"column:total2;type:decimal(10,2);comment:两步制电价" json:"total2"`            // 两步制电价
+	Name    string          `gorm:"column:name;type:varchar(1);comment:电价名称" json:"name"`                    // 电价名称
+	Service decimal.Decimal `gorm:"column:service;type:decimal(10,4);comment:服务费" json:"service"`            // 服务费
 }
 
 // TableName TabPrice's table name

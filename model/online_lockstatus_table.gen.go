@@ -8,10 +8,10 @@ const TableNameOnlineLockstatusTable = "online_lockstatus_Table"
 
 // OnlineLockstatusTable mapped from table <online_lockstatus_Table>
 type OnlineLockstatusTable struct {
-	Number  string `gorm:"column:number" json:"number"`
-	LockID  string `gorm:"column:lockID" json:"lockID"`
-	Battery string `gorm:"column:battery" json:"battery"`
-	Online  string `gorm:"column:online" json:"online"`
+	Number  string `gorm:"column:number;type:longtext" json:"number"`
+	LockID  string `gorm:"column:lockID;type:longtext" json:"lockID"`
+	Battery string `gorm:"column:battery;type:longtext" json:"battery"`
+	Online  string `gorm:"column:online;type:longtext" json:"online"`
 }
 
 // TableName OnlineLockstatusTable's table name

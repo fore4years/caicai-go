@@ -43,6 +43,7 @@ func newOmEmployee(db *gorm.DB, opts ...gen.DOOption) omEmployee {
 	return _omEmployee
 }
 
+// omEmployee 运维职工申请表
 type omEmployee struct {
 	omEmployeeDo omEmployeeDo
 

@@ -10,16 +10,16 @@ import (
 
 const TableNameWangguanTbl = "wangguan_tbl"
 
-// WangguanTbl mapped from table <wangguan_tbl>
+// WangguanTbl 未使用
 type WangguanTbl struct {
-	ID           int32     `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"` // 主键id
-	Name         string    `gorm:"column:name;not null;comment:网关名称" json:"name"`                  // 网关名称
-	Sn           string    `gorm:"column:sn;comment:sn" json:"sn"`                                 // sn
-	Wgtype       string    `gorm:"column:wgtype;comment:网关类型" json:"wgtype"`                       // 网关类型
-	Organization string    `gorm:"column:organization;comment:所属组织" json:"organization"`           // 所属组织
-	Azadd        string    `gorm:"column:azadd;comment:安装地址" json:"azadd"`                         // 安装地址
-	Cjshijian    time.Time `gorm:"column:cjshijian;not null;comment:创建时间" json:"cjshijian"`        // 创建时间
-	Xgshijian    time.Time `gorm:"column:xgshijian;not null;comment:修改时间" json:"xgshijian"`        // 修改时间
+	ID           int32      `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:主键id" json:"id"` // 主键id
+	Name         string     `gorm:"column:name;type:varchar(255);not null;comment:网关名称" json:"name"`         // 网关名称
+	Sn           string     `gorm:"column:sn;type:varchar(255);comment:sn" json:"sn"`                        // sn
+	Wgtype       string     `gorm:"column:wgtype;type:varchar(255);comment:网关类型" json:"wgtype"`              // 网关类型
+	Organization string     `gorm:"column:organization;type:varchar(255);comment:所属组织" json:"organization"`  // 所属组织
+	Azadd        string     `gorm:"column:azadd;type:varchar(255);comment:安装地址" json:"azadd"`                // 安装地址
+	Cjshijian    *time.Time `gorm:"column:cjshijian;type:datetime;not null;comment:创建时间" json:"cjshijian"`   // 创建时间
+	Xgshijian    *time.Time `gorm:"column:xgshijian;type:datetime;not null;comment:修改时间" json:"xgshijian"`   // 修改时间
 }
 
 // TableName WangguanTbl's table name

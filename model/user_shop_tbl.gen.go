@@ -8,9 +8,9 @@ const TableNameUserShopTbl = "user_shop_tbl"
 
 // UserShopTbl mapped from table <user_shop_tbl>
 type UserShopTbl struct {
-	ID     int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:无逻辑主键" json:"id"` // 无逻辑主键
-	OpenID string `gorm:"column:open_id;comment:wechart user key" json:"open_id"`          // wechart user key
-	ShopID string `gorm:"column:shop_id;comment:shop key" json:"shop_id"`                  // shop key
+	ID     int32  `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:无逻辑主键" json:"id"` // 无逻辑主键
+	OpenID string `gorm:"column:open_id;type:varchar(255);comment:wechart user key" json:"open_id"` // wechart user key
+	ShopID string `gorm:"column:shop_id;type:varchar(255);comment:shop key" json:"shop_id"`         // shop key
 }
 
 // TableName UserShopTbl's table name

@@ -47,6 +47,7 @@ func newLockTbl(db *gorm.DB, opts ...gen.DOOption) lockTbl {
 	return _lockTbl
 }
 
+// lockTbl 车位锁
 type lockTbl struct {
 	lockTblDo lockTblDo
 

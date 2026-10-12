@@ -12,43 +12,43 @@ import (
 
 const TableNameOrderTbl = "order_tbl"
 
-// OrderTbl mapped from table <order_tbl>
+// OrderTbl 订单
 type OrderTbl struct {
-	Orderid              string          `gorm:"column:orderid;primaryKey" json:"orderid"`
-	Openid               string          `gorm:"column:openid;comment:用户微信id" json:"openid"`                                         // 用户微信id
-	Lockid               string          `gorm:"column:lockid;comment:锁ID" json:"lockid"`                                            // 锁ID
-	TwiceChargeTime      string          `gorm:"column:twice_charge_time;comment:二轮车充电时长" json:"twice_charge_time"`                  // 二轮车充电时长
-	ReserveTime          time.Time       `gorm:"column:reserve_time;comment:预约时间" json:"reserve_time"`                               // 预约时间
-	BeginTime            time.Time       `gorm:"column:begin_time;comment:开始时间" json:"begin_time"`                                   // 开始时间
-	OverTime             time.Time       `gorm:"column:over_time;comment:关锁/还枪时间" json:"over_time"`                                  // 关锁/还枪时间
-	State                string          `gorm:"column:state;comment:当前状态" json:"state"`                                             // 当前状态
-	TotalPrice           decimal.Decimal `gorm:"column:total_price;comment:单价" json:"total_price"`                                   // 单价
-	CloseTime            time.Time       `gorm:"column:close_time;comment:用户关闭订单时间" json:"close_time"`                               // 用户关闭订单时间
-	PlateNum             string          `gorm:"column:plate_num;comment:车牌号" json:"plate_num"`                                      // 车牌号
-	SpacesID             int32           `gorm:"column:spaces_id;comment:车位id" json:"spaces_id"`                                     // 车位id
-	BookingStartTime     time.Time       `gorm:"column:booking_start_time;comment:预约开始充电时间" json:"booking_start_time"`               // 预约开始充电时间
-	BookingEndTime       time.Time       `gorm:"column:booking_end_time;comment:预约结束充电时间" json:"booking_end_time"`                   // 预约结束充电时间
-	ConsumptionLocation  string          `gorm:"column:consumption_location;comment:消费地址" json:"consumption_location"`               // 消费地址
-	ConsumptionType      string          `gorm:"column:consumption_type;comment:消费类型" json:"consumption_type"`                       // 消费类型
-	ChargingDegree       float64         `gorm:"column:charging_degree;comment:充电度数" json:"charging_degree"`                         // 充电度数
-	ChargingRates        decimal.Decimal `gorm:"column:charging_rates;comment:充电费率(元)" json:"charging_rates"`                        // 充电费率(元)
-	ChargerPower         string          `gorm:"column:charger_power;comment:充电器功率(瓦)" json:"charger_power"`                         // 充电器功率(瓦)
-	StartMode            string          `gorm:"column:start_mode;comment:启动方式" json:"start_mode"`                                   // 启动方式
-	StopMode             string          `gorm:"column:stop_mode;comment:结束方式" json:"stop_mode"`                                     // 结束方式
-	ChargingTime         string          `gorm:"column:charging_time;comment:充电时长" json:"charging_time"`                             // 充电时长
-	FullTime             time.Time       `gorm:"column:full_time;comment:充满时间" json:"full_time"`                                     // 充满时间
-	LeaveTime            time.Time       `gorm:"column:leave_time;comment:车辆驶离时间" json:"leave_time"`                                 // 车辆驶离时间
-	SettlementTime       time.Time       `gorm:"column:settlement_time;comment:结算时间" json:"settlement_time"`                         // 结算时间
-	BasicConsumption     decimal.Decimal `gorm:"column:basic_consumption;comment:基本消费" json:"basic_consumption"`                     // 基本消费
-	DecideAmount         decimal.Decimal `gorm:"column:decide_amount;comment:定金" json:"decide_amount"`                               // 定金
-	Pid                  string          `gorm:"column:pid;comment:产品id" json:"pid"`                                                 // 产品id
-	GiftAmount           string          `gorm:"column:gift_amount;comment:赠送金额" json:"gift_amount"`                                 // 赠送金额
-	ChargeGunPull        int32           `gorm:"column:charge_gun_pull;comment:充电枪是否拔下,0未拔,1已拔" json:"charge_gun_pull"`              // 充电枪是否拔下,0未拔,1已拔
-	GunDisconnectTime    time.Time       `gorm:"column:gun_disconnect_time;comment:充电枪与车辆断开连接时间" json:"gun_disconnect_time"`         // 充电枪与车辆断开连接时间
-	NeighborRelocateTime time.Time       `gorm:"column:neighbor_relocate_time;comment:桩主给用户发送挪车通知的时间" json:"neighbor_relocate_time"` // 桩主给用户发送挪车通知的时间
-	MoveCarTime          time.Time       `gorm:"column:move_car_time;comment:车位无效时挪车通知时间" json:"move_car_time"`                      // 车位无效时挪车通知时间
-	ImageID              string          `gorm:"column:image_id;comment:用户换停车位无效的图片ID" json:"image_id"`                              // 用户换停车位无效的图片ID
-	WechatTransactionID  string          `gorm:"column:wechat_transaction_id;comment:微信支付交易号" json:"wechat_transaction_id"`          // 微信支付交易号
+	Orderid              string          `gorm:"column:orderid;type:varchar(50);primaryKey" json:"orderid"`
+	Openid               string          `gorm:"column:openid;type:varchar(28);comment:用户微信id" json:"openid"`                                      // 用户微信id
+	Lockid               string          `gorm:"column:lockid;type:varchar(15);comment:锁ID" json:"lockid"`                                         // 锁ID
+	TwiceChargeTime      string          `gorm:"column:twice_charge_time;type:varchar(255);comment:二轮车充电时长" json:"twice_charge_time"`              // 二轮车充电时长
+	ReserveTime          *time.Time      `gorm:"column:reserve_time;type:datetime;comment:预约时间" json:"reserve_time"`                               // 预约时间
+	BeginTime            *time.Time      `gorm:"column:begin_time;type:datetime;comment:开始时间" json:"begin_time"`                                   // 开始时间
+	OverTime             *time.Time      `gorm:"column:over_time;type:datetime;comment:关锁/还枪时间" json:"over_time"`                                  // 关锁/还枪时间
+	State                string          `gorm:"column:state;type:varchar(20);comment:当前状态" json:"state"`                                          // 当前状态
+	TotalPrice           decimal.Decimal `gorm:"column:total_price;type:decimal(9,2);comment:单价" json:"total_price"`                               // 单价
+	CloseTime            *time.Time      `gorm:"column:close_time;type:datetime;comment:用户关闭订单时间" json:"close_time"`                               // 用户关闭订单时间
+	PlateNum             string          `gorm:"column:plate_num;type:varchar(10);comment:车牌号" json:"plate_num"`                                   // 车牌号
+	SpacesID             int32           `gorm:"column:spaces_id;type:int;comment:车位id" json:"spaces_id"`                                          // 车位id
+	BookingStartTime     *time.Time      `gorm:"column:booking_start_time;type:datetime;comment:预约开始充电时间" json:"booking_start_time"`               // 预约开始充电时间
+	BookingEndTime       *time.Time      `gorm:"column:booking_end_time;type:datetime;comment:预约结束充电时间" json:"booking_end_time"`                   // 预约结束充电时间
+	ConsumptionLocation  string          `gorm:"column:consumption_location;type:varchar(255);comment:消费地址" json:"consumption_location"`           // 消费地址
+	ConsumptionType      string          `gorm:"column:consumption_type;type:varchar(255);comment:消费类型" json:"consumption_type"`                   // 消费类型
+	ChargingDegree       decimal.Decimal `gorm:"column:charging_degree;type:decimal(10,2);comment:充电度数" json:"charging_degree"`                    // 充电度数
+	ChargingRates        decimal.Decimal `gorm:"column:charging_rates;type:decimal(10,2);comment:充电费率(元)" json:"charging_rates"`                   // 充电费率(元)
+	ChargerPower         string          `gorm:"column:charger_power;type:varchar(255);comment:充电器功率(瓦)" json:"charger_power"`                     // 充电器功率(瓦)
+	StartMode            string          `gorm:"column:start_mode;type:varchar(10);comment:启动方式" json:"start_mode"`                                // 启动方式
+	StopMode             string          `gorm:"column:stop_mode;type:varchar(10);comment:结束方式" json:"stop_mode"`                                  // 结束方式
+	ChargingTime         string          `gorm:"column:charging_time;type:varchar(255);comment:充电时长" json:"charging_time"`                         // 充电时长
+	FullTime             *time.Time      `gorm:"column:full_time;type:datetime;comment:充满时间" json:"full_time"`                                     // 充满时间
+	LeaveTime            *time.Time      `gorm:"column:leave_time;type:datetime;comment:车辆驶离时间" json:"leave_time"`                                 // 车辆驶离时间
+	SettlementTime       *time.Time      `gorm:"column:settlement_time;type:datetime(6);comment:结算时间" json:"settlement_time"`                      // 结算时间
+	BasicConsumption     decimal.Decimal `gorm:"column:basic_consumption;type:decimal(20,2);comment:基本消费" json:"basic_consumption"`                // 基本消费
+	DecideAmount         decimal.Decimal `gorm:"column:decide_amount;type:decimal(10,2);comment:定金" json:"decide_amount"`                          // 定金
+	Pid                  string          `gorm:"column:pid;type:varchar(255);comment:产品id" json:"pid"`                                             // 产品id
+	GiftAmount           string          `gorm:"column:gift_amount;type:varchar(255);comment:赠送金额" json:"gift_amount"`                             // 赠送金额
+	ChargeGunPull        int32           `gorm:"column:charge_gun_pull;type:int unsigned;comment:充电枪是否拔下,0未拔,1已拔" json:"charge_gun_pull"`          // 充电枪是否拔下,0未拔,1已拔
+	GunDisconnectTime    *time.Time      `gorm:"column:gun_disconnect_time;type:timestamp;comment:充电枪与车辆断开连接时间" json:"gun_disconnect_time"`        // 充电枪与车辆断开连接时间
+	NeighborRelocateTime *time.Time      `gorm:"column:neighbor_relocate_time;type:datetime;comment:桩主给用户发送挪车通知的时间" json:"neighbor_relocate_time"` // 桩主给用户发送挪车通知的时间
+	MoveCarTime          *time.Time      `gorm:"column:move_car_time;type:datetime;comment:车位无效时挪车通知时间" json:"move_car_time"`                      // 车位无效时挪车通知时间
+	ImageID              string          `gorm:"column:image_id;type:varchar(64);comment:用户换停车位无效的图片ID" json:"image_id"`                           // 用户换停车位无效的图片ID
+	WechatTransactionID  string          `gorm:"column:wechat_transaction_id;type:varchar(32);comment:微信支付交易号" json:"wechat_transaction_id"`       // 微信支付交易号
 }
 
 // TableName OrderTbl's table name

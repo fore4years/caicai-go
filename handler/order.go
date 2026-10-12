@@ -58,7 +58,7 @@ func userToDTO(u model.UserTbl) UserDTO {
 		Avatar:       u.Avatar,
 		IDCardEmblem: u.IDCardEmblem,
 		IDCardAvatar: u.IDCardAvatar,
-		Balans:       u.Balans,
+		Balans:       u.Balans.Round(2),
 		FreezeBalans: u.FreezeBalans,
 		IDEntity:     u.IDEntity,
 		OmEnable:     u.OmEnable,

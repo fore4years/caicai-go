@@ -30,12 +30,12 @@ func newReOrderElectronicTbl(db *gorm.DB, opts ...gen.DOOption) reOrderElectroni
 	_reOrderElectronicTbl.ALL = field.NewAsterisk(tableName)
 	_reOrderElectronicTbl.ID = field.NewInt32(tableName, "id")
 	_reOrderElectronicTbl.OrderID = field.NewString(tableName, "order_id")
-	_reOrderElectronicTbl.StartValue = field.NewFloat64(tableName, "start_value")
-	_reOrderElectronicTbl.OverValue = field.NewFloat64(tableName, "over_value")
+	_reOrderElectronicTbl.StartValue = field.NewField(tableName, "start_value")
+	_reOrderElectronicTbl.OverValue = field.NewField(tableName, "over_value")
 	_reOrderElectronicTbl.PriceTimeID = field.NewInt32(tableName, "price_time_id")
 	_reOrderElectronicTbl.Power = field.NewString(tableName, "power")
 	_reOrderElectronicTbl.Count = field.NewInt32(tableName, "count")
-	_reOrderElectronicTbl.MaxPower = field.NewFloat64(tableName, "max_power")
+	_reOrderElectronicTbl.MaxPower = field.NewField(tableName, "max_power")
 	_reOrderElectronicTbl.CreateTime = field.NewTime(tableName, "create_time")
 	_reOrderElectronicTbl.UpdateTime = field.NewTime(tableName, "update_time")
 
@@ -44,20 +44,21 @@ func newReOrderElectronicTbl(db *gorm.DB, opts ...gen.DOOption) reOrderElectroni
 	return _reOrderElectronicTbl
 }
 
+// reOrderElectronicTbl 二轮车订单充电时段电量
 type reOrderElectronicTbl struct {
 	reOrderElectronicTblDo reOrderElectronicTblDo
 
 	ALL         field.Asterisk
-	ID          field.Int32   // 主键id
-	OrderID     field.String  // 订单id
-	StartValue  field.Float64 // 开始时电表值
-	OverValue   field.Float64 // 结束时电表值
-	PriceTimeID field.Int32   // 充电时段id
-	Power       field.String  // 功率
-	Count       field.Int32   // 次数
-	MaxPower    field.Float64 // 最大功率
-	CreateTime  field.Time    // 创建时间
-	UpdateTime  field.Time    // 更新时间
+	ID          field.Int32  // 主键id
+	OrderID     field.String // 订单id
+	StartValue  field.Field  // 开始时电表值
+	OverValue   field.Field  // 结束时电表值
+	PriceTimeID field.Int32  // 充电时段id
+	Power       field.String // 功率
+	Count       field.Int32  // 次数
+	MaxPower    field.Field  // 最大功率
+	CreateTime  field.Time   // 创建时间
+	UpdateTime  field.Time   // 更新时间
 
 	fieldMap map[string]field.Expr
 }
@@ -76,12 +77,12 @@ func (r *reOrderElectronicTbl) updateTableName(table string) *reOrderElectronicT
 	r.ALL = field.NewAsterisk(table)
 	r.ID = field.NewInt32(table, "id")
 	r.OrderID = field.NewString(table, "order_id")
-	r.StartValue = field.NewFloat64(table, "start_value")
-	r.OverValue = field.NewFloat64(table, "over_value")
+	r.StartValue = field.NewField(table, "start_value")
+	r.OverValue = field.NewField(table, "over_value")
 	r.PriceTimeID = field.NewInt32(table, "price_time_id")
 	r.Power = field.NewString(table, "power")
 	r.Count = field.NewInt32(table, "count")
-	r.MaxPower = field.NewFloat64(table, "max_power")
+	r.MaxPower = field.NewField(table, "max_power")
 	r.CreateTime = field.NewTime(table, "create_time")
 	r.UpdateTime = field.NewTime(table, "update_time")
 

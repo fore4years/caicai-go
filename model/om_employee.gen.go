@@ -10,17 +10,17 @@ import (
 
 const TableNameOmEmployee = "om_employee"
 
-// OmEmployee mapped from table <om_employee>
+// OmEmployee 运维职工申请表
 type OmEmployee struct {
-	EmployeeID  string    `gorm:"column:employee_id;primaryKey;comment:员工工号" json:"employee_id"`                        // 员工工号
-	Name        string    `gorm:"column:name;not null;comment:姓名" json:"name"`                                          // 姓名
-	Password    string    `gorm:"column:password;not null;comment:密码" json:"password"`                                  // 密码
-	Phone       string    `gorm:"column:phone;not null;comment:手机号" json:"phone"`                                       // 手机号
-	IDCard      string    `gorm:"column:id_card;not null;comment:身份证号" json:"id_card"`                                  // 身份证号
-	EntryDate   time.Time `gorm:"column:entry_date;not null;comment:入职日期" json:"entry_date"`                            // 入职日期
-	Department  string    `gorm:"column:department;not null;comment:所属部门" json:"department"`                            // 所属部门
-	Position    string    `gorm:"column:position;not null;comment:职务" json:"position"`                                  // 职务
-	AuditStatus bool      `gorm:"column:audit_status;not null;comment:审核状态（0-待审核，1-审核通过，-1-审核未通过）" json:"audit_status"` // 审核状态（0-待审核，1-审核通过，-1-审核未通过）
+	EmployeeID  string     `gorm:"column:employee_id;type:varchar(20);primaryKey;comment:员工工号" json:"employee_id"`                       // 员工工号
+	Name        string     `gorm:"column:name;type:varchar(50);not null;comment:姓名" json:"name"`                                         // 姓名
+	Password    string     `gorm:"column:password;type:varchar(100);not null;comment:密码" json:"password"`                                // 密码
+	Phone       string     `gorm:"column:phone;type:varchar(20);not null;comment:手机号" json:"phone"`                                      // 手机号
+	IDCard      string     `gorm:"column:id_card;type:varchar(18);not null;comment:身份证号" json:"id_card"`                                 // 身份证号
+	EntryDate   *time.Time `gorm:"column:entry_date;type:date;not null;comment:入职日期" json:"entry_date"`                                  // 入职日期
+	Department  string     `gorm:"column:department;type:varchar(100);not null;comment:所属部门" json:"department"`                          // 所属部门
+	Position    string     `gorm:"column:position;type:varchar(100);not null;comment:职务" json:"position"`                                // 职务
+	AuditStatus bool       `gorm:"column:audit_status;type:tinyint(1);not null;comment:审核状态（0-待审核，1-审核通过，-1-审核未通过）" json:"audit_status"` // 审核状态（0-待审核，1-审核通过，-1-审核未通过）
 }
 
 // TableName OmEmployee's table name

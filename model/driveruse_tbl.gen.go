@@ -10,11 +10,11 @@ import (
 
 const TableNameDriveruseTbl = "driveruse_tbl"
 
-// DriveruseTbl mapped from table <driveruse_tbl>
+// DriveruseTbl 预约次数表
 type DriveruseTbl struct {
-	Openid        string    `gorm:"column:openid;comment:用户id" json:"openid"`               // 用户id
-	ReserveNumber int32     `gorm:"column:reserveNumber;comment:预约次数" json:"reserveNumber"` // 预约次数
-	EveryDay      time.Time `gorm:"column:everyDay;comment:时间" json:"everyDay"`             // 时间
+	Openid        string     `gorm:"column:openid;type:varchar(255);comment:用户id" json:"openid"`      // 用户id
+	ReserveNumber int32      `gorm:"column:reserveNumber;type:int;comment:预约次数" json:"reserveNumber"` // 预约次数
+	EveryDay      *time.Time `gorm:"column:everyDay;type:date;comment:时间" json:"everyDay"`            // 时间
 }
 
 // TableName DriveruseTbl's table name

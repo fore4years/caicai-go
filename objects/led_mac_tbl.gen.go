@@ -39,6 +39,7 @@ func newLedMacTbl(db *gorm.DB, opts ...gen.DOOption) ledMacTbl {
 	return _ledMacTbl
 }
 
+// ledMacTbl 车位牌
 type ledMacTbl struct {
 	ledMacTblDo ledMacTblDo
 

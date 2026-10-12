@@ -16,6 +16,7 @@ type Config struct {
 	Redis RedisConf `mapstructure:"redis"`
 	Mysql MysqlConf `mapstructure:"mysql"`
 	App   AppConf   `mapstructure:"app"`
+	Tcp   TcpConf   `mapstructure:"tcp"`
 }
 
 var (

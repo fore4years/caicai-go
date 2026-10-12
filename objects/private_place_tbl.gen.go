@@ -29,7 +29,7 @@ func newPrivatePlaceTbl(db *gorm.DB, opts ...gen.DOOption) privatePlaceTbl {
 	tableName := _privatePlaceTbl.privatePlaceTblDo.TableName()
 	_privatePlaceTbl.ALL = field.NewAsterisk(tableName)
 	_privatePlaceTbl.ID = field.NewInt32(tableName, "id")
-	_privatePlaceTbl.Point = field.NewString(tableName, "point")
+	_privatePlaceTbl.Point = field.NewField(tableName, "point")
 	_privatePlaceTbl.Place = field.NewString(tableName, "place")
 	_privatePlaceTbl.Openid = field.NewString(tableName, "openid")
 	_privatePlaceTbl.ChargingGunID = field.NewInt32(tableName, "charging_gun_id")
@@ -42,12 +42,13 @@ func newPrivatePlaceTbl(db *gorm.DB, opts ...gen.DOOption) privatePlaceTbl {
 	return _privatePlaceTbl
 }
 
+// privatePlaceTbl 私桩车位表
 type privatePlaceTbl struct {
 	privatePlaceTblDo privatePlaceTblDo
 
 	ALL           field.Asterisk
 	ID            field.Int32  // 主键id
-	Point         field.String // 经纬度
+	Point         field.Field  // 经纬度
 	Place         field.String // 位置
 	Openid        field.String // openid
 	ChargingGunID field.Int32  // 充电枪id
@@ -71,7 +72,7 @@ func (p privatePlaceTbl) As(alias string) *privatePlaceTbl {
 func (p *privatePlaceTbl) updateTableName(table string) *privatePlaceTbl {
 	p.ALL = field.NewAsterisk(table)
 	p.ID = field.NewInt32(table, "id")
-	p.Point = field.NewString(table, "point")
+	p.Point = field.NewField(table, "point")
 	p.Place = field.NewString(table, "place")
 	p.Openid = field.NewString(table, "openid")
 	p.ChargingGunID = field.NewInt32(table, "charging_gun_id")

@@ -8,10 +8,10 @@ const TableNameStaffTbl = "staff_tbl"
 
 // StaffTbl mapped from table <staff_tbl>
 type StaffTbl struct {
-	Name string `gorm:"column:name;not null" json:"name"`
-	Age  int32  `gorm:"column:age" json:"age"`
-	Sex  string `gorm:"column:sex" json:"sex"`
-	Work string `gorm:"column:work;not null" json:"work"`
+	Name string `gorm:"column:name;type:varchar(255);not null" json:"name"`
+	Age  int32  `gorm:"column:age;type:int" json:"age"`
+	Sex  string `gorm:"column:sex;type:varchar(20)" json:"sex"`
+	Work string `gorm:"column:work;type:varchar(255);not null" json:"work"`
 }
 
 // TableName StaffTbl's table name

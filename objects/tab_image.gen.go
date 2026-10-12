@@ -36,6 +36,7 @@ func newTabImage(db *gorm.DB, opts ...gen.DOOption) tabImage {
 	return _tabImage
 }
 
+// tabImage 图片表
 type tabImage struct {
 	tabImageDo tabImageDo
 

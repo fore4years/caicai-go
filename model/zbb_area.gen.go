@@ -4,21 +4,25 @@
 
 package model
 
+import (
+	"github.com/shopspring/decimal"
+)
+
 const TableNameZbbArea = "zbb_area"
 
-// ZbbArea mapped from table <zbb_area>
+// ZbbArea 区域表
 type ZbbArea struct {
-	ID          int32   `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
-	Pid         int32   `gorm:"column:pid;not null;comment:父id" json:"pid"`                   // 父id
-	Code        string  `gorm:"column:code;not null;comment:编码" json:"code"`                  // 编码
-	Name        string  `gorm:"column:name;not null;comment:名称" json:"name"`                  // 名称
-	Fullname    string  `gorm:"column:fullname;not null;comment:全名" json:"fullname"`          // 全名
-	Pinyin      string  `gorm:"column:pinyin;not null;comment:拼音" json:"pinyin"`              // 拼音
-	FirstLetter string  `gorm:"column:first_letter;not null;comment:首字母" json:"first_letter"` // 首字母
-	FullLetter  string  `gorm:"column:full_letter;not null;comment:首字母全拼" json:"full_letter"` // 首字母全拼
-	Lat         float64 `gorm:"column:lat;not null;comment:纬度" json:"lat"`                    // 纬度
-	Lng         float64 `gorm:"column:lng;not null;comment:经度" json:"lng"`                    // 经度
-	Level       int32   `gorm:"column:level;not null;comment:层级" json:"level"`                // 层级
+	ID          int32           `gorm:"column:id;type:int;primaryKey;autoIncrement:true" json:"id"`
+	Pid         int32           `gorm:"column:pid;type:int;not null;comment:父id" json:"pid"`                           // 父id
+	Code        string          `gorm:"column:code;type:varchar(10);not null;comment:编码" json:"code"`                  // 编码
+	Name        string          `gorm:"column:name;type:varchar(40);not null;comment:名称" json:"name"`                  // 名称
+	Fullname    string          `gorm:"column:fullname;type:varchar(60);not null;comment:全名" json:"fullname"`          // 全名
+	Pinyin      string          `gorm:"column:pinyin;type:varchar(60);not null;comment:拼音" json:"pinyin"`              // 拼音
+	FirstLetter string          `gorm:"column:first_letter;type:varchar(1);not null;comment:首字母" json:"first_letter"`  // 首字母
+	FullLetter  string          `gorm:"column:full_letter;type:varchar(15);not null;comment:首字母全拼" json:"full_letter"` // 首字母全拼
+	Lat         decimal.Decimal `gorm:"column:lat;type:decimal(10,6);not null;comment:纬度" json:"lat"`                  // 纬度
+	Lng         decimal.Decimal `gorm:"column:lng;type:decimal(10,6);not null;comment:经度" json:"lng"`                  // 经度
+	Level       int32           `gorm:"column:level;type:tinyint unsigned;not null;comment:层级" json:"level"`           // 层级
 }
 
 // TableName ZbbArea's table name

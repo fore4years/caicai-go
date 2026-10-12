@@ -26,8 +26,8 @@ const (
 
 // 命令字（对齐 Java OpCodeConstants）。
 const (
-	OpSetGateway           = 0x00 // 设置网关 mac
-	OpSetFactory           = 0x01 // 设置出厂蓝牙 mac
+	_OpSetGateway          = 0x00 // 设置网关 mac
+	_OpSetFactory          = 0x01 // 设置出厂蓝牙 mac
 	OpGetVersion           = 0xA0 // 获取软件版本号
 	OpSetPWM               = 0xA1 // 设置 PWM 占空比
 	OpOpenLock             = 0xA2 // 开充电桩箱锁
@@ -53,13 +53,13 @@ const (
 	OpChargeGunConnect     = 0xB6 // 充电枪与车辆连接
 	OpGetEleData           = 0xB7 // 获取电网数据
 	OpGetICCID             = 0xB8 // 获取 ICCID
-	OpSetPID               = 0xB9 // 设置 PID
+	_OpSetPID              = 0xB9 // 设置 PID
 	OpOpenTime             = 0xBA // 空闲时段
-	OpBluetooth            = 0xBB // 蓝牙请求开车位锁
-	OpBluetoothCharge      = 0xBC // 蓝牙请求充电
-	OpBluetoothPass        = 0xBD // 蓝牙请求通过
-	OpBluetoothFail        = 0xBE // 蓝牙请求失败
-	OpBluetoothSendFail    = 0xBF // 蓝牙发送失败
+	_OpBluetooth           = 0xBB // 蓝牙请求开车位锁
+	_OpBluetoothCharge     = 0xBC // 蓝牙请求充电
+	_OpBluetoothPass       = 0xBD // 蓝牙请求通过
+	_OpBluetoothFail       = 0xBE // 蓝牙请求失败
+	_OpBluetoothSendFail   = 0xBF // 蓝牙发送失败
 	OpOpenGauge            = 0xC0 // 开启继电器
 	OpCloseGauge           = 0xC1 // 关闭继电器
 	OpGetGaugePower        = 0xC2 // 读取继电器电量
@@ -80,9 +80,9 @@ const (
 	OpCloseOpenTime        = 0xD3 // 关闭车位牌显示
 	OpStartOpenTime        = 0xD4 // 开启车位牌显示
 	OpChargingEndDetection = 0xDC // 结束订单断电检测
-	OpSendBluetoothMac     = 0xDD // 传输蓝牙 mac 地址
-	OpBluetoothMacSuccess  = 0xDE // 蓝牙 mac 匹配成功
-	OpBluetoothMacCancel   = 0xDF // 蓝牙 mac 取消匹配
+	_OpSendBluetoothMac    = 0xDD // 传输蓝牙 mac 地址
+	_OpBluetoothMacSuccess = 0xDE // 蓝牙 mac 匹配成功
+	_OpBluetoothMacCancel  = 0xDF // 蓝牙 mac 取消匹配
 	OpGetGunHolderStatus   = 0xF3 // 获取枪座状态与电量
 	OpOpenGunHolderSensor  = 0xF6 // 打开枪座压感开关
 	OpGatewayRegister      = 0xFF // 网关注册

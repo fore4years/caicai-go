@@ -29,5 +29,6 @@ func registerChargeStation(r *gin.Engine) {
 		rop.GET("/getValueByOrderid", reOrderPower.GetValueByOrderid)
 		rop.GET("/getFeesByOrderid", reOrderPower.GetFeesByOrderid)
 		rop.GET("/getElectronicByOrderid", reOrderPower.GetElectronicByOrderid)
+		rop.GET("/getMaxPowerByOrderid", reOrderPower.GetMaxPowerByOrderid)
 	}
 }

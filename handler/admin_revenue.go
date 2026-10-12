@@ -321,7 +321,7 @@ func (a *AdminRevenueController) ExcelExport(c *gin.Context) {
 			EndTime:        timeToLocal(o.OverTime),
 			UserOpenID:     o.Openid,
 			Amount:         o.BasicConsumption,
-			ElectronNum:    decimal.NewFromFloat(o.ChargingDegree),
+			ElectronNum:    o.ChargingDegree,
 			ElectronFee:    electronFee,
 			ServiceFee:     serviceFee,
 			OvertimeUseFee: overtimeUseFee,

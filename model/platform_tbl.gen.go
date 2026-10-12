@@ -8,12 +8,12 @@ const TableNamePlatformTbl = "platform_tbl"
 
 // PlatformTbl mapped from table <platform_tbl>
 type PlatformTbl struct {
-	ID          int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:主键id" json:"id"` // 主键id
-	Name        string `gorm:"column:name;primaryKey;comment:平台名称" json:"name"`                // 平台名称
-	APIURL      string `gorm:"column:api_url;not null;comment:热搜数据的API地址" json:"api_url"`      // 热搜数据的API地址
-	APIParams   string `gorm:"column:api_params;comment:携带参数" json:"api_params"`               // 携带参数
-	VisitURL    string `gorm:"column:visit_url;comment:访问的API地址" json:"visit_url"`             // 访问的API地址
-	VisitParams string `gorm:"column:visit_params;comment:携带参数" json:"visit_params"`           // 携带参数
+	ID          int32  `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:主键id" json:"id"`     // 主键id
+	Name        string `gorm:"column:name;type:varchar(255);primaryKey;comment:平台名称" json:"name"`           // 平台名称
+	APIURL      string `gorm:"column:api_url;type:varchar(255);not null;comment:热搜数据的API地址" json:"api_url"` // 热搜数据的API地址
+	APIParams   string `gorm:"column:api_params;type:varchar(255);comment:携带参数" json:"api_params"`          // 携带参数
+	VisitURL    string `gorm:"column:visit_url;type:varchar(255);comment:访问的API地址" json:"visit_url"`        // 访问的API地址
+	VisitParams string `gorm:"column:visit_params;type:varchar(255);comment:携带参数" json:"visit_params"`      // 携带参数
 }
 
 // TableName PlatformTbl's table name

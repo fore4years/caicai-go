@@ -20,22 +20,43 @@ func (t LocalDateTime) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + time.Time(t).Format("2006-01-02T15:04:05") + `"`), nil
 }
 
-// timeToLocal 将 time.Time 转为可空时间；零值返回 nil（对齐 Java non_null 省略 null 字段）。
-func timeToLocal(t time.Time) *LocalDateTime {
-	if t.IsZero() {
+// timeToLocal 将可空时间转为 LocalDateTime；nil 或零值返回 nil（对齐 Java non_null 省略 null 字段）。
+func timeToLocal(t *time.Time) *LocalDateTime {
+	if t == nil || t.IsZero() {
 		return nil
 	}
-	v := LocalDateTime(t)
+	v := LocalDateTime(*t)
 	return &v
 }
 
-// timeToString 将 time.Time 转为字符串；零值返回空串。
+// timeToString 将可空时间转为字符串；nil 或零值返回空串。
 // Java 中 fullTime/leaveTime 是 String（由 MyBatis 将 datetime 列转成字符串）。
-func timeToString(t time.Time) string {
-	if t.IsZero() {
+func timeToString(t *time.Time) string {
+	if t == nil || t.IsZero() {
 		return ""
 	}
 	return t.Format("2006-01-02 15:04:05")
+}
+
+// timePtr 将 time.Time 转为 *time.Time；零值返回 nil（对齐 Java 可空 LocalDateTime 插入 NULL）。
+func timePtr(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+// isZeroTime 判断可空时间是否为空（nil 或零值）。
+func isZeroTime(t *time.Time) bool {
+	return t == nil || t.IsZero()
+}
+
+// timeOrZero 解引用可空时间，nil 返回零值。
+func timeOrZero(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }
 
 // PlaceDTO 对应 Java domain.Place，JSON 字段名与 Jackson 序列化保持一致（驼峰）。

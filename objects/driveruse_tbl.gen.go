@@ -37,6 +37,7 @@ func newDriveruseTbl(db *gorm.DB, opts ...gen.DOOption) driveruseTbl {
 	return _driveruseTbl
 }
 
+// driveruseTbl 预约次数表
 type driveruseTbl struct {
 	driveruseTblDo driveruseTblDo
 

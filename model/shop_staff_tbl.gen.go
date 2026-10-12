@@ -8,18 +8,18 @@ const TableNameShopStaffTbl = "shop_staff_tbl"
 
 // ShopStaffTbl mapped from table <shop_staff_tbl>
 type ShopStaffTbl struct {
-	ID              int32  `gorm:"column:id;primaryKey;autoIncrement:true;comment:与逻辑无关主键" json:"id"` // 与逻辑无关主键
-	OpenID          string `gorm:"column:openId;not null;comment:用户id" json:"openId"`                 // 用户id
-	ShopID          string `gorm:"column:shopId;comment:商铺的id" json:"shopId"`                         // 商铺的id
-	Dust            string `gorm:"column:dust" json:"dust"`
-	Name            string `gorm:"column:name" json:"name"`
-	Age             string `gorm:"column:age;comment:年纪" json:"age"`                                              // 年纪
-	Number          string `gorm:"column:number;comment:编号" json:"number"`                                        // 编号
-	CreatTime       string `gorm:"column:creatTime;comment:入职时间" json:"creatTime"`                                // 入职时间
-	Email           string `gorm:"column:email;comment:电子邮件" json:"email"`                                        // 电子邮件
-	Phone           string `gorm:"column:phone;comment:手机" json:"phone"`                                          // 手机
-	Icon            string `gorm:"column:icon;comment:头像" json:"icon"`                                            // 头像
-	LockPermissions string `gorm:"column:lockPermissions;not null;comment:0代表没有开锁权限，1代表有" json:"lockPermissions"` // 0代表没有开锁权限，1代表有
+	ID              int32  `gorm:"column:id;type:int;primaryKey;autoIncrement:true;comment:与逻辑无关主键" json:"id"` // 与逻辑无关主键
+	OpenID          string `gorm:"column:openId;type:varchar(255);not null;comment:用户id" json:"openId"`        // 用户id
+	ShopID          string `gorm:"column:shopId;type:varchar(255);comment:商铺的id" json:"shopId"`                // 商铺的id
+	Dust            string `gorm:"column:dust;type:varchar(255)" json:"dust"`
+	Name            string `gorm:"column:name;type:varchar(255)" json:"name"`
+	Age             string `gorm:"column:age;type:varchar(255);comment:年纪" json:"age"`                                            // 年纪
+	Number          string `gorm:"column:number;type:varchar(255);comment:编号" json:"number"`                                      // 编号
+	CreatTime       string `gorm:"column:creatTime;type:varchar(255);comment:入职时间" json:"creatTime"`                              // 入职时间
+	Email           string `gorm:"column:email;type:varchar(255);comment:电子邮件" json:"email"`                                      // 电子邮件
+	Phone           string `gorm:"column:phone;type:varchar(255);comment:手机" json:"phone"`                                        // 手机
+	Icon            string `gorm:"column:icon;type:varchar(1024);comment:头像" json:"icon"`                                         // 头像
+	LockPermissions string `gorm:"column:lockPermissions;type:varchar(1);not null;comment:0代表没有开锁权限，1代表有" json:"lockPermissions"` // 0代表没有开锁权限，1代表有
 }
 
 // TableName ShopStaffTbl's table name

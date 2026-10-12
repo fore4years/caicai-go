@@ -44,6 +44,7 @@ func newChargeMessageTbl(db *gorm.DB, opts ...gen.DOOption) chargeMessageTbl {
 	return _chargeMessageTbl
 }
 
+// chargeMessageTbl 业主车位对应的枪表
 type chargeMessageTbl struct {
 	chargeMessageTblDo chargeMessageTblDo
 

@@ -42,6 +42,7 @@ func newAccountPrivateTbl(db *gorm.DB, opts ...gen.DOOption) accountPrivateTbl {
 	return _accountPrivateTbl
 }
 
+// accountPrivateTbl 私人账户信息表
 type accountPrivateTbl struct {
 	accountPrivateTblDo accountPrivateTblDo
 

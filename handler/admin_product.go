@@ -163,7 +163,7 @@ func (a *AdminProductController) addProduct(c *gin.Context, header string, isTwi
 		Imei:           req.Imei,
 		GatewayID:      req.GatewayID,
 		Environment:    env,
-		ProductionTime: time.Now(),
+		ProductionTime: timePtr(time.Now()),
 		IsTwicecar:     isTwicecar,
 	}
 	if err := conf.Db.Create(&p).Error; err != nil {

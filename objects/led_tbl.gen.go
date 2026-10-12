@@ -39,6 +39,7 @@ func newLedTbl(db *gorm.DB, opts ...gen.DOOption) ledTbl {
 	return _ledTbl
 }
 
+// ledTbl LED设备表
 type ledTbl struct {
 	ledTblDo ledTblDo
 

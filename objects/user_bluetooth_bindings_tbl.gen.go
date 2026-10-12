@@ -41,6 +41,7 @@ func newUserBluetoothBindingsTbl(db *gorm.DB, opts ...gen.DOOption) userBluetoot
 	return _userBluetoothBindingsTbl
 }
 
+// userBluetoothBindingsTbl 用户蓝牙设备绑定关系表
 type userBluetoothBindingsTbl struct {
 	userBluetoothBindingsTblDo userBluetoothBindingsTblDo
 
