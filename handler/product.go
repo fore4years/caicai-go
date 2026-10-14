@@ -180,3 +180,43 @@ func (p *ProductController) GetAllRegisteredIds(c *gin.Context) {
 
 	c.JSON(http.StatusOK, ResultSuccess(productVoDTO{RegisteredIds: registeredIds, LatestNumber: latestNumber}))
 }
+
+// GetNotUse GET /product/getNotUse 对齐 Java getNotUse：未被充电枪/车位锁使用且非二轮车的产品。
+func (p *ProductController) GetNotUse(c *gin.Context) {
+	var rows []model.TabProduct
+	conf.Db.Raw(`SELECT tab_product.* FROM tab_product
+		LEFT JOIN tab_charging_gun ON tab_charging_gun.product_id = tab_product.pid
+		LEFT JOIN lock_tbl ON lock_tbl.product_id = tab_product.pid
+		WHERE tab_charging_gun.product_id IS NULL AND lock_tbl.product_id IS NULL AND tab_product.is_twicecar = 0`).Scan(&rows)
+	list := make([]productDTO, 0, len(rows))
+	for _, r := range rows {
+		list = append(list, productToDTO(r))
+	}
+	c.JSON(http.StatusOK, ResultSuccess(list))
+}
+
+// GetNotUseByStations GET /product/getNotUseByStations 对齐 Java getNotUseByStations：二轮车充电站产品。
+func (p *ProductController) GetNotUseByStations(c *gin.Context) {
+	var rows []model.TabProduct
+	conf.Db.Raw(`SELECT tab_product.* FROM tab_product WHERE tab_product.is_twicecar = 1`).Scan(&rows)
+	list := make([]productDTO, 0, len(rows))
+	for _, r := range rows {
+		list = append(list, productToDTO(r))
+	}
+	c.JSON(http.StatusOK, ResultSuccess(list))
+}
+
+// GetPidBySpacesId GET /product/getPidBySpacesId 对齐 Java getPidBySpacesId：
+// 车位 → 充电枪 → 产品。
+func (p *ProductController) GetPidBySpacesId(c *gin.Context) {
+	var prod model.TabProduct
+	err := conf.Db.Raw(`SELECT tab_product.* FROM tab_parking_spaces
+		LEFT JOIN tab_charging_gun ON tab_parking_spaces.charging_gun_id = tab_charging_gun.id
+		LEFT JOIN tab_product ON tab_charging_gun.product_id = tab_product.pid
+		WHERE tab_parking_spaces.id = ?`, c.Query("spacesId")).Scan(&prod).Error
+	if err != nil || prod.Pid == "" {
+		c.JSON(http.StatusOK, ResultSuccess(nil))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(productToDTO(prod)))
+}

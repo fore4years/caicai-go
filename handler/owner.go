@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"fmt"
+	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -187,4 +190,150 @@ func (c *OwnerController) GetByLockMac(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, ResultSuccess(l.Lockmac))
+}
+
+// saveNamedImage 读取 multipart 的指定字段并写入 tab_image，返回图片 id。
+func saveNamedImage(ctx *gin.Context, field string) (int32, bool) {
+	fh, err := ctx.FormFile(field)
+	if err != nil {
+		return 0, false
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return 0, false
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return 0, false
+	}
+	img := model.TabImage{Image: data}
+	if conf.Db.Create(&img).Error != nil {
+		return 0, false
+	}
+	return img.ID, true
+}
+
+// nextPlaceSpacesCode 对齐 Java indexSerImpl.getNextSpacesCode：code + 5 位递增编号。
+func nextPlaceSpacesCode(code string) string {
+	if code == "" {
+		return ""
+	}
+	var maxCode string
+	conf.Db.Raw("SELECT MAX(placeid) FROM place_tbl WHERE placeid LIKE ?", code+"%").Scan(&maxCode)
+	if maxCode == "" {
+		maxCode = "0"
+	}
+	remainder := maxCode
+	if len(maxCode) >= len(code) && maxCode[:len(code)] == code {
+		remainder = maxCode[len(code):]
+	}
+	n, err := strconv.Atoi(remainder)
+	if err != nil {
+		return ""
+	}
+	return code + fmt.Sprintf("%05d", n+1)
+}
+
+// GetByIdPlace GET /wx/owner/getByIdPlace 对齐 Java indexSerImpl.getByIdPlace：按 placeid 查单个车位（返回列表）。
+func (c *OwnerController) GetByIdPlace(ctx *gin.Context) {
+	var place model.PlaceTbl
+	if err := conf.Db.Where("placeid = ?", ctx.Query("placeid")).First(&place).Error; err != nil {
+		ctx.JSON(http.StatusOK, ResultSuccess([]PlaceDtoDTO{}))
+		return
+	}
+	ctx.JSON(http.StatusOK, ResultSuccess([]PlaceDtoDTO{placeToPlaceDtoDTO(place)}))
+}
+
+// Save POST /wx/owner/save 对齐 Java indexCon.add + indexSerImpl.save：新增车位（证书图片可选，COS 上传省略）。
+func (c *OwnerController) Save(ctx *gin.Context) {
+	code := ctx.PostForm("code")
+	openid := ctx.PostForm("openid")
+	place := ctx.PostForm("place") // relatedBuilding
+	province := ctx.PostForm("province")
+	city := ctx.PostForm("city")
+	district := ctx.PostForm("district")
+	street := ctx.PostForm("street") // streer
+	latitude := ctx.PostForm("latitude")
+	longitude := ctx.PostForm("longitude")
+
+	var imageID int32
+	// Java：certificate == null ? null : imageService.add(certificate)；COS/磁盘上传省略，图片字节落 tab_image。
+	if _, err := ctx.FormFile("file"); err == nil {
+		imageID, _ = saveImageFromCtx(ctx)
+	}
+
+	spacesCode := nextPlaceSpacesCode(code)
+	if spacesCode == "" {
+		ctx.JSON(http.StatusOK, false)
+		return
+	}
+	rec := model.PlaceTbl{
+		Placeid:         spacesCode,
+		Ownerid:         openid,
+		Province:        province,
+		City:            city,
+		District:        district,
+		Streer:          street,
+		Longitude:       longitude,
+		Latitude:        latitude,
+		RelatedBuilding: place,
+		State:           "待审核",
+		ImageID:         imageID,
+	}
+	res := conf.Db.Select("placeid", "ownerid", "province", "city", "district", "streer", "longitude", "latitude", "relatedBuilding", "state", "image_id").
+		Create(&rec)
+	ctx.JSON(http.StatusOK, res.Error == nil)
+}
+
+// PlaceAddIdCardR POST /wx/owner/placeAdd_idCard_r 对齐 Java mySerImpl.placeAdd_r：回写身份证反面照。
+// Java 用 saveFileUtil.save 落盘/COS，此处省略，图片字节存入 tab_image，以图片 id 字符串回写。
+func (c *OwnerController) PlaceAddIdCardR(ctx *gin.Context) {
+	id := ctx.PostForm("id")
+	url := ""
+	if _, err := ctx.FormFile("idCard_r"); err == nil {
+		if imageID, ok := saveNamedImage(ctx, "idCard_r"); ok {
+			url = strconv.Itoa(int(imageID))
+		}
+	}
+	conf.Db.Model(&model.PlaceapplyTbl{}).Where("id = ?", id).Update("idCard_r", url)
+	ctx.JSON(http.StatusOK, "ok")
+}
+
+// PlaceAddProve POST /wx/owner/placeAdd_prove 对齐 Java mySerImpl.placeAdd_p：回写产权证明。
+// 同 placeAdd_idCard_r，文件存储省略，图片 id 字符串回写。
+func (c *OwnerController) PlaceAddProve(ctx *gin.Context) {
+	id := ctx.PostForm("id")
+	url := ""
+	if _, err := ctx.FormFile("prove"); err == nil {
+		if imageID, ok := saveNamedImage(ctx, "prove"); ok {
+			url = strconv.Itoa(int(imageID))
+		}
+	}
+	conf.Db.Model(&model.PlaceapplyTbl{}).Where("id = ?", id).Update("prove", url)
+	ctx.JSON(http.StatusOK, "ok")
+}
+
+// ownerMessageDTO 对应 Java domain.MessageBean。
+type ownerMessageDTO struct {
+	ID      int32  `json:"id,omitempty"`
+	Ownerid string `json:"ownerid,omitempty"`
+	Message string `json:"message,omitempty"`
+	Msgtime string `json:"msgtime,omitempty"`
+	Status  string `json:"status,omitempty"`
+}
+
+// GetMsgs GET /wx/owner/getmsgs 对齐 Java mySerImpl.getmsgs：查询业主消息并倒序。
+func (c *OwnerController) GetMsgs(ctx *gin.Context) {
+	var msgs []model.MessageTbl
+	conf.Db.Where("ownerid = ?", ctx.Query("ownerid")).Find(&msgs)
+	// Java Collections.reverse 倒序
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+	list := make([]ownerMessageDTO, 0, len(msgs))
+	for _, m := range msgs {
+		list = append(list, ownerMessageDTO{ID: m.ID, Ownerid: m.Ownerid, Message: m.Message, Msgtime: m.Msgtime, Status: m.Status})
+	}
+	ctx.JSON(http.StatusOK, list)
 }

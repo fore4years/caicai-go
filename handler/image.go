@@ -24,3 +24,24 @@ func (i *ImageController) GetById(c *gin.Context) {
 	}
 	c.Data(http.StatusOK, "image/jpeg", img.Image)
 }
+
+// Add POST /image/add 对齐 Java ImageController.add：JSON 提交图片字节落库。
+func (i *ImageController) Add(c *gin.Context) {
+	var req model.TabImage
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	res := conf.Db.Create(&req)
+	c.JSON(http.StatusOK, ResultSuccess(res.Error == nil))
+}
+
+// GetAll GET /image/getAll 对齐 Java ImageController.getAll：分页查询所有图片。
+func (i *ImageController) GetAll(c *gin.Context) {
+	current, size := parsePage(c)
+	var total int64
+	conf.Db.Model(&model.TabImage{}).Count(&total)
+	var rows []model.TabImage
+	conf.Db.Model(&model.TabImage{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	c.JSON(http.StatusOK, ResultSuccessPage(total, rows))
+}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -169,4 +170,59 @@ func (o *OrderController) UpdateUserStatus(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, ResultSuccess("ok"))
+}
+
+// UpdateAvatar POST /user/updateAvatar 对齐 Java updateAvatar：头像字节直接写入 user_tbl.avatar。
+func (o *OrderController) UpdateAvatar(c *gin.Context) {
+	fh, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	f, err := fh.Open()
+	if err != nil {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	openid := c.GetString("openid")
+	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).Update("avatar", data)
+	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+}
+
+// UpdateEmblem POST /user/updateEmblem 对齐 Java updateEmblem：国徽面图片写入 tab_image，回写 id_card_emblem。
+func (o *OrderController) UpdateEmblem(c *gin.Context) {
+	imageID, ok := saveImageFromCtx(c)
+	if !ok {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	openid := c.GetString("openid")
+	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).Update("id_card_emblem", imageID)
+	if res.RowsAffected == 0 {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(true))
+}
+
+// UpdateIdCardAvatar POST /user/updateIdCardAvatar 对齐 Java updateIdCardAvatar：头像面图片写入 tab_image，回写 id_card_avatar。
+func (o *OrderController) UpdateIdCardAvatar(c *gin.Context) {
+	imageID, ok := saveImageFromCtx(c)
+	if !ok {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	openid := c.GetString("openid")
+	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).Update("id_card_avatar", imageID)
+	if res.RowsAffected == 0 {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(true))
 }

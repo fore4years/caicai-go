@@ -118,3 +118,159 @@ func (c *ShopController) SearchShop(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, list)
 }
+
+// shopLockUseInfoDTO 对应 Java domain.ShopLockUseInfoDto（字段 Numb/adr/state/useTime）。
+type shopLockUseInfoDTO struct {
+	Numb    string `json:"numb"`
+	Adr     string `json:"adr"`
+	State   string `json:"state"`
+	UseTime string `json:"useTime"`
+}
+
+// GetShopLockInfoByShopId GET /wx/getShopLockInfoByShopId 对齐 Java getShopLockInfoByShopId：
+// shop → place → 该车位所有锁 → 每个锁的使用信息 DTO。
+func (c *ShopController) GetShopLockInfoByShopId(ctx *gin.Context) {
+	shopID := ctx.Query("shopId")
+	var shop model.ShopTbl
+	if err := conf.Db.Where("shop_id = ?", shopID).First(&shop).Error; err != nil {
+		ctx.JSON(http.StatusOK, nil)
+		return
+	}
+	var place model.PlaceTbl
+	if err := conf.Db.Where("placeid = ?", shop.Address).First(&place).Error; err != nil {
+		ctx.JSON(http.StatusOK, nil)
+		return
+	}
+	var locks []model.LockTbl
+	conf.Db.Where("placeid = ?", place.Placeid).Find(&locks)
+
+	res := make([]shopLockUseInfoDTO, 0, len(locks))
+	for _, l := range locks {
+		var lui model.LockUseTbl
+		if conf.Db.Where("lockid = ?", l.Lockid).First(&lui).Error != nil {
+			continue
+		}
+		if lui.UseState == "1" {
+			lui.UseTime = strconv.Itoa(sysTimeDiffMs(lui.StartTime, sysTime()) / 60000)
+		}
+		adr := "dm"
+		if l.FixType == "地下" {
+			adr = "dx"
+		}
+		state := "使用中"
+		if lui.UseState == "0" {
+			state = "空闲中"
+		}
+		res = append(res, shopLockUseInfoDTO{Numb: lui.Lockid, Adr: adr, State: state, UseTime: lui.UseTime})
+	}
+	ctx.JSON(http.StatusOK, res)
+}
+
+// GetShopLockListByShopId GET /wx/getShopLockListByShopId 对齐 Java getShopLockListByShopId：
+// 返回商铺关联车位下的所有车位锁（lock_tbl）。
+func (c *ShopController) GetShopLockListByShopId(ctx *gin.Context) {
+	shopID := ctx.Query("shopId")
+	var shop model.ShopTbl
+	if err := conf.Db.Where("shop_id = ?", shopID).First(&shop).Error; err != nil {
+		ctx.JSON(http.StatusOK, nil)
+		return
+	}
+	var place model.PlaceTbl
+	if err := conf.Db.Where("placeid = ?", shop.Address).First(&place).Error; err != nil {
+		ctx.JSON(http.StatusOK, nil)
+		return
+	}
+	var locks []model.LockTbl
+	conf.Db.Where("placeid = ?", place.Placeid).Find(&locks)
+	ctx.JSON(http.StatusOK, locks)
+}
+
+// UpdateLockInfo GET /wx/updateLockInfo 对齐 Java ShopServerImpl.updateLockInfo。
+// 注：Java 原逻辑无论原状态如何都会置 useState=1 并刷新 startTime（else 分支为死代码）。
+func (c *ShopController) UpdateLockInfo(ctx *gin.Context) {
+	lockID := ctx.Query("lockId")
+	var lui model.LockUseTbl
+	if err := conf.Db.Where("lockid = ?", lockID).First(&lui).Error; err != nil {
+		ctx.JSON(http.StatusOK, false)
+		return
+	}
+	now := sysTime()
+	res := conf.Db.Model(&model.LockUseTbl{}).Where("lockid = ?", lockID).
+		Updates(map[string]interface{}{"useState": "1", "startTime": now, "updateTime": now})
+	ctx.JSON(http.StatusOK, res.RowsAffected > 0)
+}
+
+// GetShopStaff GET /wx/getShopStaff 对齐 Java getShopStaff：查询有权限的员工（lockPermissions=1）。
+func (c *ShopController) GetShopStaff(ctx *gin.Context) {
+	var staffs []model.ShopStaffTbl
+	conf.Db.Where("shopId = ? AND lockPermissions = ?", ctx.Query("shopId"), "1").Find(&staffs)
+	ctx.JSON(http.StatusOK, staffs)
+}
+
+// DeleteShopStaff GET /wx/deleteShopStaff 对齐 Java deleteShopStaff：取消员工权限（=0）。
+func (c *ShopController) DeleteShopStaff(ctx *gin.Context) {
+	res := conf.Db.Model(&model.ShopStaffTbl{}).
+		Where("number = ?", ctx.Query("staffId")).
+		Update("lockPermissions", "0")
+	ctx.JSON(http.StatusOK, res.RowsAffected > 0)
+}
+
+// GetShopApplyStaff GET /wx/getShopApplyStaff 对齐 Java getShopApplyStaff：查询无权限员工（=0）。
+func (c *ShopController) GetShopApplyStaff(ctx *gin.Context) {
+	var staffs []model.ShopStaffTbl
+	conf.Db.Where("shopId = ? AND lockPermissions = ?", ctx.Query("shopId"), "0").Find(&staffs)
+	ctx.JSON(http.StatusOK, staffs)
+}
+
+// AgreeShopApplyStaff GET /wx/agreeShopApplyStaff 对齐 Java agreeShopApplyStaff：给予权限（=1）。
+func (c *ShopController) AgreeShopApplyStaff(ctx *gin.Context) {
+	res := conf.Db.Model(&model.ShopStaffTbl{}).
+		Where("number = ?", ctx.Query("staffId")).
+		Update("lockPermissions", "1")
+	ctx.JSON(http.StatusOK, res.RowsAffected > 0)
+}
+
+// StaffSendApply GET /wx/staffSendApply 对齐 Java ShopStaffServerImpl.staffSendApply：提交权限申请。
+func (c *ShopController) StaffSendApply(ctx *gin.Context) {
+	openID := ctx.Query("openId")
+	shopID := ctx.Query("shopId")
+
+	var staffs []model.ShopStaffTbl
+	conf.Db.Where("shopId = ?", shopID).Find(&staffs)
+	for _, s := range staffs {
+		if s.OpenID == openID {
+			ctx.JSON(http.StatusOK, false)
+			return
+		}
+	}
+
+	staff := c.creatShopStaff(openID, shopID, staffs)
+	res := conf.Db.Select("openId", "shopId", "dust", "name", "age", "number", "creatTime", "phone", "icon", "lockPermissions").
+		Create(&staff)
+	ctx.JSON(http.StatusOK, res.Error == nil)
+}
+
+// creatShopStaff 对齐 Java ShopStaffServerImpl.creatNewStaff：查询 user 封装员工信息（dust=普通员工）。
+func (c *ShopController) creatShopStaff(openID, shopID string, staffs []model.ShopStaffTbl) model.ShopStaffTbl {
+	var user model.UserTbl
+	conf.Db.Where("openid = ?", openID).First(&user)
+
+	lastNumber := "000001"
+	for _, s := range staffs {
+		lastNumber = s.Number
+	}
+	lastNumber = nextStaffNumber(lastNumber)
+
+	return model.ShopStaffTbl{
+		OpenID:          openID,
+		ShopID:          shopID,
+		Dust:            "普通员工",
+		Name:            user.NickName,
+		Age:             "20",
+		Number:          lastNumber,
+		CreatTime:       sysTime(),
+		Phone:           user.Phone,
+		Icon:            "", // Java 取 user.avatarUrl，Go 模型无此列（只有 avatar BLOB），置空
+		LockPermissions: "0",
+	}
+}
