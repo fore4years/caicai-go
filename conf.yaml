@@ -23,4 +23,4 @@ app:
   port: 8888
 
 tcp:
-  port: 10012
+  port: 10013

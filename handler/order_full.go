@@ -734,7 +734,7 @@ func (o *OrderController) UpdateOrderState(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(true))
 	case consumeTypeNeighbor:
 		gun := chargingGunByPrivateOrder(orderID)
-		if gun == nil || !service.SendCommand(gun.deviceID(), protocol.OpOpenCharge, -1) {
+		if gun == nil || !service.OpenGunLock(gun.deviceID()) {
 			c.JSON(http.StatusOK, ResultError(1, "开充电枪失败"))
 			return
 		}

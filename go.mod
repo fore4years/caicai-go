@@ -11,7 +11,7 @@ require (
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/rs/zerolog v1.35.1
-	github.com/shopspring/decimal v1.4.0
+	github.com/shopspring/decimal v1.5.0
 	github.com/spf13/viper v1.21.0
 	github.com/wechatpay-apiv3/wechatpay-go v0.2.21
 	gorm.io/driver/mysql v1.6.0

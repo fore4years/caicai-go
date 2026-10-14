@@ -25,6 +25,7 @@ func RouterInit(r *gin.Engine) {
 	gatewayController := new(handler.GatewayController)
 	lockController := new(handler.LockController)
 	chargingGunController := new(handler.ChargingGunController)
+	privatePriceTimeController := new(handler.PrivatePriceTimeController)
 	chargingStateController := new(handler.ChargingStateController)
 	stationManagementController := new(handler.StationManagementController)
 	ledController := new(handler.LedController)
@@ -173,6 +174,18 @@ func RouterInit(r *gin.Engine) {
 		chargingGun.POST("/updatePwm", chargingGunController.UpdatePwm)
 	}
 
+	// 私桩时段电价（Java PrivatePriceTimeController）
+	privatePriceTime := r.Group("/PrivatePriceTime")
+	{
+		privatePriceTime.GET("/getById", privatePriceTimeController.GetById)
+		privatePriceTime.POST("/add", privatePriceTimeController.Add)
+		privatePriceTime.GET("/getAll", privatePriceTimeController.GetAll)
+		privatePriceTime.GET("/getAllBySeason", privatePriceTimeController.GetAllBySeason)
+		privatePriceTime.GET("/getAllBySeasonAndPrivateOwner", privatePriceTimeController.GetAllBySeasonAndPrivateOwner)
+		privatePriceTime.GET("/getByTime", privatePriceTimeController.GetByTime)
+		privatePriceTime.GET("/getNow", privatePriceTimeController.GetNow)
+	}
+
 	// 充电桩状态（Java ChargingStateController）
 	chargingState := r.Group("/chargingState")
 	{
@@ -229,6 +242,7 @@ func RouterInit(r *gin.Engine) {
 		product.GET("/getAll", productController.GetAll)
 		product.GET("/getByImeiLike", productController.GetByImeiLike)
 		product.GET("/getNidAndGatewayByPid", productController.GetNidAndGatewayByPid)
+		product.GET("/getAllRegisteredIds", productController.GetAllRegisteredIds)
 	}
 
 	// 订单电量（Java OrderElectronicController）

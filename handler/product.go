@@ -19,6 +19,12 @@ type productNidGatewayDTO struct {
 	Gateway string `json:"gateway"`
 }
 
+// productVoDTO 对齐 Java domain.vo.ProductVo（getAllRegisteredIds 的返回）。
+type productVoDTO struct {
+	RegisteredIds []string `json:"registeredIds"`
+	LatestNumber  string   `json:"latestNumber"`
+}
+
 // GetById GET /product/getById?id=（tab_product 主键为 pid，此处按 pid 查询）
 func (p *ProductController) GetById(c *gin.Context) {
 	var prod model.TabProduct
@@ -160,4 +166,16 @@ func (p *ProductController) GetNidAndGatewayByPid(c *gin.Context) {
 		gateway = gw.Mac
 	}
 	c.JSON(http.StatusOK, ResultSuccess(productNidGatewayDTO{Nid: nid, Gateway: gateway}))
+}
+
+// GetAllRegisteredIds GET /product/getAllRegisteredIds
+// 返回已使用的充电桩编号列表（pid 前缀 SCC）与最新编号，对齐 Java ProductServiceImpl.getAllRegisteredIds。
+func (p *ProductController) GetAllRegisteredIds(c *gin.Context) {
+	var latestNumber string
+	conf.Db.Raw("SELECT COALESCE(MAX(pid), '') FROM tab_product WHERE pid LIKE ?", "SCC%").Row().Scan(&latestNumber)
+
+	var registeredIds []string
+	conf.Db.Model(&model.TabProduct{}).Where("pid LIKE ?", "SCC%").Pluck("pid", &registeredIds)
+
+	c.JSON(http.StatusOK, ResultSuccess(productVoDTO{RegisteredIds: registeredIds, LatestNumber: latestNumber}))
 }

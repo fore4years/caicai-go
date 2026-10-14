@@ -68,6 +68,7 @@ func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 		} else {
 			logger.Mylog.Info().Msgf("已订阅主题: %s", heartbeatTopic)
 		}
+		//
 	})
 	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
 		logger.Mylog.Warn().Err(err).Msg("MQTT 连接断开，等待重连")

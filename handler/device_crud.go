@@ -28,10 +28,11 @@ type chargingGunDTO struct {
 	Model      int32           `json:"model,omitempty"`
 	Pwm        int32           `json:"pwm,omitempty"`
 	UpdateTime *LocalDateTime  `json:"updateTime,omitempty"`
+	Product    *productDTO     `json:"product,omitempty"`
 }
 
 func chargingGunToDTO(g model.TabChargingGun) chargingGunDTO {
-	return chargingGunDTO{
+	dto := chargingGunDTO{
 		ID:         g.ID,
 		Name:       g.Name,
 		UnitPrice:  g.UnitPrice,
@@ -43,6 +44,12 @@ func chargingGunToDTO(g model.TabChargingGun) chargingGunDTO {
 		Pwm:        g.Pwm,
 		UpdateTime: timeToLocal(g.UpdateTime),
 	}
+	// 关联产品（对齐 Java ChargingGunMapper.getById 的 <collection property="product">）
+	if p := productByPid(g.ProductID); p != nil {
+		pd := productToDTO(*p)
+		dto.Product = &pd
+	}
+	return dto
 }
 
 // stationManagementDTO 对应 Java domain.ChargingStationManagement。

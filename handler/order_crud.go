@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"caicai-go/logger"
 	"database/sql"
 	"fmt"
 	"math"
@@ -422,6 +423,7 @@ func (c *OrderTwiceController) GetByOrderid(ctx *gin.Context) {
 	// 对齐 Java ReOrderPowerMapper.getMaxPowerByOrderid：取 max_power 字段。
 	var maxPower decimal.Decimal
 	conf.Db.Raw("SELECT COALESCE(max_power,0) FROM re_order_electronic_tbl WHERE order_id = ? LIMIT 1", o.Orderid).Row().Scan(&maxPower)
+	logger.Mylog.Info().Msgf("====>> %#v <<=====", maxPower.Round(2))
 	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{
 		"totalFee":   o.PowerRate.Round(2),
 		"serviceFee": o.ServiceRate.Round(2),

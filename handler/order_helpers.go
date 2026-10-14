@@ -398,6 +398,14 @@ func freezeBalance(openid string, amount decimal.Decimal) bool {
 		"UPDATE user_tbl SET balans = balans - CAST(? AS DECIMAL(10,2)), freeze_balans = freeze_balans + CAST(? AS DECIMAL(10,2)) WHERE openid = ? AND balans >= CAST(? AS DECIMAL(10,2))",
 		amt, amt, openid, amt,
 	)
+	if res.Error != nil {
+		//log.Printf("freezeBalance 执行失败: %v", res.Error)
+		logger.Mylog.Err(res.Error).Msg("冻结失败")
+		return false
+	}
+	if amount.Equal(decimal.Zero) {
+		return true
+	}
 	return res.RowsAffected > 0
 }
 

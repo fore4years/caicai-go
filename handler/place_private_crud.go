@@ -194,12 +194,12 @@ func (c *PrivatePlaceController) GetById(ctx *gin.Context) {
 
 func (c *PrivatePlaceController) Save(ctx *gin.Context) {
 	var req struct {
-		Place     string  `json:"place"`
-		Openid    string  `json:"openid"`
-		Pid       string  `json:"pid"`
-		Code      string  `json:"code"`
-		Latitude  float64 `json:"latitude"`
-		Longitude float64 `json:"longitude"`
+		Place     string `json:"place"`
+		Openid    string `json:"openid"`
+		Pid       string `json:"pid"`
+		Code      string `json:"code"`
+		Latitude  string `json:"latitude"`
+		Longitude string `json:"longitude"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultError(400, "参数缺失"))
@@ -229,7 +229,10 @@ func (c *PrivatePlaceController) Save(ctx *gin.Context) {
 		return
 	}
 
-	wkt := wktPoint(req.Longitude, req.Latitude)
+	//wkt := wktPoint(req.Longitude, req.Latitude)
+	lonPoint, _ := strconv.ParseFloat(req.Longitude, 64)
+	lanPoint, _ := strconv.ParseFloat(req.Latitude, 64)
+	wkt := wktPoint(lonPoint, lanPoint)
 	if err := conf.Db.Exec(
 		"INSERT INTO private_place_tbl (point, place, openid, charging_gun_id, spaces_code) VALUES (ST_GeomFromText(?),?,?,?,?)",
 		wkt, req.Place, req.Openid, gun.ID, spacesCode,
@@ -487,20 +490,36 @@ func (c *FreeChargingUserController) Delete(ctx *gin.Context) {
 type NeighborShareUserController struct{}
 
 func (c *NeighborShareUserController) Save(ctx *gin.Context) {
-	var req neighborShareUserDTO
+	var req struct {
+		Openid      string `json:"openid,omitempty"`
+		OwnerUserID string `json:"ownerUserId,omitempty"`
+		Phone       string `json:"phone,omitempty"`
+		Pid         string `json:"pid,omitempty"`
+		Status      int32  `json:"status,omitempty"`
+	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultError(400, "参数缺失,请检查"))
 		return
 	}
-	if req.OwnerUserID == 0 || strings.TrimSpace(req.Openid) == "" || strings.TrimSpace(req.Status) == "" {
+	if strings.TrimSpace(req.Openid) == "" {
 		ctx.JSON(http.StatusOK, ResultError(400, "参数缺失,请检查"))
 		return
 	}
 
-	// 对齐 Java：校验桩主信息存在
+	// 定位桩主：优先用 ownerUserId（私桩桩主id），为空时用 pid（充电桩编号）反查
 	var charging model.PrivateChargingTbl
-	if err := conf.Db.Where("id = ?", req.OwnerUserID).First(&charging).Error; err != nil {
-		ctx.JSON(http.StatusOK, ResultError(400, "查询无此桩主信息,请检查"))
+	if strings.TrimSpace(req.OwnerUserID) != "" {
+		if err := conf.Db.Where("id = ?", req.OwnerUserID).First(&charging).Error; err != nil {
+			ctx.JSON(http.StatusOK, ResultError(400, "查询无此桩主信息,请检查"))
+			return
+		}
+	} else if strings.TrimSpace(req.Pid) != "" {
+		if err := conf.Db.Where("product_id = ?", req.Pid).First(&charging).Error; err != nil {
+			ctx.JSON(http.StatusOK, ResultError(400, "查询无此桩主信息,请检查"))
+			return
+		}
+	} else {
+		ctx.JSON(http.StatusOK, ResultError(400, "参数缺失,请检查"))
 		return
 	}
 
@@ -508,18 +527,17 @@ func (c *NeighborShareUserController) Save(ctx *gin.Context) {
 	var existing []model.NeighborShareUserTbl
 	conf.Db.Where("openid = ?", req.Openid).Find(&existing)
 	for _, n := range existing {
-		if n.OwnerUserID == req.OwnerUserID {
+		if n.OwnerUserID == charging.ID {
 			ctx.JSON(http.StatusOK, ResultError(400, "已是此桩主的共享用户,请勿重复申请"))
 			return
 		}
 	}
 
 	rec := model.NeighborShareUserTbl{
-		OwnerUserID:    req.OwnerUserID,
-		Openid:         req.Openid,
-		ChargingPileID: req.ChargingPileID,
-		Status:         req.Status,
-		Phone:          req.Phone,
+		OwnerUserID: charging.ID,
+		Openid:      req.Openid,
+		Status:      strconv.Itoa(int(req.Status)),
+		Phone:       req.Phone,
 	}
 	if err := conf.Db.Create(&rec).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
