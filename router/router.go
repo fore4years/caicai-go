@@ -912,6 +912,7 @@ func RouterInit(r *gin.Engine) {
 	registerWxMisc(r)
 	registerAdminPlaceApply(r)
 	registerPartialGaps(r)
+	healthyPing(r)
 
 	// 静态资源：前端以根绝对路径引用（/js/、/page/、/img/、/agreement/ 等）。
 	// 不能用 r.Static("/", ...)（会注册根 catch-all /*filepath，与 /system、/om 等 API 前缀冲突导致启动 panic），

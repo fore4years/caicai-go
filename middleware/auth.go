@@ -74,6 +74,8 @@ var excludedPrefixes = []string{
 	"/account/private/getByOrderId/", "/account/public/getByOrderId/",
 	// 设备数据 / 外部 API（走其它鉴权）
 	"/api/device/", "/external/",
+	//检测是否能够连通
+	"/ping",
 }
 
 // isExcluded 判断路径是否在白名单内。

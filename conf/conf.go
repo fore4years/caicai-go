@@ -94,6 +94,7 @@ func Dbconnection(dbconf MysqlConf) error {
 	}
 
 	Db = db
+	logger.Mylog.Info().Msgf("正在使用 %s 数据库", dbconf.Dbname)
 
 	// 后台健康检查：每 30s Ping 一次，记录断连/恢复（database/sql 会自动重建连接）。
 	go func() {
