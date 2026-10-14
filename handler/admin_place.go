@@ -12,6 +12,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // PlaceVoDTO 对应 Java System.domain.PlaceVo（Place 字段 + user）。
@@ -393,18 +394,6 @@ func (a *AdminParkingSpaceController) UpdateServiceAndFeeById(c *gin.Context) {
 	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
-// currentSeason 对齐 Java SeasonUtil.getSeason()。
-func currentSeason() string {
-	switch int(time.Now().Month()) {
-	case 3, 4, 5, 6, 10, 11:
-		return "spring"
-	case 7, 8, 9:
-		return "summer"
-	default: // 12,1,2
-		return "winter"
-	}
-}
-
 // parkingSpaceStats 统计某车位号下驿享充电的（月/周）电量与电费。
 func parkingSpaceStats(c *gin.Context, spacesCode string, weekly bool) {
 	var space model.TabParkingSpace
@@ -442,7 +431,7 @@ func parkingSpaceStats(c *gin.Context, spacesCode string, weekly bool) {
 	).Row().Scan(&degree)
 
 	// 总电费（电子时段电价，季节表）
-	season := currentSeason()
+	season := repository.CurrentSeason()
 	feeSQL := "SELECT COALESCE(SUM((e.over_value - e.start_value) / 100 * " +
 		"CASE s.price_mode WHEN 1 THEN p.total1 WHEN 2 THEN p.total2 ELSE p.total END),0) " +
 		"FROM tab_order_electronic e " +

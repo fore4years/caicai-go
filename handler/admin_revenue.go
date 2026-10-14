@@ -11,6 +11,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // AdminRevenueController 对齐 Java System.controller.MoneyGetCon（/system 收益统计）。
@@ -307,7 +308,7 @@ func (a *AdminRevenueController) ExcelExport(c *gin.Context) {
 	for _, o := range orders {
 		var electronFee, serviceFee decimal.Decimal
 		if consumptionType == "邻享充电" {
-			electronFee, serviceFee = privateElectronicByOrderidAndPrivateUser(o.Orderid)
+			electronFee, serviceFee = repository.PrivateElectronicByOrderidAndPrivateUser(o.Orderid)
 		} else {
 			electronFee, serviceFee = electronicFeesByOrderid(o.Orderid)
 		}

@@ -1,4 +1,5 @@
-package handler
+// Package repository 数据访问层：封装所有数据库 / 查询操作，供 handler / service 调用。
+package repository
 
 import (
 	"time"
@@ -14,66 +15,77 @@ import (
 
 // ============================================================================
 // 订单相关的共享查询 / 金额 / 余额工具，对齐 Java OrderServiceImpl 依赖的各 Service。
-// 均直接复用 conf.Db（GORM），保持与现有 handler 一致的风格。
 // ============================================================================
 
 // 订单状态 / 消费类型常量（对齐 Java OrderServiceImpl 中的字段与状态字面量）。
 const (
-	orderStateBooked   = "已预约" // state 字段
-	orderStateBooking  = "预约中" // bookingState 字段
-	orderStateConduct  = "进行中"
-	orderStateUse      = "使用中"
-	orderStateWaitPay  = "待支付"
-	orderStateFinished = "已完成"
-	orderStateRevoked  = "已取消"
-	orderStateWaitUse  = "待使用"
-	orderStateWaitGun  = "待还枪"
+	OrderStateBooked   = "已预约" // state 字段
+	OrderStateBooking  = "预约中" // bookingState 字段
+	OrderStateConduct  = "进行中"
+	OrderStateUse      = "使用中"
+	OrderStateWaitPay  = "待支付"
+	OrderStateFinished = "已完成"
+	OrderStateRevoked  = "已取消"
+	OrderStateWaitUse  = "待使用"
+	OrderStateWaitGun  = "待还枪"
 
-	consumeTypeCaiParking = "踩踩停车"
-	consumeTypeYiXiang    = "驿享充电"
-	consumeTypeTwice      = "二轮车充电"
-	consumeTypeNeighbor   = "邻享充电"
+	ConsumeTypeCaiParking = "踩踩停车"
+	ConsumeTypeYiXiang    = "驿享充电"
+	ConsumeTypeTwice      = "二轮车充电"
+	ConsumeTypeNeighbor   = "邻享充电"
 )
 
 // 业务常量（对齐 Java BusinessConstants）。
 const (
-	overtimeServiceFee   = 200.0 // 超时占位费封顶（元）
-	overtimeParkingFee   = 0.05  // 超时占位费单价（元/分钟）
-	chargeGunModel220    = int32(220)
-	chargeGunPowerSmall  = "7"    // 220V 充电功率
-	chargeGunPowerBig    = "21"   // 380V 充电功率
-	chargeCoefficient    = "1.16" // 预计充电时长系数
-	orderTwiceChargeRate = "1.0064"
+	OvertimeServiceFee   = 200.0 // 超时占位费封顶（元）
+	OvertimeParkingFee   = 0.05  // 超时占位费单价（元/分钟）
+	ChargeGunModel220    = int32(220)
+	ChargeGunPowerSmall  = "7"    // 220V 充电功率
+	ChargeGunPowerBig    = "21"   // 380V 充电功率
+	ChargeCoefficient    = "1.16" // 预计充电时长系数
+	OrderTwiceChargeRate = "1.0064"
 )
+
+// CurrentSeason 对齐 Java SeasonUtil.getSeason()。
+func CurrentSeason() string {
+	switch int(time.Now().Month()) {
+	case 3, 4, 5, 6, 10, 11:
+		return "spring"
+	case 7, 8, 9:
+		return "summer"
+	default: // 12,1,2
+		return "winter"
+	}
+}
 
 // ============================ 设备 / 车位 / 产品 / 网关 ============================
 
-// chargingGunCtx 充电枪及其关联的产品、网关信息。
-type chargingGunCtx struct {
-	gun     model.TabChargingGun
-	product model.TabProduct
-	gateway model.TabGateway
+// ChargingGunCtx 充电枪及其关联的产品、网关信息。
+type ChargingGunCtx struct {
+	Gun     model.TabChargingGun
+	Product model.TabProduct
+	Gateway model.TabGateway
 }
 
-// deviceID 返回主题用设备标识：优先 4G IMEI，否则 LoRa NID。
-func (g *chargingGunCtx) deviceID() string {
-	if g.product.Imei != "" {
-		return g.product.Imei
+// DeviceID 返回主题用设备标识：优先 4G IMEI，否则 LoRa NID。
+func (g *ChargingGunCtx) DeviceID() string {
+	if g.Product.Imei != "" {
+		return g.Product.Imei
 	}
-	return g.product.Nid
+	return g.Product.Nid
 }
 
-func (g *chargingGunCtx) fillProductGateway() {
-	if g.gun.ProductID == "" {
+func (g *ChargingGunCtx) fillProductGateway() {
+	if g.Gun.ProductID == "" {
 		return
 	}
-	conf.Db.Where("pid = ?", g.gun.ProductID).First(&g.product)
-	conf.Db.Where("id = ?", g.product.GatewayID).First(&g.gateway)
+	conf.Db.Where("pid = ?", g.Gun.ProductID).First(&g.Product)
+	conf.Db.Where("id = ?", g.Product.GatewayID).First(&g.Gateway)
 }
 
-// chargingGunByOrder 根据订单查询四轮车充电枪（order→tab_parking_spaces→tab_charging_gun）。
+// ChargingGunByOrder 根据订单查询四轮车充电枪（order→tab_parking_spaces→tab_charging_gun）。
 // 对齐 Java ChargingGunMapper.getByOrder。
-func chargingGunByOrder(orderID string) *chargingGunCtx {
+func ChargingGunByOrder(orderID string) *ChargingGunCtx {
 	var gun model.TabChargingGun
 	err := conf.Db.Raw(
 		`SELECT cg.* FROM order_tbl o
@@ -84,14 +96,14 @@ func chargingGunByOrder(orderID string) *chargingGunCtx {
 	if err != nil || gun.ID == 0 {
 		return nil
 	}
-	g := &chargingGunCtx{gun: gun}
+	g := &ChargingGunCtx{Gun: gun}
 	g.fillProductGateway()
 	return g
 }
 
-// chargingGunByPrivateOrder 根据订单查询私桩充电枪（order→private_place_tbl→tab_charging_gun）。
+// ChargingGunByPrivateOrder 根据订单查询私桩充电枪（order→private_place_tbl→tab_charging_gun）。
 // 对齐 Java ChargingGunMapper.getPrivateChargingByOrder。
-func chargingGunByPrivateOrder(orderID string) *chargingGunCtx {
+func ChargingGunByPrivateOrder(orderID string) *ChargingGunCtx {
 	var gun model.TabChargingGun
 	err := conf.Db.Raw(
 		`SELECT cg.* FROM order_tbl o
@@ -102,40 +114,41 @@ func chargingGunByPrivateOrder(orderID string) *chargingGunCtx {
 	if err != nil || gun.ID == 0 {
 		return nil
 	}
-	g := &chargingGunCtx{gun: gun}
+	g := &ChargingGunCtx{Gun: gun}
 	g.fillProductGateway()
 	return g
 }
 
-// chargingGunByPidAndDirection 按产品与方向查询充电枪（对齐 ChargingGunMapper.getByPidAndDirection）。
-func chargingGunByPidAndDirection(pid, direction string) *chargingGunCtx {
+// ChargingGunByPidAndDirection 按产品与方向查询充电枪（对齐 ChargingGunMapper.getByPidAndDirection）。
+func ChargingGunByPidAndDirection(pid, direction string) *ChargingGunCtx {
 	var gun model.TabChargingGun
 	err := conf.Db.Where("product_id = ? AND direction = ?", pid, direction).First(&gun).Error
 	if err != nil {
 		return nil
 	}
-	g := &chargingGunCtx{gun: gun}
+	g := &ChargingGunCtx{Gun: gun}
 	g.fillProductGateway()
 	return g
 }
 
-// lockCtx 车位锁及其关联的产品、网关信息。
-type lockCtx struct {
-	lock    model.LockTbl
-	product model.TabProduct
-	gateway model.TabGateway
+// LockCtx 车位锁及其关联的产品、网关信息。
+type LockCtx struct {
+	Lock    model.LockTbl
+	Product model.TabProduct
+	Gateway model.TabGateway
 }
 
-func (l *lockCtx) deviceID() string {
-	if l.product.Imei != "" {
-		return l.product.Imei
+// DeviceID 返回主题用设备标识：优先 4G IMEI，否则 LoRa NID。
+func (l *LockCtx) DeviceID() string {
+	if l.Product.Imei != "" {
+		return l.Product.Imei
 	}
-	return l.product.Nid
+	return l.Product.Nid
 }
 
-// lockByOrder 根据订单查询车位锁（order→tab_parking_spaces→lock_tbl）。
+// LockByOrder 根据订单查询车位锁（order→tab_parking_spaces→lock_tbl）。
 // 对齐 Java LockService.getByOrder。
-func lockByOrder(orderID string) *lockCtx {
+func LockByOrder(orderID string) *LockCtx {
 	var lock model.LockTbl
 	err := conf.Db.Raw(
 		`SELECT l.* FROM order_tbl o
@@ -146,15 +159,15 @@ func lockByOrder(orderID string) *lockCtx {
 	if err != nil || lock.Lockid == "" {
 		return nil
 	}
-	l := &lockCtx{lock: lock}
+	l := &LockCtx{Lock: lock}
 	if lock.ProductID != "" {
-		conf.Db.Where("pid = ?", lock.ProductID).First(&l.product)
-		conf.Db.Where("id = ?", l.product.GatewayID).First(&l.gateway)
+		conf.Db.Where("pid = ?", lock.ProductID).First(&l.Product)
+		conf.Db.Where("id = ?", l.Product.GatewayID).First(&l.Gateway)
 	}
 	return l
 }
 
-func productByPid(pid string) *model.TabProduct {
+func ProductByPid(pid string) *model.TabProduct {
 	var p model.TabProduct
 	if conf.Db.Where("pid = ?", pid).First(&p).Error != nil {
 		return nil
@@ -162,7 +175,7 @@ func productByPid(pid string) *model.TabProduct {
 	return &p
 }
 
-func gatewayByID(id int32) *model.TabGateway {
+func GatewayByID(id int32) *model.TabGateway {
 	var g model.TabGateway
 	if conf.Db.Where("id = ?", id).First(&g).Error != nil {
 		return nil
@@ -172,7 +185,7 @@ func gatewayByID(id int32) *model.TabGateway {
 
 // ============================ 车位（tab_parking_spaces / place_tbl） ============================
 
-func spacesByID(id int32) *model.TabParkingSpace {
+func SpacesByID(id int32) *model.TabParkingSpace {
 	var s model.TabParkingSpace
 	if conf.Db.Where("id = ?", id).First(&s).Error != nil {
 		return nil
@@ -180,7 +193,7 @@ func spacesByID(id int32) *model.TabParkingSpace {
 	return &s
 }
 
-func spacesByLockID(lockid string) *model.TabParkingSpace {
+func SpacesByLockID(lockid string) *model.TabParkingSpace {
 	var s model.TabParkingSpace
 	if conf.Db.Where("lock_id = ?", lockid).First(&s).Error != nil {
 		return nil
@@ -188,7 +201,7 @@ func spacesByLockID(lockid string) *model.TabParkingSpace {
 	return &s
 }
 
-func spacesByChargingGunID(chargingGunID int32) *model.TabParkingSpace {
+func SpacesByChargingGunID(chargingGunID int32) *model.TabParkingSpace {
 	var s model.TabParkingSpace
 	if conf.Db.Where("charging_gun_id = ?", chargingGunID).First(&s).Error != nil {
 		return nil
@@ -196,8 +209,8 @@ func spacesByChargingGunID(chargingGunID int32) *model.TabParkingSpace {
 	return &s
 }
 
-// chargingGunByID 按主键查询充电枪。
-func chargingGunByID(id int32) *model.TabChargingGun {
+// ChargingGunByID 按主键查询充电枪。
+func ChargingGunByID(id int32) *model.TabChargingGun {
 	var g model.TabChargingGun
 	if conf.Db.Where("id = ?", id).First(&g).Error != nil {
 		return nil
@@ -205,14 +218,14 @@ func chargingGunByID(id int32) *model.TabChargingGun {
 	return &g
 }
 
-// otherSpacesIDBySpacesID 一桩一锁：返回与当前车位共用一个锁的另一个车位 id。
+// OtherSpacesIDBySpacesID 一桩一锁：返回与当前车位共用一个锁的另一个车位 id。
 // 对齐 Java ParkingSpacesServiceImpl.getOtherSpacesIdBySpacesId。
-func otherSpacesIDBySpacesID(spacesID int32) int32 {
-	spaces := spacesByID(spacesID)
+func OtherSpacesIDBySpacesID(spacesID int32) int32 {
+	spaces := SpacesByID(spacesID)
 	if spaces == nil || spaces.LockID == "" || spaces.ChargingGunID == 0 {
 		return 0
 	}
-	gun := chargingGunByID(spaces.ChargingGunID)
+	gun := ChargingGunByID(spaces.ChargingGunID)
 	if gun == nil {
 		return 0
 	}
@@ -222,24 +235,24 @@ func otherSpacesIDBySpacesID(spacesID int32) int32 {
 	} else {
 		otherDirection = "L"
 	}
-	otherGun := chargingGunByPidAndDirection(gun.ProductID, otherDirection)
+	otherGun := ChargingGunByPidAndDirection(gun.ProductID, otherDirection)
 	if otherGun == nil {
 		return 0
 	}
-	otherSpaces := spacesByChargingGunID(otherGun.gun.ID)
+	otherSpaces := SpacesByChargingGunID(otherGun.Gun.ID)
 	if otherSpaces == nil {
 		return 0
 	}
 	return otherSpaces.ID
 }
 
-// isOneLockPerSpot 判断车位是否为「一桩一锁」（对齐 Java ParkingSpacesServiceImpl.isOneLockPerSpot）。
-func isOneLockPerSpot(spacesID int32) bool {
-	spaces := spacesByID(spacesID)
+// IsOneLockPerSpot 判断车位是否为「一桩一锁」（对齐 Java ParkingSpacesServiceImpl.isOneLockPerSpot）。
+func IsOneLockPerSpot(spacesID int32) bool {
+	spaces := SpacesByID(spacesID)
 	if spaces == nil || spaces.LockID == "" || spaces.ChargingGunID == 0 {
 		return false
 	}
-	gun := chargingGunByID(spaces.ChargingGunID)
+	gun := ChargingGunByID(spaces.ChargingGunID)
 	if gun == nil {
 		return false
 	}
@@ -249,18 +262,18 @@ func isOneLockPerSpot(spacesID int32) bool {
 	} else {
 		otherDirection = "L"
 	}
-	otherGun := chargingGunByPidAndDirection(gun.ProductID, otherDirection)
+	otherGun := ChargingGunByPidAndDirection(gun.ProductID, otherDirection)
 	if otherGun == nil {
 		return false
 	}
-	otherSpaces := spacesByChargingGunID(otherGun.gun.ID)
+	otherSpaces := SpacesByChargingGunID(otherGun.Gun.ID)
 	if otherSpaces == nil || otherSpaces.LockID == "" {
 		return false
 	}
 	return spaces.LockID == otherSpaces.LockID
 }
 
-func spacesByPidAndDirection(pid, direction string) *model.TabParkingSpace {
+func SpacesByPidAndDirection(pid, direction string) *model.TabParkingSpace {
 	var s model.TabParkingSpace
 	// 对齐 Java ParkingSpacesServiceImpl.getByPidAndDirection（按充电枪 product_id+direction 关联车位）
 	if err := conf.Db.Raw(
@@ -273,7 +286,7 @@ func spacesByPidAndDirection(pid, direction string) *model.TabParkingSpace {
 	return &s
 }
 
-func placeByLockid(lockid string) *model.PlaceTbl {
+func PlaceByLockid(lockid string) *model.PlaceTbl {
 	var p model.PlaceTbl
 	if conf.Db.Where("placeid = (SELECT placeid FROM lock_tbl WHERE lockid = ?)", lockid).First(&p).Error != nil {
 		return nil
@@ -283,7 +296,7 @@ func placeByLockid(lockid string) *model.PlaceTbl {
 
 // ============================ 私桩 ============================
 
-func orderPrivateByOrderid(orderid string) *model.OrderPrivateTbl {
+func OrderPrivateByOrderid(orderid string) *model.OrderPrivateTbl {
 	var op model.OrderPrivateTbl
 	if conf.Db.Where("orderid = ?", orderid).First(&op).Error != nil {
 		return nil
@@ -291,7 +304,7 @@ func orderPrivateByOrderid(orderid string) *model.OrderPrivateTbl {
 	return &op
 }
 
-func privatePlaceByID(id int32) *model.PrivatePlaceTbl {
+func PrivatePlaceByID(id int32) *model.PrivatePlaceTbl {
 	var p model.PrivatePlaceTbl
 	if conf.Db.Where("id = ?", id).First(&p).Error != nil {
 		return nil
@@ -299,7 +312,7 @@ func privatePlaceByID(id int32) *model.PrivatePlaceTbl {
 	return &p
 }
 
-func privateChargingBySpacesNum(spacesNum string) *model.PrivateChargingTbl {
+func PrivateChargingBySpacesNum(spacesNum string) *model.PrivateChargingTbl {
 	var p model.PrivateChargingTbl
 	if conf.Db.Where("spaces_num = ?", spacesNum).First(&p).Error != nil {
 		return nil
@@ -309,7 +322,7 @@ func privateChargingBySpacesNum(spacesNum string) *model.PrivateChargingTbl {
 
 // ============================ 参数 / 状态 ============================
 
-func configByOrderid(orderid string) *model.ConfigTbl {
+func ConfigByOrderid(orderid string) *model.ConfigTbl {
 	var c model.ConfigTbl
 	if conf.Db.Where("orderid = ?", orderid).First(&c).Error != nil {
 		return nil
@@ -317,7 +330,7 @@ func configByOrderid(orderid string) *model.ConfigTbl {
 	return &c
 }
 
-func chargingStateByProductAndDirection(productID, direction string) *model.ChargingStateTbl {
+func ChargingStateByProductAndDirection(productID, direction string) *model.ChargingStateTbl {
 	var c model.ChargingStateTbl
 	if conf.Db.Where("product_id = ? AND direction = ?", productID, direction).First(&c).Error != nil {
 		return nil
@@ -327,7 +340,7 @@ func chargingStateByProductAndDirection(productID, direction string) *model.Char
 
 // ============================ 二轮车插座 ============================
 
-func receptacleByID(id int32) *model.ReceptacleTbl {
+func ReceptacleByID(id int32) *model.ReceptacleTbl {
 	var r model.ReceptacleTbl
 	if conf.Db.Where("id = ?", id).First(&r).Error != nil {
 		return nil
@@ -335,8 +348,8 @@ func receptacleByID(id int32) *model.ReceptacleTbl {
 	return &r
 }
 
-// receptacleByOrderid 根据订单查询二轮车插座（对齐 Java selectReceptacleByOrderid：number = order.lockid AND pid = order.pid）。
-func receptacleByOrderid(orderid string) *model.ReceptacleTbl {
+// ReceptacleByOrderid 根据订单查询二轮车插座（对齐 Java selectReceptacleByOrderid：number = order.lockid AND pid = order.pid）。
+func ReceptacleByOrderid(orderid string) *model.ReceptacleTbl {
 	var order model.OrderTbl
 	if conf.Db.Where("orderid = ?", orderid).First(&order).Error != nil {
 		return nil
@@ -351,7 +364,7 @@ func receptacleByOrderid(orderid string) *model.ReceptacleTbl {
 	return &r
 }
 
-func receptaclePowerByPidAndRid(pid string, rid string) *model.ReceptaclePowerTbl {
+func ReceptaclePowerByPidAndRid(pid string, rid string) *model.ReceptaclePowerTbl {
 	var rp model.ReceptaclePowerTbl
 	if conf.Db.Where("pid = ? AND receptacle_id = ?", pid, rid).First(&rp).Error != nil {
 		return nil
@@ -361,7 +374,7 @@ func receptaclePowerByPidAndRid(pid string, rid string) *model.ReceptaclePowerTb
 
 // ============================ 预约次数 ============================
 
-func driverUseByOpenid(openid string) *model.DriveruseTbl {
+func DriverUseByOpenid(openid string) *model.DriveruseTbl {
 	var d model.DriveruseTbl
 	if conf.Db.Where("openid = ?", openid).First(&d).Error != nil {
 		return nil
@@ -371,9 +384,9 @@ func driverUseByOpenid(openid string) *model.DriveruseTbl {
 
 // ============================ 电价（对齐 PriceTimeServiceImpl.getNow） ============================
 
-// currentChargingRate 返回当前时段电价 = total + service*0.8。
-func currentChargingRate() decimal.Decimal {
-	season := currentSeason()
+// CurrentChargingRate 返回当前时段电价 = total + service*0.8。
+func CurrentChargingRate() decimal.Decimal {
+	season := CurrentSeason()
 	now := time.Now().Format("15:04:05")
 	var total, service decimal.Decimal
 	sql := `SELECT p.total, p.service
@@ -389,17 +402,16 @@ func currentChargingRate() decimal.Decimal {
 
 // ============================ 余额操作（对齐 UserServiceImpl / BalanceConsumptionServiceImpl） ============================
 
-// freezeBalance 冻结余额：可用余额 → 冻结余额。
+// FreezeBalance 冻结余额：可用余额 → 冻结余额。
 // 单条原子 UPDATE 完成「校验 balans>=amount → balans-amount → freeze_balans+amount」，
 // 条件写进 WHERE，避免读-改-写竞态与余额被扣成负数。
-func freezeBalance(openid string, amount decimal.Decimal) bool {
+func FreezeBalance(openid string, amount decimal.Decimal) bool {
 	amt := amount.StringFixed(2)
 	res := conf.Db.Exec(
 		"UPDATE user_tbl SET balans = balans - CAST(? AS DECIMAL(10,2)), freeze_balans = freeze_balans + CAST(? AS DECIMAL(10,2)) WHERE openid = ? AND balans >= CAST(? AS DECIMAL(10,2))",
 		amt, amt, openid, amt,
 	)
 	if res.Error != nil {
-		//log.Printf("freezeBalance 执行失败: %v", res.Error)
 		logger.Mylog.Err(res.Error).Msg("冻结失败")
 		return false
 	}
@@ -409,10 +421,10 @@ func freezeBalance(openid string, amount decimal.Decimal) bool {
 	return res.RowsAffected > 0
 }
 
-// consumeBalanceTx 在给定事务内执行余额消费：按充值订单创建时间 FIFO 扣减 remaining_refund_amount，
+// ConsumeBalanceTx 在给定事务内执行余额消费：按充值订单创建时间 FIFO 扣减 remaining_refund_amount，
 // 并释放冻结余额。返回是否成功、扣减后的新余额及错误。用户不存在/余额不足返回 ok=false 且 err=nil
 // （无写入、无需回滚）；DB 错误返回 err（由外层事务回滚）。供需要把余额扣款与订单结算放进同一事务的调用方使用。
-func consumeBalanceTx(tx *gorm.DB, openid string, amount decimal.Decimal) (bool, decimal.Decimal, error) {
+func ConsumeBalanceTx(tx *gorm.DB, openid string, amount decimal.Decimal) (bool, decimal.Decimal, error) {
 	var user model.UserTbl
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("openid = ?", openid).First(&user).Error; err != nil {
@@ -478,12 +490,12 @@ func consumeBalanceTx(tx *gorm.DB, openid string, amount decimal.Decimal) (bool,
 	return true, newBalance, nil
 }
 
-// consumeBalance 余额消费：包在独立事务内执行 consumeBalanceTx，保证原子性与并发安全。
-func consumeBalance(openid string, amount decimal.Decimal) bool {
+// ConsumeBalance 余额消费：包在独立事务内执行 ConsumeBalanceTx，保证原子性与并发安全。
+func ConsumeBalance(openid string, amount decimal.Decimal) bool {
 	consumed := false
 	var newBalance decimal.Decimal
 	_ = conf.Db.Transaction(func(tx *gorm.DB) error {
-		ok, nb, err := consumeBalanceTx(tx, openid, amount)
+		ok, nb, err := ConsumeBalanceTx(tx, openid, amount)
 		if err != nil {
 			return err
 		}
@@ -500,9 +512,9 @@ func consumeBalance(openid string, amount decimal.Decimal) bool {
 	return true
 }
 
-// completeOrderIsamountNot 完成订单（费用=0）：释放冻结余额。
+// CompleteOrderIsamountNot 完成订单（费用=0）：释放冻结余额。
 // 单条原子 UPDATE：balans = balans + freeze_balans, freeze_balans = 0。
-func completeOrderIsamountNot(openid string) bool {
+func CompleteOrderIsamountNot(openid string) bool {
 	res := conf.Db.Exec(
 		"UPDATE user_tbl SET balans = balans + freeze_balans, freeze_balans = 0 WHERE openid = ?",
 		openid,
@@ -510,9 +522,9 @@ func completeOrderIsamountNot(openid string) bool {
 	return res.RowsAffected > 0
 }
 
-// completeOrderIsamountNotNull 取消订单扣费（费用>0）：balans = balans - price + freeze_balans，freeze_balans=0。
+// CompleteOrderIsamountNotNull 取消订单扣费（费用>0）：balans = balans - price + freeze_balans，freeze_balans=0。
 // 单条原子 UPDATE，金额 CAST 为 DECIMAL 保证精确，避免读-改-写竞态。
-func completeOrderIsamountNotNull(openid, price string) bool {
+func CompleteOrderIsamountNotNull(openid, price string) bool {
 	if price == "undefined" || price == "null" {
 		price = "0"
 	}
@@ -528,18 +540,18 @@ func completeOrderIsamountNotNull(openid, price string) bool {
 	return res.RowsAffected > 0
 }
 
-// ============================ 电费计算（复用 order_crud.go 的 electronicFeesByOrderid） ============================
+// ============================ 电费计算 ============================
 
-// updateChargingDegree 设置订单充电度数（对齐 Java updateChargingDegree：电量/100）。
-func updateChargingDegree(orderid string) {
+// UpdateChargingDegree 设置订单充电度数（对齐 Java updateChargingDegree：电量/100）。
+func UpdateChargingDegree(orderid string) {
 	var degree decimal.Decimal
 	conf.Db.Raw("SELECT COALESCE(SUM(over_value - start_value),0)/100 FROM tab_order_electronic WHERE order_id = ?", orderid).
 		Row().Scan(&degree)
 	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderid).Update("charging_degree", degree)
 }
 
-// invoiceForOrder 构造一条与 Java finish/finishBalans 一致的发票记录并落库。
-func invoiceForOrder(order model.OrderTbl, amount decimal.Decimal) {
+// InvoiceForOrder 构造一条与 Java finish/finishBalans 一致的发票记录并落库。
+func InvoiceForOrder(order model.OrderTbl, amount decimal.Decimal) {
 	inv := model.Invoice{
 		InvoiceType: "增值税电子普通发票",
 		InvoiceDate: order.OverTime,
@@ -556,8 +568,8 @@ func invoiceForOrder(order model.OrderTbl, amount decimal.Decimal) {
 	conf.Db.Create(&inv)
 }
 
-// saveBalanceRecord 记录余额明细。
-func saveBalanceRecord(openid, recordType string, amount decimal.Decimal) {
+// SaveBalanceRecord 记录余额明细。
+func SaveBalanceRecord(openid, recordType string, amount decimal.Decimal) {
 	conf.Db.Create(&model.TabBalanceRecord{Openid: openid, Type: recordType, Amount: amount})
 }
 
@@ -565,9 +577,9 @@ func saveBalanceRecord(openid, recordType string, amount decimal.Decimal) {
 // 对齐 Java OrderElectronicMapper 的 private 变体（LEFT JOIN private_charging_price_tbl，
 // 经 tab_price_time_{season}.price_id 关联）。
 
-// privateFeesByOrderid 对齐 getPrivateFeesByOrderid：SUM((over-start)/100 * (price.total + price.service))。
-func privateFeesByOrderid(orderid string) decimal.Decimal {
-	season := currentSeason()
+// PrivateFeesByOrderid 对齐 getPrivateFeesByOrderid：SUM((over-start)/100 * (price.total + price.service))。
+func PrivateFeesByOrderid(orderid string) decimal.Decimal {
+	season := CurrentSeason()
 	var v decimal.Decimal
 	sql := `SELECT COALESCE(SUM((over_value - start_value)/100 * (price.total + price.service)),0)
 		FROM tab_order_electronic
@@ -578,9 +590,9 @@ func privateFeesByOrderid(orderid string) decimal.Decimal {
 	return v.Round(2)
 }
 
-// privateFeesByPrivateOrderid 对齐 getPrivateFeesByPrivateOrderid：SUM((over-start)/100 * price.total)。
-func privateFeesByPrivateOrderid(orderid string) decimal.Decimal {
-	season := currentSeason()
+// PrivateFeesByPrivateOrderid 对齐 getPrivateFeesByPrivateOrderid：SUM((over-start)/100 * price.total)。
+func PrivateFeesByPrivateOrderid(orderid string) decimal.Decimal {
+	season := CurrentSeason()
 	var v decimal.Decimal
 	sql := `SELECT COALESCE(SUM((over_value - start_value)/100 * price.total),0)
 		FROM tab_order_electronic
@@ -591,10 +603,10 @@ func privateFeesByPrivateOrderid(orderid string) decimal.Decimal {
 	return v.Round(2)
 }
 
-// privateFeesByOrderidAndPrivateUser 对齐 getPrivateFeesByOrderidAndPrivateUser：
+// PrivateFeesByOrderidAndPrivateUser 对齐 getPrivateFeesByOrderidAndPrivateUser：
 // SUM((over-start)/100 * (price.total + fee))，fee 为私桩服务费率。
-func privateFeesByOrderidAndPrivateUser(orderid string, fee decimal.Decimal) decimal.Decimal {
-	season := currentSeason()
+func PrivateFeesByOrderidAndPrivateUser(orderid string, fee decimal.Decimal) decimal.Decimal {
+	season := CurrentSeason()
 	var v decimal.Decimal
 	sql := `SELECT COALESCE(SUM((over_value - start_value)/100 * (price.total + ?)),0)
 		FROM tab_order_electronic
@@ -605,9 +617,9 @@ func privateFeesByOrderidAndPrivateUser(orderid string, fee decimal.Decimal) dec
 	return v.Round(2)
 }
 
-// privateElectronicByOrderid 对齐 getElectronicByPrivateOrderid：返回 (totalFee, serviceFee)。
-func privateElectronicByOrderid(orderid string) (decimal.Decimal, decimal.Decimal) {
-	season := currentSeason()
+// PrivateElectronicByOrderid 对齐 getElectronicByPrivateOrderid：返回 (totalFee, serviceFee)。
+func PrivateElectronicByOrderid(orderid string) (decimal.Decimal, decimal.Decimal) {
+	season := CurrentSeason()
 	var totalFee, serviceFee decimal.Decimal
 	sql := `SELECT
 		COALESCE(SUM((over_value - start_value)/100 * price.total),0),
@@ -620,20 +632,20 @@ func privateElectronicByOrderid(orderid string) (decimal.Decimal, decimal.Decima
 	return totalFee.Round(2), serviceFee.Round(2)
 }
 
-// privateElectronicByOrderidAndPrivateUser 对齐 getElectronicByPrivateOrderidAndPrivateUser：
+// PrivateElectronicByOrderidAndPrivateUser 对齐 getElectronicByPrivateOrderidAndPrivateUser：
 // totalFee = SUM(... * price.total)，serviceFee = SUM(... * (chargingBean.Fee * 0.8))。
-func privateElectronicByOrderidAndPrivateUser(orderid string) (decimal.Decimal, decimal.Decimal) {
+func PrivateElectronicByOrderidAndPrivateUser(orderid string) (decimal.Decimal, decimal.Decimal) {
 	var order model.OrderTbl
 	if conf.Db.Where("orderid = ?", orderid).First(&order).Error != nil {
 		return decimal.Zero, decimal.Zero
 	}
 	var fee decimal.Decimal
-	if privatePlace := privatePlaceByID(order.SpacesID); privatePlace != nil {
-		if chargingBean := privateChargingBySpacesNum(privatePlace.SpacesCode); chargingBean != nil {
+	if privatePlace := PrivatePlaceByID(order.SpacesID); privatePlace != nil {
+		if chargingBean := PrivateChargingBySpacesNum(privatePlace.SpacesCode); chargingBean != nil {
 			fee = chargingBean.Fee
 		}
 	}
-	season := currentSeason()
+	season := CurrentSeason()
 	var totalFee, serviceFee decimal.Decimal
 	sql := `SELECT
 		COALESCE(SUM((over_value - start_value)/100 * price.total),0),

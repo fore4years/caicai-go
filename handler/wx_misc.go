@@ -11,6 +11,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============================================================================
@@ -155,14 +156,14 @@ func (c *CheweisuoController) kaisuo(userID, lockID string) string {
 
 	// 用户是否有未完成订单
 	var unfinished []model.OrderTbl
-	conf.Db.Where("openid = ? AND state <> ? AND state <> ?", userID, orderStateFinished, orderStateRevoked).Find(&unfinished)
+	conf.Db.Where("openid = ? AND state <> ? AND state <> ?", userID, repository.OrderStateFinished, repository.OrderStateRevoked).Find(&unfinished)
 	if len(unfinished) > 0 {
 		return "您有订单正在进行中，请查看"
 	}
 
 	// 锁是否被预定（预约中且非本人 → 拒绝）
 	var reservation model.OrderTbl
-	if err := conf.Db.Where("lockid = ? AND state = ?", lockID, orderStateBooking).First(&reservation).Error; err == nil &&
+	if err := conf.Db.Where("lockid = ? AND state = ?", lockID, repository.OrderStateBooking).First(&reservation).Error; err == nil &&
 		reservation.Openid != userID {
 		return "车位锁已被预定"
 	}
@@ -180,7 +181,7 @@ func (c *CheweisuoController) dakai(userID, lockID string) string {
 		Openid:    userID,
 		Lockid:    lockID,
 		BeginTime: timePtr(time.Now()),
-		State:     orderStateConduct, // 进行中
+		State:     repository.OrderStateConduct, // 进行中
 	}
 	conf.Db.Create(&order)
 	conf.Db.Model(&model.OnlineLockstatusTable{}).Where("lockID = ?", lockID).Update("online", "y")
@@ -229,7 +230,7 @@ func createLockOrder(openid, lockid, orderid string) string {
 		Openid:    openid,
 		Lockid:    lockid,
 		BeginTime: timePtr(time.Now()),
-		State:     orderStateConduct, // 进行中
+		State:     repository.OrderStateConduct, // 进行中
 	})
 	return orderid
 }
@@ -237,19 +238,19 @@ func createLockOrder(openid, lockid, orderid string) string {
 // updataLockOrder 对齐 LockServiceImpl.updataOrder：把该锁“预约中”订单更新为“进行中”。
 func updataLockOrder(lockid string) string {
 	var o model.OrderTbl
-	if err := conf.Db.Where("lockid = ? AND state = ?", lockid, orderStateBooking).First(&o).Error; err != nil {
+	if err := conf.Db.Where("lockid = ? AND state = ?", lockid, repository.OrderStateBooking).First(&o).Error; err != nil {
 		return ""
 	}
 	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", o.Orderid).Updates(map[string]interface{}{
 		"begin_time": time.Now(),
-		"state":      orderStateConduct,
+		"state":      repository.OrderStateConduct,
 	})
 	return o.Orderid
 }
 
 // updataPlaceByLockid 对齐 LockServiceImpl.updataPlace：按 lockid 关联 placeid 更新车位状态。
 func updataPlaceByLockid(lockid, state string) {
-	p := placeByLockid(lockid)
+	p := repository.PlaceByLockid(lockid)
 	if p != nil {
 		conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", p.Placeid).Update("state", state)
 	}
@@ -273,7 +274,7 @@ func cancelYuyue(openid string) {
 
 // lockIsOk 对齐 LockServiceImpl.lockIsOk：返回 (是否可用 ok/no, 车位状态)。
 func lockIsOk(lockid, openid string) (string, string) {
-	p := placeByLockid(lockid)
+	p := repository.PlaceByLockid(lockid)
 	if p == nil {
 		return "no", ""
 	}
@@ -282,7 +283,7 @@ func lockIsOk(lockid, openid string) (string, string) {
 	}
 	if p.State == "预约中" && isPlaceOpen(p.OpenTime) {
 		var o model.OrderTbl
-		if err := conf.Db.Where("lockid = ? AND state = ?", lockid, orderStateBooking).First(&o).Error; err == nil && o.Openid == openid {
+		if err := conf.Db.Where("lockid = ? AND state = ?", lockid, repository.OrderStateBooking).First(&o).Error; err == nil && o.Openid == openid {
 			cancelYuyue(openid)
 			return "ok", p.State
 		}
@@ -301,7 +302,7 @@ func (c *HardwareLockController) OpenScanPhone(ctx *gin.Context) {
 	status, placeState := lockIsOk(body.Lockid, body.Openid)
 	if status == "ok" {
 		orderid := simpleUUID()
-		if placeState == orderStateBooking {
+		if placeState == repository.OrderStateBooking {
 			orderid = updataLockOrder(body.Lockid)
 		} else {
 			orderid = createLockOrder(body.Openid, body.Lockid, orderid)
@@ -309,7 +310,7 @@ func (c *HardwareLockController) OpenScanPhone(ctx *gin.Context) {
 		// Java：LockUtil.open(ldao.selectByid(lockid).getSn(), orderid) —— NB 通道开锁硬件下发，
 		// Go 侧省略，仅保留订单与车位状态写入。
 		_ = orderid
-		updataPlaceByLockid(body.Lockid, orderStateUse)
+		updataPlaceByLockid(body.Lockid, repository.OrderStateUse)
 	}
 	ctx.JSON(http.StatusOK, ResultSuccess([]string{status, placeState}))
 }
@@ -321,7 +322,7 @@ func (c *HardwareLockController) CloseScanPhone(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	p := placeByLockid(body.Lockid)
+	p := repository.PlaceByLockid(body.Lockid)
 	if p != nil && p.State == "使用中" {
 		// Java：LockUtil.close(ldao.selectByid(lockid).getSn()) —— NB 通道关锁硬件下发，此处省略。
 		conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", p.Placeid).Update("state", "可使用")
@@ -341,12 +342,12 @@ func (c *HardwareLockController) OpenScanLanya(ctx *gin.Context) {
 	result := []string{status, placeState}
 	if status == "ok" {
 		orderid := simpleUUID()
-		if placeState == orderStateBooking {
+		if placeState == repository.OrderStateBooking {
 			orderid = updataLockOrder(body.Lockid)
 		} else {
 			orderid = createLockOrder(body.Openid, body.Lockid, orderid)
 		}
-		updataPlaceByLockid(body.Lockid, orderStateUse)
+		updataPlaceByLockid(body.Lockid, repository.OrderStateUse)
 
 		// Java open_scan_lanya 无服务端硬件下发，返回 lockmac + orderid 供客户端蓝牙开锁。
 		var lock model.LockTbl

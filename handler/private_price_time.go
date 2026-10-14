@@ -9,6 +9,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // PrivatePriceTimeController 对齐 Java controller.PrivatePriceTimeController（/PrivatePriceTime）。
@@ -111,7 +112,7 @@ func (c *PrivatePriceTimeController) GetAll(ctx *gin.Context) {
 
 // GetAllBySeason GET /PrivatePriceTime/getAllBySeason
 func (c *PrivatePriceTimeController) GetAllBySeason(ctx *gin.Context) {
-	table := "tab_price_time_" + currentSeason()
+	table := "tab_price_time_" + repository.CurrentSeason()
 	var rows []privatePriceTimeRow
 	conf.Db.Raw("SELECT " + privatePriceTimeColumns + " FROM " + table).Scan(&rows)
 
@@ -125,7 +126,7 @@ func (c *PrivatePriceTimeController) GetAllBySeason(ctx *gin.Context) {
 // GetAllBySeasonAndPrivateOwner GET /PrivatePriceTime/getAllBySeasonAndPrivateOwner?privateOwnerId=
 func (c *PrivatePriceTimeController) GetAllBySeasonAndPrivateOwner(ctx *gin.Context) {
 	ownerID := ctx.Query("privateOwnerId")
-	table := "tab_price_time_" + currentSeason()
+	table := "tab_price_time_" + repository.CurrentSeason()
 	var rows []privatePriceTimeRow
 	conf.Db.Raw("SELECT " + privatePriceTimeColumns + " FROM " + table).Scan(&rows)
 

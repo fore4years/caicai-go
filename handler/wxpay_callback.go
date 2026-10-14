@@ -10,6 +10,7 @@ import (
 	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============================================================================
@@ -110,7 +111,7 @@ func triggerProfitSharing(orderID string) {
 		logger.Mylog.Warn().Msgf("触发分账失败：未找到订单 - 订单号: %s", orderID)
 		return
 	}
-	if order.ConsumptionType != consumeTypeYiXiang {
+	if order.ConsumptionType != repository.ConsumeTypeYiXiang {
 		logger.Mylog.Info().Msgf("订单类型不符合分账条件，跳过分账 - 订单号: %s, 类型: %s", orderID, order.ConsumptionType)
 		return
 	}

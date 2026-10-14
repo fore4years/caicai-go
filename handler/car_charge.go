@@ -13,6 +13,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============================================================================
@@ -146,7 +147,7 @@ func (c *CarDetailsController) Yuyue(ctx *gin.Context) {
 	// 3. 查询预约用户信息（driveruse_tbl）；若日期不是今天则内存中重置为 3 次
 	//    （Java 中 updateDriverUseData 被注释，此处同样只做内存判断、不落库）。
 	var reserveNumber int32
-	if du := driverUseByOpenid(openid); du != nil {
+	if du := repository.DriverUseByOpenid(openid); du != nil {
 		today := time.Now().Format("2006-01-02")
 		if du.EveryDay.Format("2006-01-02") != today {
 			du.ReserveNumber = 3
@@ -167,7 +168,7 @@ func (c *CarDetailsController) Yuyue(ctx *gin.Context) {
 
 		now := time.Now()
 		var spacesID int32
-		if s := spacesByLockID(lockid); s != nil {
+		if s := repository.SpacesByLockID(lockid); s != nil {
 			spacesID = s.ID
 		}
 		// 生成订单（对齐 Java OrderBean.builder 的字段回填）
@@ -523,7 +524,7 @@ func (c *ChargeListController) GetByLockid(ctx *gin.Context) {
 // GetpByLockid 按锁 id 查询车位。Java ChargeListCon.getpByLockid / placeDao.selectBylockid。
 func (c *ChargeListController) GetpByLockid(ctx *gin.Context) {
 	lockid := ctx.Query("lockid")
-	if p := placeByLockid(lockid); p != nil {
+	if p := repository.PlaceByLockid(lockid); p != nil {
 		ctx.JSON(http.StatusOK, placeToDTO(*p))
 		return
 	}
@@ -571,7 +572,7 @@ func (c *ChargeListController) CoverOrder(ctx *gin.Context) {
 		return
 	}
 
-	p := placeByLockid(chargeOrder.Lockid)
+	p := repository.PlaceByLockid(chargeOrder.Lockid)
 	if p == nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
@@ -622,7 +623,7 @@ func (c *ChargeListController) GetChargePayMsg(ctx *gin.Context) {
 		return
 	}
 
-	p := placeByLockid(o.Lockid)
+	p := repository.PlaceByLockid(o.Lockid)
 	if p == nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
@@ -662,7 +663,7 @@ func (c *ChargeListController) GetChargePayMsg(ctx *gin.Context) {
 // GetPlaceByLockid 按锁 id 查询车位。Java ChargeListCon.getPlaceByLockid / ChargeSerImpl.getPlaceByLockid。
 func (c *ChargeListController) GetPlaceByLockid(ctx *gin.Context) {
 	lockid := ctx.Query("lockid")
-	if p := placeByLockid(lockid); p != nil {
+	if p := repository.PlaceByLockid(lockid); p != nil {
 		ctx.JSON(http.StatusOK, placeToDTO(*p))
 		return
 	}

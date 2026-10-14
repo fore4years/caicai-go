@@ -13,6 +13,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============================================================================
@@ -620,7 +621,7 @@ func (w *WodeController) OverOrder(c *gin.Context) {
 		c.JSON(http.StatusOK, "ok")
 		return
 	}
-	place := placeByLockid(order.Lockid)
+	place := repository.PlaceByLockid(order.Lockid)
 	if place == nil {
 		c.JSON(http.StatusOK, "ok")
 		return
@@ -684,7 +685,7 @@ func (w *WodeController) OverOrder(c *gin.Context) {
 		"close_time":        now,
 		"total_price":       totalPrice,
 		"basic_consumption": totalPrice,
-		"state":             orderStateWaitPay,
+		"state":             repository.OrderStateWaitPay,
 		"charging_time":     chargingTime,
 		"stop_mode":         "扫码自停",
 	})

@@ -12,6 +12,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ DTO（驼峰，对齐 Java Bean 序列化） ============
@@ -45,7 +46,7 @@ func chargingGunToDTO(g model.TabChargingGun) chargingGunDTO {
 		UpdateTime: timeToLocal(g.UpdateTime),
 	}
 	// 关联产品（对齐 Java ChargingGunMapper.getById 的 <collection property="product">）
-	if p := productByPid(g.ProductID); p != nil {
+	if p := repository.ProductByPid(g.ProductID); p != nil {
 		pd := productToDTO(*p)
 		dto.Product = &pd
 	}

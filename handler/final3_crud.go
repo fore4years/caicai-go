@@ -12,6 +12,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 func sysTime() string {
@@ -186,7 +187,7 @@ func (c *PrivateChargingController) Save(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess("无此车位编号, 请重新输入"))
 		return
 	}
-	if existing := privateChargingBySpacesNum(spacesNum); existing != nil && existing.Openid != openid {
+	if existing := repository.PrivateChargingBySpacesNum(spacesNum); existing != nil && existing.Openid != openid {
 		ctx.JSON(http.StatusOK, ResultSuccess("此车位编号已存在, 请重新输入"))
 		return
 	}
@@ -253,7 +254,7 @@ func (c *PrivateChargingController) Register(ctx *gin.Context) {
 	openid := ctx.GetString("openid")
 
 	var spacesNum string
-	product := productByPid(req.Pid)
+	product := repository.ProductByPid(req.Pid)
 	if product == nil {
 		// 创建产品
 		p := model.TabProduct{Pid: req.Pid, Environment: "私桩", IsTwicecar: 0}

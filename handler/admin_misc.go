@@ -11,6 +11,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // invoiceDTO 对应 Java domain.Invoice（invoice，驼峰）。
@@ -351,7 +352,7 @@ func (a *AdminBalanceController) Deduct(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(400, "扣除金额必须大于0"))
 		return
 	}
-	if !consumeBalance(openid, amount) {
+	if !repository.ConsumeBalance(openid, amount) {
 		c.JSON(http.StatusOK, ResultError(500, "扣除余额失败，用户openid: "+openid+"，扣除金额: "+amount.String()))
 		return
 	}

@@ -8,6 +8,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ProductController 对齐 Java controller.ProductController（小程序侧产品，base /product）。
@@ -146,7 +147,7 @@ func (p *ProductController) GetByImeiLike(c *gin.Context) {
 
 // GetNidAndGatewayByPid GET /product/getNidAndGatewayByPid?pid=
 func (p *ProductController) GetNidAndGatewayByPid(c *gin.Context) {
-	prod := productByPid(c.Query("pid"))
+	prod := repository.ProductByPid(c.Query("pid"))
 	if prod == nil {
 		c.JSON(http.StatusOK, ResultError(400, "产品不存在"))
 		return
@@ -158,7 +159,7 @@ func (p *ProductController) GetNidAndGatewayByPid(c *gin.Context) {
 		gateway = prod.Imei
 	} else {
 		nid = prod.Nid
-		gw := gatewayByID(prod.GatewayID)
+		gw := repository.GatewayByID(prod.GatewayID)
 		if gw == nil {
 			c.JSON(http.StatusOK, ResultError(400, "网关不存在"))
 			return

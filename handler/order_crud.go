@@ -17,6 +17,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 	"caicai-go/service"
 )
 
@@ -125,7 +126,7 @@ type orderElectronicPeriodDTO struct {
 
 // electronicFeesByOrderid 计算订单的电费与服务费（对齐 Java getElectronicByOrderid，季节电价表）。
 func electronicFeesByOrderid(orderid string) (totalFee, serviceFee decimal.Decimal) {
-	season := currentSeason()
+	season := repository.CurrentSeason()
 	sql := `SELECT
 		COALESCE(SUM((e.over_value - e.start_value) / 100 * CASE s.price_mode WHEN 1 THEN p.total1 WHEN 2 THEN p.total2 ELSE p.total END),0),
 		COALESCE(SUM((e.over_value - e.start_value) / 100 * CASE WHEN s.service_fee IS NOT NULL AND s.service_fee != 0 THEN s.service_fee WHEN s.service IS NOT NULL AND s.service != 0 THEN (s.service*0.8) ELSE (p.service*0.8) END),0)
@@ -162,11 +163,11 @@ func privateChargingFeeByOrderid(orderid string) *decimal.Decimal {
 	if conf.Db.Where("orderid = ?", orderid).First(&order).Error != nil {
 		return nil
 	}
-	privatePlace := privatePlaceByID(order.SpacesID)
+	privatePlace := repository.PrivatePlaceByID(order.SpacesID)
 	if privatePlace == nil {
 		return nil
 	}
-	chargingBean := privateChargingBySpacesNum(privatePlace.SpacesCode)
+	chargingBean := repository.PrivateChargingBySpacesNum(privatePlace.SpacesCode)
 	if chargingBean == nil {
 		return nil
 	}
@@ -235,7 +236,7 @@ func (c *OrderElectronicController) GetValueByOrderid(ctx *gin.Context) {
 
 // GetFeesByOrderid 对齐 Java getFeesByOrderid：电费 + 服务费合计（tab_price + tab_parking_spaces）。
 func (c *OrderElectronicController) GetFeesByOrderid(ctx *gin.Context) {
-	season := currentSeason()
+	season := repository.CurrentSeason()
 	d := queryFeeDecimal(`SELECT SUM((e.over_value - e.start_value) / 100 * (
 			CASE s.price_mode WHEN 1 THEN p.total1 WHEN 2 THEN p.total2 ELSE p.total END
 			+
@@ -265,7 +266,7 @@ func (c *OrderElectronicController) GetElectronicByOrderid(ctx *gin.Context) {
 
 // GetPrivateFeesByOrderid 对齐 Java getPrivateFeesByOrderid（private_charging_price_tbl.total + service）。
 func (c *OrderElectronicController) GetPrivateFeesByOrderid(ctx *gin.Context) {
-	ctx.JSON(http.StatusOK, ResultSuccess(privateFeesByOrderid(ctx.Query("orderid"))))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.PrivateFeesByOrderid(ctx.Query("orderid"))))
 }
 
 // GetPrivateFeesByOrderidAndPrivateUser 对齐 Java getPrivateFeesByOrderidAndPrivateUser（fee 来自请求参数）。
@@ -274,30 +275,30 @@ func (c *OrderElectronicController) GetPrivateFeesByOrderidAndPrivateUser(ctx *g
 	if err != nil {
 		fee = decimal.Zero
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(privateFeesByOrderidAndPrivateUser(ctx.Query("orderid"), fee)))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.PrivateFeesByOrderidAndPrivateUser(ctx.Query("orderid"), fee)))
 }
 
 // GetPrivateFeesByPrivateOrderid 对齐 Java getPrivateFeesByPrivateOrderid（桩主：仅 price.total）。
 func (c *OrderElectronicController) GetPrivateFeesByPrivateOrderid(ctx *gin.Context) {
-	ctx.JSON(http.StatusOK, ResultSuccess(privateFeesByPrivateOrderid(ctx.Query("orderid"))))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.PrivateFeesByPrivateOrderid(ctx.Query("orderid"))))
 }
 
 // GetElectronicByPrivateOrderid 对齐 Java getElectronicByPrivateOrderid（private_charging_price_tbl.total/service）。
 func (c *OrderElectronicController) GetElectronicByPrivateOrderid(ctx *gin.Context) {
-	totalFee, serviceFee := privateElectronicByOrderid(ctx.Query("orderid"))
+	totalFee, serviceFee := repository.PrivateElectronicByOrderid(ctx.Query("orderid"))
 	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{"totalFee": totalFee, "serviceFee": serviceFee}))
 }
 
 // GetElectronicByPrivateOrderidAndPrivateUser 对齐 Java getElectronicByPrivateOrderidAndPrivateUser
 // （桩主设置的服务费率 fee 从私桩表查询，服务费 = fee*0.8）。
 func (c *OrderElectronicController) GetElectronicByPrivateOrderidAndPrivateUser(ctx *gin.Context) {
-	totalFee, serviceFee := privateElectronicByOrderidAndPrivateUser(ctx.Query("orderid"))
+	totalFee, serviceFee := repository.PrivateElectronicByOrderidAndPrivateUser(ctx.Query("orderid"))
 	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{"totalFee": totalFee, "serviceFee": serviceFee}))
 }
 
 // GetPeriodFeesByOrderid 对齐 Java getPeriodFeesByOrderid（各时段电费/服务费明细）。
 func (c *OrderElectronicController) GetPeriodFeesByOrderid(ctx *gin.Context) {
-	season := currentSeason()
+	season := repository.CurrentSeason()
 	rows, err := conf.Db.Raw(`SELECT
 			e.create_time,
 			e.update_time,
@@ -392,7 +393,7 @@ func (c *OrderPrivateController) GetOrderState(ctx *gin.Context) {
 
 // GetOrderRechargeAmountByOwner 对齐 Java getOrderRechargeAmountByOwner（桩主：getPrivateFeesByPrivateOrderid）。
 func (c *OrderPrivateController) GetOrderRechargeAmountByOwner(ctx *gin.Context) {
-	ctx.JSON(http.StatusOK, ResultSuccess(privateFeesByPrivateOrderid(ctx.Query("orderId"))))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.PrivateFeesByPrivateOrderid(ctx.Query("orderId"))))
 }
 
 // GetOrderRechargeAmountByNeighbor 对齐 Java getOrderRechargeAmountByNeighbor（邻居：total + 桩主服务费）。
@@ -407,7 +408,7 @@ func (c *OrderPrivateController) GetOrderRechargeAmountByNeighbor(ctx *gin.Conte
 		ctx.JSON(http.StatusOK, ResultSuccess(decimal.Zero))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(privateFeesByOrderidAndPrivateUser(orderID, *fee)))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.PrivateFeesByOrderidAndPrivateUser(orderID, *fee)))
 }
 
 // ============ OrderTwiceController（/orderTwice） ============

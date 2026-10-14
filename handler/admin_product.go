@@ -13,6 +13,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // productGatewayDTO 对应 Java model.GatewayBean 的序列化字段（驼峰）。
@@ -50,7 +51,7 @@ func productToDTO(p model.TabProduct) productDTO {
 		HasCpLine:      p.HasCpLine,
 	}
 	// 对齐 Java ProductBean.resultMap 中 <collection property="gateway" column="gateway_id">。
-	if g := gatewayByID(p.GatewayID); g != nil {
+	if g := repository.GatewayByID(p.GatewayID); g != nil {
 		dto.Gateway = &productGatewayDTO{
 			ID:           g.ID,
 			Mac:          g.Mac,

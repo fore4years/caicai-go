@@ -17,6 +17,7 @@ import (
 	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============================================================================
@@ -291,7 +292,7 @@ func buildCompleteOrder(orderID string, amount int) *wxCompleteOrder {
 	}
 
 	switch order.ConsumptionType {
-	case consumeTypeYiXiang:
+	case repository.ConsumeTypeYiXiang:
 		// 驿享充电：分账（对齐 onCompleteWxOrder）
 		totalFee, serviceFee := electronicFeesByOrderid(orderID)
 		req.ProfitSharing = true
@@ -299,15 +300,15 @@ func buildCompleteOrder(orderID string, amount int) *wxCompleteOrder {
 			{Name: "计费规则", Description: "电费最低0.23元/度起,服务费0.4元起,详情请见小程序", Count: 1},
 			{Name: "费用明细", Description: "电费" + totalFee.String() + "元,服务费" + serviceFee.String() + "元", Count: 1},
 		}
-	case consumeTypeNeighbor:
+	case repository.ConsumeTypeNeighbor:
 		// 邻享充电：不分账（对齐 onCompleteWxPrivateOrder）
-		totalFee, serviceFee := privateElectronicByOrderidAndPrivateUser(orderID)
+		totalFee, serviceFee := repository.PrivateElectronicByOrderidAndPrivateUser(orderID)
 		req.ProfitSharing = false
 		req.PostPayments = []wxCompletePostPayment{
 			{Name: "计费规则", Description: "电费最低0.23元/度起,服务费0.2元起,详情请见小程序", Count: 1},
 			{Name: "费用明细", Description: "电费" + totalFee.String() + "元,服务费" + serviceFee.String() + "元", Count: 1},
 		}
-	case consumeTypeTwice:
+	case repository.ConsumeTypeTwice:
 		// 二轮车充电：不分账（对齐 onCompleteWxTwiceOrder）
 		totalFee := reOrderPowerNoServiceFees(orderID)
 		serviceFee := decimal.NewFromInt(int64(amount)).Div(decimal.NewFromInt(100)).Sub(totalFee).Round(2)

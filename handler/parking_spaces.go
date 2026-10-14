@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"caicai-go/conf"
+	"caicai-go/repository"
 )
 
 // ParkingSpacesController 对齐 Java controller.ParkingSpacesController（base /spaces）。
@@ -343,14 +344,14 @@ func (s *ParkingSpacesController) GetByUserOrderAndLocation(c *gin.Context) {
 	c.JSON(http.StatusOK, ResultSuccessPage(total, rows))
 }
 
-// IsOneLockPerSpot GET /spaces/isOneLockPerSpot?spacesId=
+// IsOneLockPerSpot GET /spaces/repository.IsOneLockPerSpot?spacesId=
 func (s *ParkingSpacesController) IsOneLockPerSpot(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Query("spacesId"))
-	c.JSON(http.StatusOK, ResultSuccess(isOneLockPerSpot(int32(id))))
+	c.JSON(http.StatusOK, ResultSuccess(repository.IsOneLockPerSpot(int32(id))))
 }
 
 // GetOtherSpacesIdBySpacesId GET /spaces/getOtherSpacesIdBySpacesId?spacesId=
 func (s *ParkingSpacesController) GetOtherSpacesIdBySpacesId(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Query("spacesId"))
-	c.JSON(http.StatusOK, ResultSuccess(otherSpacesIDBySpacesID(int32(id))))
+	c.JSON(http.StatusOK, ResultSuccess(repository.OtherSpacesIDBySpacesID(int32(id))))
 }
