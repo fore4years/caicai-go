@@ -266,6 +266,21 @@ func HasRecentInvoiceApply() bool {
 	return n > 0
 }
 
+// LatestNeighborOrderByOpenid 查询用户最近的邻享充电使用中订单。
+func LatestNeighborOrderByOpenid(openid string) (*model.OrderTbl, error) {
+	var latest model.OrderTbl
+	if err := conf.Db.Where("openid = ? AND consumption_type = ? AND state = ?", openid, "邻享充电", "使用中").
+		Order("begin_time desc").First(&latest).Error; err != nil {
+		return nil, err
+	}
+	return &latest, nil
+}
+
+// UpdateOrderMoveCarTime 更新订单挪车通知时间。
+func UpdateOrderMoveCarTime(orderid string) {
+	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderid).Update("move_car_time", time.Now())
+}
+
 // FindUserByOpenid 按 openid 查询用户（未找到返回 nil）。
 func FindUserByOpenid(openid string) *model.UserTbl {
 	var u model.UserTbl

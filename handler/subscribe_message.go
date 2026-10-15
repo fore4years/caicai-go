@@ -2,12 +2,10 @@ package handler
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
-	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ SubscribeMessageController（/subscribeMessage） ============
@@ -51,15 +49,13 @@ func (c *SubscribeMessageController) SendMoveCarMessage(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	var user model.UserTbl
-	if err := conf.Db.Where("phone = ?", req.Phone).First(&user).Error; err != nil || user.Openid == "" {
+	user, err := repository.UserByPhone(ctx.Request.Context(), req.Phone)
+	if err != nil || user.Openid == "" {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	var latest model.OrderTbl
-	if err := conf.Db.Where("openid = ? AND consumption_type = ? AND state = ?", user.Openid, "邻享充电", "使用中").
-		Order("begin_time desc").First(&latest).Error; err == nil {
-		conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", latest.Orderid).Update("move_car_time", time.Now())
+	if latest, err := repository.LatestNeighborOrderByOpenid(user.Openid); err == nil {
+		repository.UpdateOrderMoveCarTime(latest.Orderid)
 	}
 	ctx.JSON(http.StatusOK, ResultSuccess(true))
 }
