@@ -7,62 +7,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
-	"caicai-go/model"
 	"caicai-go/repository"
 )
 
 // AdminRevenueController 对齐 Java System.controller.MoneyGetCon（/system 收益统计）。
 // 注意：MoneyGetCon 是遗留控制器，多数方法返回原始 Map/String/List（不包 Result）。
 type AdminRevenueController struct{}
-
-// revenueSpaces 根据 type 解析消费类型与车位 id：
-//   - "驿享充电" 查 tab_parking_spaces
-//   - "邻享充电" 查 private_place_tbl
-//
-// 返回 spacesID、consumptionType、是否命中；未命中时返回 false。
-func revenueSpaces(spacesCode, typ string) (int32, string, bool) {
-	switch typ {
-	case "驿享充电":
-		var s model.TabParkingSpace
-		if err := conf.Db.Where("spaces_code = ?", spacesCode).First(&s).Error; err != nil {
-			return 0, "", false
-		}
-		return s.ID, "驿享充电", true
-	case "邻享充电":
-		var s model.PrivatePlaceTbl
-		if err := conf.Db.Where("spaces_code = ?", spacesCode).First(&s).Error; err != nil {
-			return 0, "", false
-		}
-		return s.ID, "邻享充电", true
-	default:
-		return 0, "", false
-	}
-}
-
-// sumBasicConsumption 对给定订单查询条件求和 basic_consumption（对齐 Java getAll）。
-func sumBasicConsumption(db *gorm.DB) decimal.Decimal {
-	var v decimal.Decimal
-	if err := db.Select("COALESCE(SUM(basic_consumption), 0)").Row().Scan(&v); err != nil {
-		return decimal.Zero
-	}
-	return v
-}
-
-// revenueOrders 解析 spacesCode/type 并查询对应已完成订单（begin_time 降序），对齐 Java getOrderDetails。
-func revenueOrders(spacesCode, typ string) ([]model.OrderTbl, string, bool) {
-	spacesID, consumptionType, ok := revenueSpaces(spacesCode, typ)
-	if !ok {
-		return nil, "", false
-	}
-	var orders []model.OrderTbl
-	conf.Db.Model(&model.OrderTbl{}).
-		Where("spaces_id = ? AND consumption_type = ? AND state = ?", spacesID, consumptionType, "已完成").
-		Order("begin_time desc").Find(&orders)
-	return orders, consumptionType, true
-}
 
 // queryDecimal 读取查询参数并解析为 decimal.Decimal，缺失或解析失败返回 0。
 func queryDecimal(c *gin.Context, key string) decimal.Decimal {
@@ -78,12 +29,8 @@ func queryDecimal(c *gin.Context, key string) decimal.Decimal {
 func (a *AdminRevenueController) MoneyPlaces(c *gin.Context) {
 	current, size := parsePage(c)
 
-	var max int64
-	conf.Db.Model(&model.PlaceTbl{}).Where("state != ?", "待加锁").Count(&max)
-
-	var places []model.PlaceTbl
-	conf.Db.Model(&model.PlaceTbl{}).Where("state != ?", "待加锁").
-		Offset(pageOffset(current, size)).Limit(size).Find(&places)
+	max := repository.CountPlacesNotState("待加锁")
+	places := repository.PagePlacesNotState("待加锁", pageOffset(current, size), size)
 
 	list := make([]PlaceDTO, 0, len(places))
 	for _, p := range places {
@@ -94,8 +41,8 @@ func (a *AdminRevenueController) MoneyPlaces(c *gin.Context) {
 
 // MoneyOwner /system/moneyOwner?ownerid= → owner 实体（原始对象）
 func (a *AdminRevenueController) MoneyOwner(c *gin.Context) {
-	var owner model.OwnerTbl
-	if err := conf.Db.Where("ownerid = ?", c.Query("ownerid")).First(&owner).Error; err != nil {
+	owner, err := repository.OwnerByOwnerid(c.Request.Context(), c.Query("ownerid"))
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
@@ -104,11 +51,8 @@ func (a *AdminRevenueController) MoneyOwner(c *gin.Context) {
 
 // GetMoney /system/getMoney → {all, today}（原始 Map，值为 basic_consumption 总和）
 func (a *AdminRevenueController) GetMoney(c *gin.Context) {
-	today := time.Now().Format("2006-01-02")
-
-	all := sumBasicConsumption(conf.Db.Model(&model.OrderTbl{}).Where("state = ?", "已完成"))
-	todaySum := sumBasicConsumption(conf.Db.Model(&model.OrderTbl{}).
-		Where("state = ?", "已完成").Where("over_time LIKE ?", today+"%"))
+	all := repository.SumFinishedOrdersBasicConsumption()
+	todaySum := repository.SumFinishedOrdersTodayBasicConsumption()
 
 	c.JSON(http.StatusOK, gin.H{"all": all, "today": todaySum})
 }
@@ -118,12 +62,7 @@ func (a *AdminRevenueController) GetOrders(c *gin.Context) {
 	current, size := parsePage(c)
 	lockid := c.Query("lockid")
 
-	var max int64
-	conf.Db.Model(&model.OrderTbl{}).Where("state = ? AND lockid = ?", "已完成", lockid).Count(&max)
-
-	var orders []model.OrderTbl
-	conf.Db.Model(&model.OrderTbl{}).Where("state = ? AND lockid = ?", "已完成", lockid).
-		Offset(pageOffset(current, size)).Limit(size).Find(&orders)
+	max, orders := repository.FinishedOrdersByLockid(lockid, pageOffset(current, size), size)
 
 	list := make([]OrderDTO, 0, len(orders))
 	for _, o := range orders {
@@ -134,8 +73,8 @@ func (a *AdminRevenueController) GetOrders(c *gin.Context) {
 
 // GetNickname /system/getNickname?openid= → 昵称（原始 String）
 func (a *AdminRevenueController) GetNickname(c *gin.Context) {
-	var u model.UserTbl
-	if err := conf.Db.Where("openid = ?", c.Query("openid")).First(&u).Error; err != nil {
+	u, err := repository.UserByOpenid(c.Request.Context(), c.Query("openid"))
+	if err != nil {
 		c.String(http.StatusOK, "")
 		return
 	}
@@ -145,11 +84,8 @@ func (a *AdminRevenueController) GetNickname(c *gin.Context) {
 // AllAndToday /system/allAndToday?lockid= → {all, today}（原始 Map）
 func (a *AdminRevenueController) AllAndToday(c *gin.Context) {
 	lockid := c.Query("lockid")
-	today := time.Now().Format("2006-01-02")
-
-	all := sumBasicConsumption(conf.Db.Model(&model.OrderTbl{}).Where("state = ? AND lockid = ?", "已完成", lockid))
-	todaySum := sumBasicConsumption(conf.Db.Model(&model.OrderTbl{}).
-		Where("state = ? AND lockid = ?", "已完成", lockid).Where("over_time LIKE ?", today+"%"))
+	all := repository.SumFinishedOrdersByLockidBasicConsumption(lockid)
+	todaySum := repository.SumFinishedOrdersByLockidTodayBasicConsumption(lockid)
 
 	c.JSON(http.StatusOK, gin.H{"all": all, "today": todaySum})
 }
@@ -160,43 +96,39 @@ func (a *AdminRevenueController) OrderDel(c *gin.Context) {
 		Orderid string `json:"orderid"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	conf.Db.Where("orderid = ?", req.Orderid).Delete(&model.OrderTbl{})
+	repository.DeleteOrderByOrderid(req.Orderid)
 	c.String(http.StatusOK, "ok")
 }
 
 // GetTotalIncome /system/getTotalIncome?spacesCode=&type= → {totalIncome}（原始 Map）
 func (a *AdminRevenueController) GetTotalIncome(c *gin.Context) {
-	spacesID, consumptionType, ok := revenueSpaces(c.Query("spacesCode"), c.Query("type"))
+	spacesID, consumptionType, ok := repository.RevenueSpaces(c.Query("spacesCode"), c.Query("type"))
 	if !ok {
 		c.JSON(http.StatusOK, gin.H{"totalIncome": 0})
 		return
 	}
 
-	total := sumBasicConsumption(conf.Db.Model(&model.OrderTbl{}).
-		Where("spaces_id = ? AND consumption_type = ? AND state = ?", spacesID, consumptionType, "已完成"))
+	total := repository.SumFinishedOrdersBySpacesBasicConsumption(spacesID, consumptionType)
 
 	c.JSON(http.StatusOK, gin.H{"totalIncome": total})
 }
 
 // GetTodayIncome /system/getTodayIncome?spacesCode=&type= → {todayIncome}（原始 Map）
 func (a *AdminRevenueController) GetTodayIncome(c *gin.Context) {
-	spacesID, consumptionType, ok := revenueSpaces(c.Query("spacesCode"), c.Query("type"))
+	spacesID, consumptionType, ok := repository.RevenueSpaces(c.Query("spacesCode"), c.Query("type"))
 	if !ok {
 		c.JSON(http.StatusOK, gin.H{"todayIncome": 0})
 		return
 	}
 
-	today := time.Now().Format("2006-01-02")
-	todayIncome := sumBasicConsumption(conf.Db.Model(&model.OrderTbl{}).
-		Where("spaces_id = ? AND consumption_type = ? AND state = ?", spacesID, consumptionType, "已完成").
-		Where("over_time LIKE ?", "%"+today+"%"))
+	todayIncome := repository.SumFinishedOrdersBySpacesTodayBasicConsumption(spacesID, consumptionType)
 
 	c.JSON(http.StatusOK, gin.H{"todayIncome": todayIncome})
 }
 
 // GetOrderDetails /system/getOrderDetails?spacesCode=&type= → 订单明细列表（原始 List<Map>）
 func (a *AdminRevenueController) GetOrderDetails(c *gin.Context) {
-	orders, _, ok := revenueOrders(c.Query("spacesCode"), c.Query("type"))
+	orders, _, ok := repository.RevenueOrders(c.Query("spacesCode"), c.Query("type"))
 	if !ok {
 		c.JSON(http.StatusOK, []gin.H{})
 		return
@@ -222,26 +154,7 @@ func (a *AdminRevenueController) GetOrderDetails(c *gin.Context) {
 func (a *AdminRevenueController) GetTodayOrders(c *gin.Context) {
 	page := queryInt(c, "page", 0)
 	length := queryInt(c, "length", 0)
-	today := time.Now().Format("2006-01-02")
-
-	todayQuery := func() *gorm.DB {
-		return conf.Db.Model(&model.OrderTbl{}).
-			Where("over_time LIKE ? AND state = ?", "%"+today+"%", "已完成").
-			Order("over_time desc")
-	}
-
-	var max int64
-	todayQuery().Count(&max)
-
-	var orders []model.OrderTbl
-	db := todayQuery()
-	if page > 0 && length > 0 {
-		db = db.Offset((page - 1) * length).Limit(length)
-	}
-	db.Find(&orders)
-
-	todayTotalIncome := sumBasicConsumption(conf.Db.Model(&model.OrderTbl{}).
-		Where("over_time LIKE ? AND state = ?", "%"+today+"%", "已完成"))
+	max, orders, todayTotalIncome := repository.TodayFinishedOrders(page, length)
 
 	list := make([]OrderDTO, 0, len(orders))
 	for _, o := range orders {
@@ -303,7 +216,7 @@ func (a *AdminRevenueController) ExcelExport(c *gin.Context) {
 		OvertimeUseFee: queryDecimal(c, "timeoutCar"),
 	}
 
-	orders, consumptionType, _ := revenueOrders(c.Query("spacesCode"), c.Query("type"))
+	orders, consumptionType, _ := repository.RevenueOrders(c.Query("spacesCode"), c.Query("type"))
 	details := make([]excelDetailRow, 0, len(orders))
 	for _, o := range orders {
 		var electronFee, serviceFee decimal.Decimal
