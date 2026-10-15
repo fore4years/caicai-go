@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // PlaceApplyDTO 对应 Java domain.PlaceApplyBean，JSON 字段名对齐 Jackson 序列化（驼峰，null 省略）。
@@ -69,29 +69,25 @@ type AdminPlaceApplyController struct{}
 
 // GetPlaceApplyMax GET /system/getPlaceApplyMax → 总数（原始 Integer）
 func (a *AdminPlaceApplyController) GetPlaceApplyMax(c *gin.Context) {
-	var count int64
-	conf.Db.Model(&model.PlaceapplyTbl{}).Count(&count)
+	count := repository.CountPlaceApplies()
 	c.JSON(http.StatusOK, count)
 }
 
 // GetPlaceApplyPaging GET /system/getPlaceApplyPaging?page=&length= → 分页列表（原始 List）
 func (a *AdminPlaceApplyController) GetPlaceApplyPaging(c *gin.Context) {
 	current, size := parsePage(c)
-	var rows []model.PlaceapplyTbl
-	conf.Db.Model(&model.PlaceapplyTbl{}).
-		Order("applyTime desc").
-		Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	rows := repository.PagePlaceApplies(pageOffset(current, size), size)
 	c.JSON(http.StatusOK, placeApplyList(rows))
 }
 
 // GetPlaceApplyById GET /system/getPlaceApplyById?id= → 单条（原始对象，未找到返回 null）
 func (a *AdminPlaceApplyController) GetPlaceApplyById(c *gin.Context) {
-	var pa model.PlaceapplyTbl
-	if err := conf.Db.Where("id = ?", c.Query("id")).First(&pa).Error; err != nil {
+	pa, err := repository.PlaceApplyByID(c.Query("id"))
+	if err != nil {
 		c.JSON(http.StatusOK, nil)
 		return
 	}
-	c.JSON(http.StatusOK, placeApplyToDTO(pa))
+	c.JSON(http.StatusOK, placeApplyToDTO(*pa))
 }
 
 // DoPlaceApply POST /system/doPlaceApply body {state,id} → 审核结果消息（原始 String）
@@ -110,17 +106,15 @@ func (a *AdminPlaceApplyController) DoPlaceApply(c *gin.Context) {
 
 	if req.State == "no" {
 		// 驳回
-		conf.Db.Model(&model.PlaceapplyTbl{}).Where("id = ?", req.ID).Update("state", "未通过")
+		repository.UpdatePlaceApplyState(req.ID, "未通过")
 		msg = "已拒绝车位申请"
-		var byID model.PlaceapplyTbl
-		if err := conf.Db.Where("id = ?", req.ID).First(&byID).Error; err == nil {
+		if byID, err := repository.PlaceApplyByID(req.ID); err == nil {
 			text := byID.Name + "先生（女士），你好，你注册的车位：" + byID.Province + byID.City + byID.Streer + byID.RelatedBuilding + ",现在暂未通过，了解详情，请咨询工作人员~"
-			conf.Db.Exec("INSERT INTO message_tbl (ownerid, msgtime, message, status) VALUES (?,?,?,?)",
-				byID.Ownerid, now, text, "未读")
+			repository.InsertMessage(byID.Ownerid, now, text, "未读")
 		}
 	} else {
-		var pa model.PlaceapplyTbl
-		if err := conf.Db.Where("id = ?", req.ID).First(&pa).Error; err != nil {
+		pa, err := repository.PlaceApplyByID(req.ID)
+		if err != nil {
 			c.String(http.StatusOK, msg)
 			return
 		}
@@ -131,14 +125,12 @@ func (a *AdminPlaceApplyController) DoPlaceApply(c *gin.Context) {
 		}
 
 		// 通过
-		conf.Db.Model(&model.PlaceapplyTbl{}).Where("id = ?", req.ID).Update("state", "已通过")
-		var byID model.PlaceapplyTbl
-		conf.Db.Where("id = ?", req.ID).First(&byID)
+		repository.UpdatePlaceApplyState(req.ID, "已通过")
+		byID, _ := repository.PlaceApplyByID(req.ID)
 
 		// 生成 placeid：code + 5 位递增序号（对齐 Java selectMaxID + shuzi.tianchongling）
 		placeid := ""
-		var p model.PlaceTbl
-		if err := conf.Db.Where("placeid LIKE ?", pa.Code+"%").Order("placeid desc").Limit(1).First(&p).Error; err != nil {
+		if p, err := repository.MaxPlaceByCode(pa.Code); err != nil {
 			placeid = pa.Code + "00001"
 		} else {
 			suffix := strings.TrimPrefix(p.Placeid, pa.Code)
@@ -160,14 +152,13 @@ func (a *AdminPlaceApplyController) DoPlaceApply(c *gin.Context) {
 			RelatedBuilding: pa.RelatedBuilding,
 			State:           "待加锁",
 		}
-		conf.Db.Select(
+		repository.CreatePlaceFields(&in, []string{
 			"placeid", "ownerid", "province", "city", "district", "streer", "relatedBuilding",
 			"longitude", "latitude", "rate", "state", "fixType",
-		).Create(&in)
+		})
 
 		text := byID.Name + "先生（女士），您好，您注册的车位：" + byID.Province + byID.City + byID.Streer + byID.RelatedBuilding + ",现已通过，您接下来可以添加车位锁以共享您的车位啦~"
-		conf.Db.Exec("INSERT INTO message_tbl (ownerid, msgtime, message, status) VALUES (?,?,?,?)",
-			pa.Ownerid, now, text, nil)
+		repository.InsertMessage(pa.Ownerid, now, text, nil)
 	}
 	c.String(http.StatusOK, msg)
 }
@@ -177,12 +168,8 @@ func (a *AdminPlaceApplyController) PaChange(c *gin.Context) {
 	tiaojian := c.Query("tiaojian")
 	current, size := parsePage(c)
 
-	var max int64
-	conf.Db.Model(&model.PlaceapplyTbl{}).Where("state = ?", tiaojian).Count(&max)
-
-	var rows []model.PlaceapplyTbl
-	conf.Db.Model(&model.PlaceapplyTbl{}).Where("state = ?", tiaojian).
-		Order("applyTime desc").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	max := repository.CountPlaceAppliesByState(tiaojian)
+	rows := repository.PagePlaceAppliesByState(tiaojian, pageOffset(current, size), size)
 
 	c.JSON(http.StatusOK, gin.H{"max": max, "list": placeApplyList(rows)})
 }
@@ -194,7 +181,7 @@ func (a *AdminPlaceApplyController) MushDel(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req)
 	for _, id := range req.Xuanzhong {
-		conf.Db.Where("id = ?", id).Delete(&model.PlaceapplyTbl{})
+		repository.DeletePlaceApplyByID(id)
 	}
 	c.String(http.StatusOK, "删除成功！")
 }
@@ -207,12 +194,9 @@ func (a *AdminPlaceApplyController) Sousuo(c *gin.Context) {
 
 	fields := []string{"applyTime", "name", "idNumber", "province", "city", "district", "streer"}
 	for _, f := range fields {
-		var max int64
-		conf.Db.Model(&model.PlaceapplyTbl{}).Where(f+" LIKE ?", "%"+tiaojian+"%").Count(&max)
+		max := repository.CountPlaceAppliesByFieldLike(f, tiaojian)
 		if max != 0 {
-			var rows []model.PlaceapplyTbl
-			conf.Db.Model(&model.PlaceapplyTbl{}).Where(f+" LIKE ?", "%"+tiaojian+"%").
-				Order("applyTime desc").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+			rows := repository.PagePlaceAppliesByFieldLike(f, tiaojian, pageOffset(current, size), size)
 			c.JSON(http.StatusOK, gin.H{"max": max, "list": placeApplyList(rows)})
 			return
 		}
