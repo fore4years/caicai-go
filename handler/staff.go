@@ -5,8 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
-	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ StaffController（base /wx） ============
@@ -18,8 +17,7 @@ type StaffController struct{}
 // 查 staff_tbl 是否存在该 name，存在返回 "ok"，否则 "fail"。
 func (c *StaffController) Selectname(ctx *gin.Context) {
 	name := ctx.Query("name")
-	var staff model.StaffTbl
-	if err := conf.Db.Where("name = ?", name).First(&staff).Error; err != nil {
+	if _, err := repository.StaffByName(name); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess("fail"))
 		return
 	}

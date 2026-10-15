@@ -13,8 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // DeviceDataController 对齐 Java controller.DeviceDataController（设备数据接收，HTTP 兼容入口）。
@@ -117,7 +117,7 @@ func (d *DeviceDataController) Receive(c *gin.Context) {
 		}
 	}
 
-	if err := conf.Db.Create(&row).Error; err != nil {
+	if err := repository.Create(&row).Error; err != nil {
 		c.JSON(http.StatusOK, deviceDataResponse{Result: 1, Message: "处理失败: " + err.Error()})
 		return
 	}

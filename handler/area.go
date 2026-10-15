@@ -6,8 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // zbbAreaDTO 对应 Java ZbbAreaBean，JSON 字段名对齐 Jackson 序列化（驼峰）。
@@ -63,7 +63,7 @@ type ZbbAreaController struct{}
 // GetById GET /ZbbAreaBean/getById 对齐 Java getById：按主键查 zbb_area。
 func (c *ZbbAreaController) GetById(ctx *gin.Context) {
 	var a model.ZbbArea
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&a).Error; err != nil {
+	if err := repository.FindByID(&a, ctx.Query("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -89,16 +89,16 @@ func (c *ZbbAreaController) Add(ctx *gin.Context) {
 		Lng:         decimal.NewFromFloat(req.Lng),
 		Level:       req.Level,
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&a).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&a).Error == nil))
 }
 
 // GetAll GET /ZbbAreaBean/getAll 对齐 Java getAll：MyBatis-Plus 分页（无排序）。
 func (c *ZbbAreaController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.ZbbArea{}).Count(&total)
+	repository.Count(&model.ZbbArea{}, &total)
 	var rows []model.ZbbArea
-	conf.Db.Model(&model.ZbbArea{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.ZbbArea{}, "", pageOffset(current, size), size, &rows)
 	list := make([]zbbAreaDTO, 0, len(rows))
 	for _, a := range rows {
 		list = append(list, zbbAreaToDTO(a))

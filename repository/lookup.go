@@ -32,3 +32,21 @@ func ReceptaclePowersByReceptacleID(rid string) []model.ReceptaclePowerTbl {
 	conf.Db.Where("receptacle_id = ?", rid).Find(&rows)
 	return rows
 }
+
+// StaffByName 按姓名查询员工。
+func StaffByName(name string) (*model.StaffTbl, error) {
+	var staff model.StaffTbl
+	if err := conf.Db.Where("name = ?", name).First(&staff).Error; err != nil {
+		return nil, err
+	}
+	return &staff, nil
+}
+
+// ImeiTabByChargingStation 按充电站编号查询枪座绑定关系。
+func ImeiTabByChargingStation(imei string) (*model.ImeiTab, error) {
+	var row model.ImeiTab
+	if err := conf.Db.Where("charging_station = ? AND deleted = 0", imei).First(&row).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
