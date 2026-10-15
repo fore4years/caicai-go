@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"caicai-go/logger"
 	"database/sql"
 	"fmt"
 	"math"
@@ -13,9 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
+	"caicai-go/logger"
 	"caicai-go/model"
 	"caicai-go/repository"
 	"caicai-go/service"
@@ -126,53 +124,24 @@ type orderElectronicPeriodDTO struct {
 
 // electronicFeesByOrderid 计算订单的电费与服务费（对齐 Java getElectronicByOrderid，季节电价表）。
 func electronicFeesByOrderid(orderid string) (totalFee, serviceFee decimal.Decimal) {
-	season := repository.CurrentSeason()
-	sql := `SELECT
-		COALESCE(SUM((e.over_value - e.start_value) / 100 * CASE s.price_mode WHEN 1 THEN p.total1 WHEN 2 THEN p.total2 ELSE p.total END),0),
-		COALESCE(SUM((e.over_value - e.start_value) / 100 * CASE WHEN s.service_fee IS NOT NULL AND s.service_fee != 0 THEN s.service_fee WHEN s.service IS NOT NULL AND s.service != 0 THEN (s.service*0.8) ELSE (p.service*0.8) END),0)
-		FROM tab_order_electronic e
-		LEFT JOIN tab_price_time_` + season + ` t ON t.id = e.price_time_id
-		LEFT JOIN tab_price p ON p.id = t.price_id
-		LEFT JOIN order_tbl o ON o.orderid = e.order_id
-		LEFT JOIN tab_parking_spaces s ON s.id = o.spaces_id
-		WHERE e.order_id = ?`
-	var tf, sf decimal.Decimal
-	conf.Db.Raw(sql, orderid).Row().Scan(&tf, &sf)
-	return tf.Round(2), sf.Round(2)
+	return repository.ElectronicFeesByOrderid(orderid)
 }
 
 func round2(v float64) float64 {
 	return math.Round(v*100) / 100
 }
 
-// ============================ 金额查询 / 私桩费率 ============================
-
-// queryFeeDecimal 执行返回单值金额的 SQL；结果为 NULL/无行时返回 nil（对齐 Java 返回 null）。
-func queryFeeDecimal(sql string, args ...interface{}) *decimal.Decimal {
-	var d decimal.Decimal
-	if err := conf.Db.Raw(sql, args...).Row().Scan(&d); err != nil {
+// roundNullableDecimal 将可空字符串金额解析并按指定小数位舍入（Java setScale HALF_UP）。
+func roundNullableDecimal(ns sql.NullString, scale int32) *decimal.Decimal {
+	if !ns.Valid {
 		return nil
 	}
-	return &d
-}
-
-// privateChargingFeeByOrderid 根据订单查询桩主设置的服务费率（order→private_place→private_charging）。
-// 对齐 Java OrderElectronicServiceImpl.getElectronicByPrivateOrderidAndPrivateUser 中的取费逻辑。
-func privateChargingFeeByOrderid(orderid string) *decimal.Decimal {
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderid).First(&order).Error != nil {
+	d, err := decimal.NewFromString(ns.String)
+	if err != nil {
 		return nil
 	}
-	privatePlace := repository.PrivatePlaceByID(order.SpacesID)
-	if privatePlace == nil {
-		return nil
-	}
-	chargingBean := repository.PrivateChargingBySpacesNum(privatePlace.SpacesCode)
-	if chargingBean == nil {
-		return nil
-	}
-	fee := chargingBean.Fee
-	return &fee
+	v := d.Round(scale)
+	return &v
 }
 
 // ============================ 提现状态常量（对齐 Java RefundStatusEnum） ============================
@@ -194,12 +163,12 @@ func simpleUUID() string {
 type OrderElectronicController struct{}
 
 func (c *OrderElectronicController) GetById(ctx *gin.Context) {
-	var e model.TabOrderElectronic
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&e).Error; err != nil {
+	e, err := repository.TabOrderElectronicByID(ctx.Query("id"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(tabOrderElectronicToDTO(e)))
+	ctx.JSON(http.StatusOK, ResultSuccess(tabOrderElectronicToDTO(*e)))
 }
 
 func (c *OrderElectronicController) Add(ctx *gin.Context) {
@@ -208,15 +177,12 @@ func (c *OrderElectronicController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&e).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.InsertTabOrderElectronic(&e) == nil))
 }
 
 func (c *OrderElectronicController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
-	var total int64
-	conf.Db.Model(&model.TabOrderElectronic{}).Count(&total)
-	var rows []model.TabOrderElectronic
-	conf.Db.Model(&model.TabOrderElectronic{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	total, rows := repository.PageTabOrderElectronics(pageOffset(current, size), size)
 	list := make([]tabOrderElectronicDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, tabOrderElectronicToDTO(r))
@@ -226,7 +192,7 @@ func (c *OrderElectronicController) GetAll(ctx *gin.Context) {
 
 // GetValueByOrderid 对齐 Java getValueByOrderid：MAX(over_value)-MIN(start_value)，不除以 100。
 func (c *OrderElectronicController) GetValueByOrderid(ctx *gin.Context) {
-	d := queryFeeDecimal("SELECT (MAX(over_value)-MIN(start_value)) FROM tab_order_electronic WHERE order_id = ?", ctx.Query("orderid"))
+	d := repository.TabOrderElectronicValueByOrderID(ctx.Query("orderid"))
 	if d == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
@@ -236,22 +202,7 @@ func (c *OrderElectronicController) GetValueByOrderid(ctx *gin.Context) {
 
 // GetFeesByOrderid 对齐 Java getFeesByOrderid：电费 + 服务费合计（tab_price + tab_parking_spaces）。
 func (c *OrderElectronicController) GetFeesByOrderid(ctx *gin.Context) {
-	season := repository.CurrentSeason()
-	d := queryFeeDecimal(`SELECT SUM((e.over_value - e.start_value) / 100 * (
-			CASE s.price_mode WHEN 1 THEN p.total1 WHEN 2 THEN p.total2 ELSE p.total END
-			+
-			CASE
-				WHEN s.service_fee IS NOT NULL AND s.service_fee != 0 THEN s.service_fee
-				WHEN s.service IS NOT NULL AND s.service != 0 THEN (s.service * 0.8)
-				ELSE (p.service * 0.8)
-			END
-		))
-		FROM tab_order_electronic e
-		LEFT JOIN tab_price_time_`+season+` t ON t.id = e.price_time_id
-		LEFT JOIN tab_price p ON p.id = t.price_id
-		LEFT JOIN order_tbl o ON o.orderid = e.order_id
-		LEFT JOIN tab_parking_spaces s ON s.id = o.spaces_id
-		WHERE e.order_id = ?`, ctx.Query("orderid"))
+	d := repository.TabOrderElectronicFeesByOrderID(ctx.Query("orderid"))
 	if d == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
@@ -298,66 +249,25 @@ func (c *OrderElectronicController) GetElectronicByPrivateOrderidAndPrivateUser(
 
 // GetPeriodFeesByOrderid 对齐 Java getPeriodFeesByOrderid（各时段电费/服务费明细）。
 func (c *OrderElectronicController) GetPeriodFeesByOrderid(ctx *gin.Context) {
-	season := repository.CurrentSeason()
-	rows, err := conf.Db.Raw(`SELECT
-			e.create_time,
-			e.update_time,
-			CASE s.price_mode WHEN 1 THEN p.total1 WHEN 2 THEN p.total2 ELSE p.total END AS price_total,
-			(e.over_value - e.start_value) / 100 * CASE s.price_mode WHEN 1 THEN p.total1 WHEN 2 THEN p.total2 ELSE p.total END AS total_fee,
-			CASE
-				WHEN s.service_fee IS NOT NULL AND s.service_fee != 0 THEN s.service_fee
-				WHEN s.service IS NOT NULL AND s.service != 0 THEN (s.service * 0.8)
-				ELSE (p.service * 0.8)
-			END AS service_unit_price,
-			(e.over_value - e.start_value) / 100 * CASE
-				WHEN s.service_fee IS NOT NULL AND s.service_fee != 0 THEN s.service_fee
-				WHEN s.service IS NOT NULL AND s.service != 0 THEN (s.service * 0.8)
-				ELSE (p.service * 0.8)
-			END AS service_fee
-		FROM tab_order_electronic e
-		LEFT JOIN tab_price_time_`+season+` t ON t.id = e.price_time_id
-		LEFT JOIN tab_price p ON p.id = t.price_id
-		LEFT JOIN order_tbl o ON o.orderid = e.order_id
-		LEFT JOIN tab_parking_spaces s ON s.id = o.spaces_id
-		WHERE e.order_id = ? AND e.over_value != e.start_value
-		ORDER BY e.create_time`, ctx.Query("orderid")).Rows()
+	rows, err := repository.TabOrderElectronicPeriodsByOrderID(ctx.Query("orderid"))
 	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess([]interface{}{}))
 		return
 	}
-	defer rows.Close()
 
 	list := make([]orderElectronicPeriodDTO, 0)
-	for rows.Next() {
-		var createTime, updateTime time.Time
-		var priceTotal, totalFee, serviceUnitPrice, serviceFee sql.NullString
-		if err := rows.Scan(&createTime, &updateTime, &priceTotal, &totalFee, &serviceUnitPrice, &serviceFee); err != nil {
-			continue
-		}
+	for _, r := range rows {
 		vo := orderElectronicPeriodDTO{
-			CreateTime:       timeToLocal(timePtr(createTime)),
-			UpdateTime:       timeToLocal(timePtr(updateTime)),
-			PriceTotal:       roundNullableDecimal(priceTotal, 4),
-			TotalFee:         roundNullableDecimal(totalFee, 2),
-			ServiceUnitPrice: roundNullableDecimal(serviceUnitPrice, 4),
-			ServiceFee:       roundNullableDecimal(serviceFee, 2),
+			CreateTime:       timeToLocal(timePtr(r.CreateTime)),
+			UpdateTime:       timeToLocal(timePtr(r.UpdateTime)),
+			PriceTotal:       roundNullableDecimal(r.PriceTotal, 4),
+			TotalFee:         roundNullableDecimal(r.TotalFee, 2),
+			ServiceUnitPrice: roundNullableDecimal(r.ServiceUnitPrice, 4),
+			ServiceFee:       roundNullableDecimal(r.ServiceFee, 2),
 		}
 		list = append(list, vo)
 	}
 	ctx.JSON(http.StatusOK, ResultSuccess(list))
-}
-
-// roundNullableDecimal 将可空字符串金额解析并按指定小数位舍入（Java setScale HALF_UP）。
-func roundNullableDecimal(ns sql.NullString, scale int32) *decimal.Decimal {
-	if !ns.Valid {
-		return nil
-	}
-	d, err := decimal.NewFromString(ns.String)
-	if err != nil {
-		return nil
-	}
-	v := d.Round(scale)
-	return &v
 }
 
 // ============ OrderPrivateController（/orderPrivate） ============
@@ -365,12 +275,12 @@ func roundNullableDecimal(ns sql.NullString, scale int32) *decimal.Decimal {
 type OrderPrivateController struct{}
 
 func (c *OrderPrivateController) GetById(ctx *gin.Context) {
-	var o model.OrderPrivateTbl
-	if err := conf.Db.Where("orderid = ?", ctx.Param("orderid")).First(&o).Error; err != nil {
+	o := repository.OrderPrivateByOrderid(ctx.Param("orderid"))
+	if o == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(orderPrivateToDTO(o)))
+	ctx.JSON(http.StatusOK, ResultSuccess(orderPrivateToDTO(*o)))
 }
 
 func (c *OrderPrivateController) Add(ctx *gin.Context) {
@@ -379,7 +289,7 @@ func (c *OrderPrivateController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&o).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.InsertOrderPrivate(&o) == nil))
 }
 
 // GetOrderState 对齐 Java OrderPrivateServiceImpl.getOrderState（Redis 键 PrivateOrderState:{orderId}）。
@@ -403,7 +313,7 @@ func (c *OrderPrivateController) GetOrderRechargeAmountByNeighbor(ctx *gin.Conte
 		ctx.JSON(http.StatusOK, ResultSuccess(decimal.Zero))
 		return
 	}
-	fee := privateChargingFeeByOrderid(orderID)
+	fee := repository.PrivateChargingFeeByOrderid(orderID)
 	if fee == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(decimal.Zero))
 		return
@@ -416,14 +326,13 @@ func (c *OrderPrivateController) GetOrderRechargeAmountByNeighbor(ctx *gin.Conte
 type OrderTwiceController struct{}
 
 func (c *OrderTwiceController) GetByOrderid(ctx *gin.Context) {
-	var o model.OrderTwiceTbl
-	if err := conf.Db.Where("orderid = ?", ctx.Param("orderid")).First(&o).Error; err != nil {
+	o, err := repository.OrderTwiceByOrderid(ctx.Param("orderid"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(gin.H{}))
 		return
 	}
 	// 对齐 Java ReOrderPowerMapper.getMaxPowerByOrderid：取 max_power 字段。
-	var maxPower decimal.Decimal
-	conf.Db.Raw("SELECT COALESCE(max_power,0) FROM re_order_electronic_tbl WHERE order_id = ? LIMIT 1", o.Orderid).Row().Scan(&maxPower)
+	maxPower := repository.ReOrderPowerMaxByOrderid(o.Orderid)
 	logger.Mylog.Info().Msgf("====>> %#v <<=====", maxPower.Round(2))
 	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{
 		"totalFee":   o.PowerRate.Round(2),
@@ -438,7 +347,7 @@ func (c *OrderTwiceController) Save(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&o).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.InsertOrderTwice(&o) == nil))
 }
 
 // ============ RechargeOrderController（/recharge） ============
@@ -446,8 +355,7 @@ func (c *OrderTwiceController) Save(ctx *gin.Context) {
 type RechargeOrderController struct{}
 
 func (c *RechargeOrderController) List(ctx *gin.Context) {
-	var rows []model.RechargeOrderTbl
-	conf.Db.Where("openid = ? AND order_status = ?", ctx.Param("openid"), "已支付").Order("create_time desc").Find(&rows)
+	rows := repository.RechargeOrdersByOpenidStatus(ctx.Param("openid"), "已支付")
 	list := make([]rechargeOrderDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, rechargeOrderToDTO(r))
@@ -456,12 +364,12 @@ func (c *RechargeOrderController) List(ctx *gin.Context) {
 }
 
 func (c *RechargeOrderController) Detail(ctx *gin.Context) {
-	var r model.RechargeOrderTbl
-	if err := conf.Db.Where("order_id = ?", ctx.Param("orderId")).First(&r).Error; err != nil {
+	r, err := repository.RechargeOrderByOrderID(ctx.Param("orderId"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(404, "充值订单不存在"))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(rechargeOrderToDTO(r)))
+	ctx.JSON(http.StatusOK, ResultSuccess(rechargeOrderToDTO(*r)))
 }
 
 // Statistics 对齐 Java RechargeOrderServiceImpl.getRechargeStatistics：
@@ -469,16 +377,11 @@ func (c *RechargeOrderController) Detail(ctx *gin.Context) {
 func (c *RechargeOrderController) Statistics(ctx *gin.Context) {
 	openid := ctx.Param("openid")
 
-	var totalAmount, refundedAmount decimal.Decimal
-	conf.Db.Model(&model.RechargeOrderTbl{}).Where("openid = ?", openid).
-		Select("COALESCE(SUM(recharge_amount),0), COALESCE(SUM(refunded_amount),0)").Row().Scan(&totalAmount, &refundedAmount)
-
-	var count int64
-	conf.Db.Model(&model.RechargeOrderTbl{}).Where("openid = ?", openid).Count(&count)
+	totalAmount, refundedAmount := repository.RechargeOrderSumsByOpenid(openid)
+	count := repository.CountRechargeOrdersByOpenid(openid)
 
 	remainingRefundAmount := decimal.Zero
-	var user model.UserTbl
-	if conf.Db.Where("openid = ?", openid).First(&user).Error == nil {
+	if user := repository.FindUserByOpenid(openid); user != nil {
 		remainingRefundAmount = user.Balans
 	}
 
@@ -499,13 +402,11 @@ func (c *RechargeOrderController) UpdateStatus(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultError(500, "更新充值订单状态失败"))
 		return
 	}
-	var r model.RechargeOrderTbl
-	if err := conf.Db.Where("order_id = ?", req.OrderID).First(&r).Error; err != nil {
+	if _, err := repository.RechargeOrderByOrderID(req.OrderID); err != nil {
 		ctx.JSON(http.StatusOK, ResultError(404, "充值订单不存在"))
 		return
 	}
-	res := conf.Db.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", req.OrderID).Update("order_status", req.Status)
-	if res.RowsAffected <= 0 {
+	if repository.UpdateRechargeOrderStatus(req.OrderID, req.Status) <= 0 {
 		ctx.JSON(http.StatusOK, ResultError(500, "充值订单状态更新失败"))
 		return
 	}
@@ -538,7 +439,7 @@ func (c *WithdrawalController) Apply(ctx *gin.Context) {
 		CreateTime:             timePtr(time.Now()),
 		UpdateTime:             timePtr(time.Now()),
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&rec).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.InsertWithdrawalRecord(&rec) == nil))
 }
 
 // Refund 对齐 Java applyRefund：校验金额/订单状态/用户余额，创建退款记录并累计退款申请次数。
@@ -596,8 +497,7 @@ func (c *WithdrawalController) ProcessRefund(ctx *gin.Context) {
 }
 
 func (c *WithdrawalController) List(ctx *gin.Context) {
-	var rows []model.WithdrawalRecordTbl
-	conf.Db.Where("openid = ?", ctx.Param("openid")).Order("create_time desc").Find(&rows)
+	rows := repository.WithdrawalRecordsByOpenid(ctx.Param("openid"))
 	list := make([]withdrawalDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, withdrawalToDTO(r))
@@ -606,12 +506,12 @@ func (c *WithdrawalController) List(ctx *gin.Context) {
 }
 
 func (c *WithdrawalController) Detail(ctx *gin.Context) {
-	var w model.WithdrawalRecordTbl
-	if err := conf.Db.Where("record_id = ?", ctx.Param("recordId")).First(&w).Error; err != nil {
+	w, err := repository.WithdrawalRecordByRecordID(ctx.Param("recordId"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "提现记录不存在"))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(withdrawalToDTO(w)))
+	ctx.JSON(http.StatusOK, ResultSuccess(withdrawalToDTO(*w)))
 }
 
 // UpdateStatus 对齐 Java updateWithdrawalStatus：状态为「已处理」写处理时间，「已拒绝」写拒绝原因。
@@ -625,8 +525,7 @@ func (c *WithdrawalController) UpdateStatus(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	var w model.WithdrawalRecordTbl
-	if err := conf.Db.Where("record_id = ?", req.RecordID).First(&w).Error; err != nil {
+	if _, err := repository.WithdrawalRecordByRecordID(req.RecordID); err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "提现记录不存在"))
 		return
 	}
@@ -637,8 +536,8 @@ func (c *WithdrawalController) UpdateStatus(ctx *gin.Context) {
 	} else if req.Status == withdrawalRejected {
 		updates["reject_reason"] = req.RejectReason
 	}
-	res := conf.Db.Model(&model.WithdrawalRecordTbl{}).Where("record_id = ?", req.RecordID).Updates(updates)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	res := repository.UpdateWithdrawalRecord(req.RecordID, updates)
+	ctx.JSON(http.StatusOK, ResultSuccess(res > 0))
 }
 
 // ============================ 提现/退款业务逻辑 ============================
@@ -651,8 +550,8 @@ func (c *WithdrawalController) applyRefund(openid, rechargeOrderID string, refun
 	}
 
 	// 2. 查询充值订单
-	var rechargeOrder model.RechargeOrderTbl
-	if err := conf.Db.Where("order_id = ?", rechargeOrderID).First(&rechargeOrder).Error; err != nil {
+	rechargeOrder, err := repository.RechargeOrderByOrderID(rechargeOrderID)
+	if err != nil {
 		return false, "充值订单不存在"
 	}
 
@@ -662,8 +561,8 @@ func (c *WithdrawalController) applyRefund(openid, rechargeOrderID string, refun
 	}
 
 	// 4. 验证退款金额是否超过用户余额
-	var user model.UserTbl
-	if err := conf.Db.Where("openid = ?", openid).First(&user).Error; err != nil {
+	user := repository.FindUserByOpenid(openid)
+	if user == nil {
 		return false, "用户不存在"
 	}
 	if refundAmount.GreaterThan(user.Balans) {
@@ -683,13 +582,12 @@ func (c *WithdrawalController) applyRefund(openid, rechargeOrderID string, refun
 		CreateTime:             timePtr(time.Now()),
 		UpdateTime:             timePtr(time.Now()),
 	}
-	if conf.Db.Omit("process_time").Create(&refundRecord).Error != nil {
+	if err := repository.InsertWithdrawalRecord(&refundRecord); err != nil {
 		return false, "退款申请保存失败"
 	}
 
 	// 更新充值订单的退款申请次数
-	conf.Db.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", rechargeOrderID).
-		Update("refund_apply_count", rechargeOrder.RefundApplyCount+1)
+	repository.UpdateRefundApplyCount(rechargeOrderID, rechargeOrder.RefundApplyCount+1)
 
 	return true, ""
 }
@@ -702,10 +600,8 @@ func (c *WithdrawalController) applyAndProcessRefund(openid, rechargeOrderID str
 	}
 
 	// 查询刚创建的退款记录
-	var latest model.WithdrawalRecordTbl
-	if err := conf.Db.Where("openid = ? AND related_recharge_order_id = ? AND withdrawal_amount = ?",
-		openid, rechargeOrderID, refundAmount).
-		Order("create_time desc").First(&latest).Error; err != nil {
+	latest, err := repository.LatestWithdrawalRecord(openid, rechargeOrderID, refundAmount)
+	if err != nil {
 		return "", fmt.Errorf("未找到刚创建的退款记录")
 	}
 
@@ -715,14 +611,14 @@ func (c *WithdrawalController) applyAndProcessRefund(openid, rechargeOrderID str
 // processRefund 对齐 Java WithdrawalRecordServiceImpl.processRefund。
 func (c *WithdrawalController) processRefund(recordID string) (string, error) {
 	// 1. 验证退款记录
-	var refundRecord model.WithdrawalRecordTbl
-	if err := conf.Db.Where("record_id = ?", recordID).First(&refundRecord).Error; err != nil {
+	refundRecord, err := repository.WithdrawalRecordByRecordID(recordID)
+	if err != nil {
 		return "", fmt.Errorf("退款记录不存在")
 	}
 
 	// 2. 验证充值订单
-	var rechargeOrder model.RechargeOrderTbl
-	if err := conf.Db.Where("order_id = ?", refundRecord.RelatedRechargeOrderID).First(&rechargeOrder).Error; err != nil {
+	rechargeOrder, err := repository.RechargeOrderByOrderID(refundRecord.RelatedRechargeOrderID)
+	if err != nil {
 		return "", fmt.Errorf("关联的充值订单不存在")
 	}
 
@@ -745,90 +641,41 @@ func (c *WithdrawalController) processRefund(recordID string) (string, error) {
 		// 退款成功处理：充值订单退款信息与用户余额统一由 processBalanceRefund 处理，
 		// 避免 refundedAmount/remainingRefundAmount 被重复累加（Java 原逻辑存在重复累加 bug，此处修正）。
 		now := time.Now()
-		conf.Db.Model(&model.WithdrawalRecordTbl{}).Where("record_id = ?", refundRecord.RecordID).
-			Updates(map[string]interface{}{"withdrawal_status": withdrawalSuccess, "process_time": now})
+		repository.UpdateWithdrawalRecord(refundRecord.RecordID, map[string]interface{}{"withdrawal_status": withdrawalSuccess, "process_time": now})
 
-		return c.processBalanceRefund(&refundRecord, &rechargeOrder)
+		return c.processBalanceRefund(refundRecord, rechargeOrder)
 
 	case "PROCESSING", "CHANGE":
 		// 退款处理中（微信支付退款为异步）
-		conf.Db.Model(&model.WithdrawalRecordTbl{}).Where("record_id = ?", refundRecord.RecordID).
-			Updates(map[string]interface{}{"withdrawal_status": withdrawalProcessing, "update_time": time.Now()})
+		repository.UpdateWithdrawalRecord(refundRecord.RecordID, map[string]interface{}{"withdrawal_status": withdrawalProcessing, "update_time": time.Now()})
 
 		// 更新用户余额并记录余额明细（只要不是处理失败状态）
-		if _, err := c.processBalanceRefund(&refundRecord, &rechargeOrder); err != nil {
+		if _, err := c.processBalanceRefund(refundRecord, rechargeOrder); err != nil {
 			return "", err
 		}
 		return "退款申请已提交，正在处理中", nil
 
 	default:
 		// 其它状态视为失败，不更新余额
-		conf.Db.Model(&model.WithdrawalRecordTbl{}).Where("record_id = ?", refundRecord.RecordID).
-			Updates(map[string]interface{}{
-				"withdrawal_status": withdrawalRejected,
-				"reject_reason":     "退款失败，状态：" + refundStatus,
-				"process_time":      time.Now(),
-			})
+		repository.UpdateWithdrawalRecord(refundRecord.RecordID, map[string]interface{}{
+			"withdrawal_status": withdrawalRejected,
+			"reject_reason":     "退款失败，状态：" + refundStatus,
+			"process_time":      time.Now(),
+		})
 		return "", fmt.Errorf("退款处理失败：%s", refundStatus)
 	}
 }
 
 // processBalanceRefund 对齐 Java WithdrawalRecordServiceImpl.processBalanceRefund。
 func (c *WithdrawalController) processBalanceRefund(refundRecord *model.WithdrawalRecordTbl, rechargeOrder *model.RechargeOrderTbl) (string, error) {
-	if err := c.doBalanceRefund(refundRecord, rechargeOrder); err != nil {
+	if err := repository.BalanceRefundTx(refundRecord, rechargeOrder); err != nil {
 		// 退款失败，更新退款记录状态
-		conf.Db.Model(&model.WithdrawalRecordTbl{}).Where("record_id = ?", refundRecord.RecordID).
-			Updates(map[string]interface{}{
-				"withdrawal_status": withdrawalRejected,
-				"reject_reason":     "余额退款失败：" + err.Error(),
-				"process_time":      time.Now(),
-			})
+		repository.UpdateWithdrawalRecord(refundRecord.RecordID, map[string]interface{}{
+			"withdrawal_status": withdrawalRejected,
+			"reject_reason":     "余额退款失败：" + err.Error(),
+			"process_time":      time.Now(),
+		})
 		return "", fmt.Errorf("余额退款失败：%s", err.Error())
 	}
 	return "余额退款成功", nil
-}
-
-// doBalanceRefund 余额充值订单退款的实际扣减逻辑。
-// 多步写（扣余额 + 退款记录 + 充值订单 + 余额明细）包裹在事务内，扣款用原子 UPDATE，保证事务与金额安全。
-func (c *WithdrawalController) doBalanceRefund(refundRecord *model.WithdrawalRecordTbl, rechargeOrder *model.RechargeOrderTbl) error {
-	refundAmount := refundRecord.WithdrawalAmount
-	amt := refundAmount.StringFixed(2)
-
-	return conf.Db.Transaction(func(tx *gorm.DB) error {
-		// 1. 扣减用户余额（原子 UPDATE，条件写进 WHERE 防止扣成负数）
-		res := tx.Exec(
-			"UPDATE user_tbl SET balans = balans - CAST(? AS DECIMAL(10,2)) WHERE openid = ? AND balans >= CAST(? AS DECIMAL(10,2))",
-			amt, refundRecord.Openid, amt,
-		)
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected <= 0 {
-			return fmt.Errorf("退款金额超过用户当前余额")
-		}
-
-		// 2. 更新退款记录状态
-		if err := tx.Model(&model.WithdrawalRecordTbl{}).Where("record_id = ?", refundRecord.RecordID).
-			Updates(map[string]interface{}{"withdrawal_status": withdrawalSuccess, "process_time": time.Now()}).Error; err != nil {
-			return err
-		}
-
-		// 3. 更新充值订单的退款信息
-		rechargeOrder.RefundedAmount = rechargeOrder.RefundedAmount.Add(refundAmount)
-		rechargeOrder.RemainingRefundAmount = rechargeOrder.RemainingRefundAmount.Sub(refundAmount)
-		if err := tx.Model(&model.RechargeOrderTbl{}).Where("order_id = ?", rechargeOrder.OrderID).
-			Updates(map[string]interface{}{
-				"refunded_amount":         rechargeOrder.RefundedAmount,
-				"remaining_refund_amount": rechargeOrder.RemainingRefundAmount,
-			}).Error; err != nil {
-			return err
-		}
-
-		// 4. 记录余额变动明细
-		if err := tx.Create(&model.TabBalanceRecord{Openid: refundRecord.Openid, Type: "退费", Amount: refundAmount}).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
 }
