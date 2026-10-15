@@ -1,17 +1,11 @@
 package handler
 
 import (
-	"database/sql"
-	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
 	"caicai-go/model"
 	"caicai-go/repository"
 )
@@ -76,30 +70,11 @@ type productReq struct {
 // AdminProductController 对齐 Java System.controller.ProductCon。
 type AdminProductController struct{}
 
-func productListQuery(gatewayID, tiaojian string) *gorm.DB {
-	db := conf.Db.Model(&model.TabProduct{})
-	if gatewayID != "" {
-		db = db.Where("gateway_id = ?", gatewayID)
-	}
-	if tiaojian != "" {
-		db = db.Where("pid LIKE ?", "%"+tiaojian+"%")
-	}
-	return db
-}
-
 // productPage 分页查询产品；ordered 为 true 时附加 Java 的自定义排序。
 // getAll/search 使用自定义排序，searchByGatewayId 不带排序（对齐 Java 各方法的 .last(...) 差异）。
 func productPage(c *gin.Context, gatewayID, tiaojian string, ordered bool) {
 	current, size := parsePage(c)
-	var total int64
-	productListQuery(gatewayID, tiaojian).Count(&total)
-
-	var products []model.TabProduct
-	q := productListQuery(gatewayID, tiaojian)
-	if ordered {
-		q = q.Order("SUBSTRING(pid, 1, 3) ASC, CAST(SUBSTRING(pid, 4) AS UNSIGNED) DESC")
-	}
-	q.Offset(pageOffset(current, size)).Limit(size).Find(&products)
+	total, products := repository.ListProducts(gatewayID, tiaojian, pageOffset(current, size), size, ordered)
 
 	list := make([]productDTO, 0, len(products))
 	for _, p := range products {
@@ -125,27 +100,12 @@ func (a *AdminProductController) SearchByGatewayId(c *gin.Context) {
 
 // GetByProductId GET /system/product/getByProductId?productId=
 func (a *AdminProductController) GetByProductId(c *gin.Context) {
-	var p model.TabProduct
-	if err := conf.Db.Where("pid = ?", c.Query("productId")).First(&p).Error; err != nil {
+	p := repository.ProductByPid(c.Query("productId"))
+	if p == nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(productToDTO(p)))
-}
-
-// nextProductID 生成下一个产品编号：header + 8 位递增序号（对齐 Java getNextProductId）。
-func nextProductID(header string) string {
-	var maxPid sql.NullString
-	conf.Db.Raw("SELECT MAX(pid) FROM tab_product WHERE pid LIKE ?", header+"%").Row().Scan(&maxPid)
-	if !maxPid.Valid || maxPid.String == "" {
-		return header + "00000001"
-	}
-	pid := strings.TrimPrefix(maxPid.String, header)
-	n, err := strconv.Atoi(pid)
-	if err != nil {
-		return header + "00000001"
-	}
-	return header + fmt.Sprintf("%08d", n+1)
+	c.JSON(http.StatusOK, ResultSuccess(productToDTO(*p)))
 }
 
 func (a *AdminProductController) addProduct(c *gin.Context, header string, isTwicecar int32, envOverride string) {
@@ -159,7 +119,7 @@ func (a *AdminProductController) addProduct(c *gin.Context, header string, isTwi
 		env = envOverride
 	}
 	p := model.TabProduct{
-		Pid:            nextProductID(header),
+		Pid:            repository.NextProductID(header),
 		Nid:            req.Nid,
 		Imei:           req.Imei,
 		GatewayID:      req.GatewayID,
@@ -167,7 +127,7 @@ func (a *AdminProductController) addProduct(c *gin.Context, header string, isTwi
 		ProductionTime: timePtr(time.Now()),
 		IsTwicecar:     isTwicecar,
 	}
-	if err := conf.Db.Create(&p).Error; err != nil {
+	if err := repository.Create(&p).Error; err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
@@ -201,28 +161,26 @@ func (a *AdminProductController) Update(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	var p model.TabProduct
-	if err := conf.Db.Where("pid = ?", req.Pid).First(&p).Error; err != nil {
+	if repository.ProductByPid(req.Pid) == nil {
 		c.JSON(http.StatusOK, ResultError(400, "产品不存在"))
 		return
 	}
-	res := conf.Db.Model(&model.TabProduct{}).Where("pid = ?", req.Pid).Updates(map[string]interface{}{
+	rowsAffected := repository.UpdateProductByPid(req.Pid, map[string]interface{}{
 		"nid":         req.Nid,
 		"Imei":        req.Imei,
 		"environment": req.Environment,
 		"gateway_id":  req.GatewayID,
 	})
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // DeleteById DELETE /system/product/deleteById/:pid
 func (a *AdminProductController) DeleteById(c *gin.Context) {
 	pid := c.Param("pid")
-	var p model.TabProduct
-	if err := conf.Db.Where("pid = ?", pid).First(&p).Error; err != nil {
+	if repository.ProductByPid(pid) == nil {
 		c.JSON(http.StatusOK, ResultError(400, "产品不存在"))
 		return
 	}
-	conf.Db.Where("pid = ?", pid).Delete(&model.TabProduct{})
+	repository.DeleteProductByPid(pid)
 	c.JSON(http.StatusOK, ResultSuccess(true))
 }

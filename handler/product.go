@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
 	"caicai-go/repository"
 )
@@ -28,22 +27,22 @@ type productVoDTO struct {
 
 // GetById GET /product/getById?id=（tab_product 主键为 pid，此处按 pid 查询）
 func (p *ProductController) GetById(c *gin.Context) {
-	var prod model.TabProduct
-	if err := conf.Db.Where("pid = ?", c.Query("id")).First(&prod).Error; err != nil {
+	prod := repository.ProductByPid(c.Query("id"))
+	if prod == nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(productToDTO(prod)))
+	c.JSON(http.StatusOK, ResultSuccess(productToDTO(*prod)))
 }
 
 // GetByProductId GET /product/getByProductId?productId=
 func (p *ProductController) GetByProductId(c *gin.Context) {
-	var prod model.TabProduct
-	if err := conf.Db.Where("pid = ?", c.Query("productId")).First(&prod).Error; err != nil {
+	prod := repository.ProductByPid(c.Query("productId"))
+	if prod == nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(productToDTO(prod)))
+	c.JSON(http.StatusOK, ResultSuccess(productToDTO(*prod)))
 }
 
 // addProduct 小程序侧新增产品：按 imei 作为网关 mac 查询网关，取网关 id 写入 gateway_id。
@@ -57,12 +56,12 @@ func (p *ProductController) addProduct(c *gin.Context, header string, isTwicecar
 	}
 
 	// Java getGateway：imei 非空时按 mac 查询网关，查不到抛 CustomException("该网关不存在,请检查")。
-	var gw model.TabGateway
 	if req.Imei == "" {
 		c.JSON(http.StatusOK, ResultError(400, "该网关不存在,请检查"))
 		return
 	}
-	if err := conf.Db.Where("mac = ?", req.Imei).First(&gw).Error; err != nil {
+	gw := repository.GatewayByMac(req.Imei)
+	if gw == nil {
 		c.JSON(http.StatusOK, ResultError(400, "该网关不存在,请检查"))
 		return
 	}
@@ -73,7 +72,7 @@ func (p *ProductController) addProduct(c *gin.Context, header string, isTwicecar
 	}
 
 	prod := model.TabProduct{
-		Pid:         nextProductID(header),
+		Pid:         repository.NextProductID(header),
 		Nid:         req.Nid,
 		Imei:        req.Imei,
 		GatewayID:   gw.ID,
@@ -84,7 +83,7 @@ func (p *ProductController) addProduct(c *gin.Context, header string, isTwicecar
 		prod.IsTwicecar = *isTwicecar
 		fields = append(fields, "is_twicecar")
 	}
-	if err := conf.Db.Select(fields).Create(&prod).Error; err != nil {
+	if err := repository.CreateProductFields(&prod, fields); err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
@@ -117,10 +116,10 @@ func (p *ProductController) AddPrivateChargingProduct(c *gin.Context) {
 func (p *ProductController) GetAll(c *gin.Context) {
 	current, size := parsePage(c)
 	var total int64
-	conf.Db.Model(&model.TabProduct{}).Count(&total)
+	repository.Count(&model.TabProduct{}, &total)
 
 	var rows []model.TabProduct
-	conf.Db.Model(&model.TabProduct{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.TabProduct{}, "", pageOffset(current, size), size, &rows)
 
 	list := make([]productDTO, 0, len(rows))
 	for _, r := range rows {
@@ -132,12 +131,7 @@ func (p *ProductController) GetAll(c *gin.Context) {
 // GetByImeiLike GET /product/getByImeiLike?imei=（空则返回全部，否则按 Imei 模糊查询）
 func (p *ProductController) GetByImeiLike(c *gin.Context) {
 	imei := strings.TrimSpace(c.Query("imei"))
-	var rows []model.TabProduct
-	if imei == "" {
-		conf.Db.Find(&rows)
-	} else {
-		conf.Db.Where("Imei LIKE ?", "%"+imei+"%").Find(&rows)
-	}
+	rows := repository.ProductsByImeiLike(imei)
 	list := make([]productDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, productToDTO(r))
@@ -172,22 +166,15 @@ func (p *ProductController) GetNidAndGatewayByPid(c *gin.Context) {
 // GetAllRegisteredIds GET /product/getAllRegisteredIds
 // 返回已使用的充电桩编号列表（pid 前缀 SCC）与最新编号，对齐 Java ProductServiceImpl.getAllRegisteredIds。
 func (p *ProductController) GetAllRegisteredIds(c *gin.Context) {
-	var latestNumber string
-	conf.Db.Raw("SELECT COALESCE(MAX(pid), '') FROM tab_product WHERE pid LIKE ?", "SCC%").Row().Scan(&latestNumber)
-
-	var registeredIds []string
-	conf.Db.Model(&model.TabProduct{}).Where("pid LIKE ?", "SCC%").Pluck("pid", &registeredIds)
+	latestNumber := repository.MaxSCCPid()
+	registeredIds := repository.SCCPids()
 
 	c.JSON(http.StatusOK, ResultSuccess(productVoDTO{RegisteredIds: registeredIds, LatestNumber: latestNumber}))
 }
 
 // GetNotUse GET /product/getNotUse 对齐 Java getNotUse：未被充电枪/车位锁使用且非二轮车的产品。
 func (p *ProductController) GetNotUse(c *gin.Context) {
-	var rows []model.TabProduct
-	conf.Db.Raw(`SELECT tab_product.* FROM tab_product
-		LEFT JOIN tab_charging_gun ON tab_charging_gun.product_id = tab_product.pid
-		LEFT JOIN lock_tbl ON lock_tbl.product_id = tab_product.pid
-		WHERE tab_charging_gun.product_id IS NULL AND lock_tbl.product_id IS NULL AND tab_product.is_twicecar = 0`).Scan(&rows)
+	rows := repository.NotUseProducts()
 	list := make([]productDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, productToDTO(r))
@@ -197,8 +184,7 @@ func (p *ProductController) GetNotUse(c *gin.Context) {
 
 // GetNotUseByStations GET /product/getNotUseByStations 对齐 Java getNotUseByStations：二轮车充电站产品。
 func (p *ProductController) GetNotUseByStations(c *gin.Context) {
-	var rows []model.TabProduct
-	conf.Db.Raw(`SELECT tab_product.* FROM tab_product WHERE tab_product.is_twicecar = 1`).Scan(&rows)
+	rows := repository.TwiceCarProducts()
 	list := make([]productDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, productToDTO(r))
@@ -209,14 +195,10 @@ func (p *ProductController) GetNotUseByStations(c *gin.Context) {
 // GetPidBySpacesId GET /product/getPidBySpacesId 对齐 Java getPidBySpacesId：
 // 车位 → 充电枪 → 产品。
 func (p *ProductController) GetPidBySpacesId(c *gin.Context) {
-	var prod model.TabProduct
-	err := conf.Db.Raw(`SELECT tab_product.* FROM tab_parking_spaces
-		LEFT JOIN tab_charging_gun ON tab_parking_spaces.charging_gun_id = tab_charging_gun.id
-		LEFT JOIN tab_product ON tab_charging_gun.product_id = tab_product.pid
-		WHERE tab_parking_spaces.id = ?`, c.Query("spacesId")).Scan(&prod).Error
+	prod, err := repository.ProductBySpacesID(c.Query("spacesId"))
 	if err != nil || prod.Pid == "" {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(productToDTO(prod)))
+	c.JSON(http.StatusOK, ResultSuccess(productToDTO(*prod)))
 }
