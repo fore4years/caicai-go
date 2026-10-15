@@ -7,8 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
-	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ ZijianController（base /zijian，锁自检） ============
@@ -22,13 +21,11 @@ func (c *ZijianController) Shibai(ctx *gin.Context) {
 }
 
 func (c *ZijianController) shibai(id string) int {
-	var on model.OnlineLockstatusTable
-	if err := conf.Db.Where("lockID = ?", id).First(&on).Error; err != nil {
+	if _, err := repository.OnlineLockByLockID(id); err != nil {
 		// 锁未上线，业务处理完毕
 		return 1
 	}
-	res := conf.Db.Model(&model.OnlineLockstatusTable{}).Where("lockID = ?", id).Update("battery", "n")
-	if res.RowsAffected > 0 {
+	if repository.UpdateOnlineLockBattery(id, "n") > 0 {
 		return 1
 	}
 	return 0
@@ -40,25 +37,22 @@ func (c *ZijianController) Chenggong(ctx *gin.Context) {
 }
 
 func (c *ZijianController) chenggong(id string) int {
-	var on model.OnlineLockstatusTable
-	if err := conf.Db.Where("lockID = ?", id).First(&on).Error; err != nil {
+	if _, err := repository.OnlineLockByLockID(id); err != nil {
 		// 锁未上线：生成 9 位编号并注册上线（battery=y, online=n）
 		number := 0
-		var maxNumStr string
-		if e := conf.Db.Raw("SELECT number FROM online_lockstatus_Table ORDER BY number DESC LIMIT 0,1").Row().Scan(&maxNumStr); e == nil && maxNumStr != "" {
+		maxNumStr := repository.MaxOnlineLockNumber()
+		if maxNumStr != "" {
 			if n, e2 := strconv.Atoi(maxNumStr); e2 == nil {
 				number = n
 			}
 		}
 		inNum := fmt.Sprintf("%09d", number+1)
-		res := conf.Db.Exec("INSERT INTO online_lockstatus_Table (number, lockID, battery, online) VALUES (?, ?, 'y', 'n')", inNum, id)
-		if res.RowsAffected > 0 {
+		if repository.InsertOnlineLock(inNum, id) > 0 {
 			return 1
 		}
 		return 0
 	}
-	res := conf.Db.Model(&model.OnlineLockstatusTable{}).Where("lockID = ?", id).Update("battery", "y")
-	if res.RowsAffected > 0 {
+	if repository.UpdateOnlineLockBattery(id, "y") > 0 {
 		return 1
 	}
 	return 0

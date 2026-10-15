@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
 	"caicai-go/repository"
 )
@@ -16,22 +15,13 @@ import (
 // CheweisuoController 对齐 Java yingjianbufen.controller.CheweisuoCon。
 type CheweisuoController struct{}
 
-// placeLockLive 对齐 Java place_LockDao.selectLive：select live from place_Lock_Table where lock_ID=?。
-func placeLockLive(lockID string) (string, bool) {
-	var live string
-	if err := conf.Db.Raw("SELECT live FROM place_Lock_Table WHERE lock_ID = ?", lockID).Row().Scan(&live); err != nil {
-		return "", false
-	}
-	return live, true
-}
-
 // Kaisuo /cheweisuo/kaisuo?user_ID=&lock_ID= —— 对齐 cheweisuoSerImpl.kaisuo 扫码开锁。
 func (c *CheweisuoController) Kaisuo(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, ResultSuccess(c.kaisuo(ctx.Query("user_ID"), ctx.Query("lock_ID"))))
 }
 
 func (c *CheweisuoController) kaisuo(userID, lockID string) string {
-	live, ok := placeLockLive(lockID)
+	live, ok := repository.PlaceLockLive(lockID)
 	if !ok {
 		return "服务器未找到该锁信息"
 	}
@@ -39,8 +29,8 @@ func (c *CheweisuoController) kaisuo(userID, lockID string) string {
 		return "这个锁没有入网哦，扫别的锁试试吧"
 	}
 
-	var on model.OnlineLockstatusTable
-	if err := conf.Db.Where("lockID = ?", lockID).First(&on).Error; err != nil {
+	on, err := repository.OnlineLockByLockID(lockID)
+	if err != nil {
 		return "获取锁的状态失败"
 	}
 	if on.Battery == "n" {
@@ -51,15 +41,12 @@ func (c *CheweisuoController) kaisuo(userID, lockID string) string {
 	}
 
 	// 用户是否有未完成订单
-	var unfinished []model.OrderTbl
-	conf.Db.Where("openid = ? AND state <> ? AND state <> ?", userID, repository.OrderStateFinished, repository.OrderStateRevoked).Find(&unfinished)
-	if len(unfinished) > 0 {
+	if repository.HasUnfinishedOrders(userID) {
 		return "您有订单正在进行中，请查看"
 	}
 
 	// 锁是否被预定（预约中且非本人 → 拒绝）
-	var reservation model.OrderTbl
-	if err := conf.Db.Where("lockid = ? AND state = ?", lockID, repository.OrderStateBooking).First(&reservation).Error; err == nil &&
+	if reservation, err := repository.BookingOrderByLockid(lockID); err == nil &&
 		reservation.Openid != userID {
 		return "车位锁已被预定"
 	}
@@ -79,7 +66,7 @@ func (c *CheweisuoController) dakai(userID, lockID string) string {
 		BeginTime: timePtr(time.Now()),
 		State:     repository.OrderStateConduct, // 进行中
 	}
-	conf.Db.Create(&order)
-	conf.Db.Model(&model.OnlineLockstatusTable{}).Where("lockID = ?", lockID).Update("online", "y")
+	repository.Create(&order)
+	repository.UpdateOnlineLockOnline(lockID, "y")
 	return "开锁成功"
 }
