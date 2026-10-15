@@ -1,17 +1,16 @@
 package handler
 
 import (
-	"caicai-go/logger"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
-	"caicai-go/conf"
+	"caicai-go/logger"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============================================================================
@@ -21,40 +20,33 @@ import (
 // ServiceImpl + Mapper XML。经纬度直接用 longitude/latitude 两个字段。
 // ============================================================================
 
-// chargeStationGeoCols 充电站查询列（经纬度取 longitude/latitude）。
-const chargeStationGeoCols = "id, longitude, latitude, place, name, openid, power_max, pid, create_time, update_time"
-
-// chargeStationDistanceSQL 充电站经纬度到查询点的球面距离（米），Haversine 公式，参数顺序 lat, lat, lng。
-const chargeStationDistanceSQL = "(6371000 * 2 * ASIN(SQRT(POWER(SIN((RADIANS(latitude) - RADIANS(?)) / 2), 2) + COS(RADIANS(?)) * COS(RADIANS(latitude)) * POWER(SIN((RADIANS(longitude) - RADIANS(?)) / 2), 2))))"
-
 // ChargeStationController 对齐 Java controller.ChargeStationController。
 type ChargeStationController struct{}
 
 // GetChargeStation GET /ChargeStation/getChargeStation?pid= 对齐 Java getChargeStation（getStationByPid）。
 func (c *ChargeStationController) GetChargeStation(ctx *gin.Context) {
-	var s model.ChargingStationTbl
-	if err := conf.Db.Raw("SELECT "+chargeStationGeoCols+" FROM charging_station_tbl WHERE pid = ?", ctx.Query("pid")).Scan(&s).Error; err != nil || s.ID == 0 {
+	s, err := repository.ChargingStationByPid(ctx.Query("pid"))
+	if err != nil || s.ID == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(chargeStationToDTO(s)))
+	ctx.JSON(http.StatusOK, ResultSuccess(chargeStationToDTO(*s)))
 }
 
 // GetById GET /ChargeStation/getById?id= 对齐 Java getById。
 func (c *ChargeStationController) GetById(ctx *gin.Context) {
-	var s model.ChargingStationTbl
-	if err := conf.Db.Raw("SELECT "+chargeStationGeoCols+" FROM charging_station_tbl WHERE id = ?", ctx.Query("id")).Scan(&s).Error; err != nil || s.ID == 0 {
+	s, err := repository.ChargingStationByID(ctx.Query("id"))
+	if err != nil || s.ID == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(chargeStationToDTO(s)))
+	ctx.JSON(http.StatusOK, ResultSuccess(chargeStationToDTO(*s)))
 }
 
 // GetByOpenid GET /ChargeStation/getByOpenid 对齐 Java getByOpenid（按当前用户 openid）。
 func (c *ChargeStationController) GetByOpenid(ctx *gin.Context) {
 	openid := ctx.GetString("openid")
-	var rows []model.ChargingStationTbl
-	conf.Db.Raw("SELECT "+chargeStationGeoCols+" FROM charging_station_tbl WHERE openid = ?", openid).Scan(&rows)
+	rows := repository.ChargingStationsByOpenid(openid)
 	list := make([]chargeStationDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, chargeStationToDTO(r))
@@ -82,8 +74,7 @@ func (c *ChargeStationController) Add(ctx *gin.Context) {
 	}
 	// 对齐 productService.getByProductId(pid)：产品 id 已存在则不允许重复添加。
 	openid := ctx.GetString("openid")
-	var station model.ChargingStationTbl
-	err := conf.Db.Where("pid = ?", req.Pid).First(&station).Error
+	station, err := repository.ChargingStationByPidDB(req.Pid)
 	exists := err == nil
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
@@ -114,7 +105,7 @@ func (c *ChargeStationController) Add(ctx *gin.Context) {
 		// pid 保持不变（Java 里 setPid(pid) 是显式保护）
 		station.Openid = openid
 
-		if err := conf.Db.Save(&station).Error; err != nil {
+		if err := repository.SaveChargingStation(station); err != nil {
 			ctx.JSON(http.StatusOK, ResultSuccess(false))
 			return
 		}
@@ -140,7 +131,7 @@ func (c *ChargeStationController) Add(ctx *gin.Context) {
 		newStation.Point = model.NewPoint(lng, lat)
 	}
 
-	if err := conf.Db.Create(&newStation).Error; err != nil {
+	if err := repository.Create(&newStation).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
@@ -158,15 +149,8 @@ func (c *ChargeStationController) GetByPoint(ctx *gin.Context) {
 	lat, _ := strconv.ParseFloat(latStr, 64)
 	current, size := parsePage(ctx)
 
-	var total int64
-	conf.Db.Model(&model.ChargingStationTbl{}).Count(&total)
-
-	var rows []model.ChargingStationTbl
-	conf.Db.Raw(
-		"SELECT "+chargeStationGeoCols+", "+chargeStationDistanceSQL+" AS distance FROM charging_station_tbl "+
-			"ORDER BY "+chargeStationDistanceSQL+" ASC LIMIT ? OFFSET ?",
-		lat, lat, lng, lat, lat, lng, size, pageOffset(current, size),
-	).Scan(&rows)
+	total := repository.CountChargingStations()
+	rows := repository.ChargingStationsByPoint(lat, lng, size, pageOffset(current, size))
 
 	list := make([]chargeStationDTO, 0, len(rows))
 	for _, r := range rows {
@@ -177,10 +161,9 @@ func (c *ChargeStationController) GetByPoint(ctx *gin.Context) {
 
 // GetStationList GET /ChargeStation/getStationList 对齐 Java getStationList（list()）。
 func (c *ChargeStationController) GetStationList(ctx *gin.Context) {
-	var rows []model.ChargingStationTbl
-	tx := conf.Db.Raw("SELECT " + chargeStationGeoCols + " FROM charging_station_tbl").Scan(&rows)
-	if tx.Error != nil {
-		logger.Mylog.Err(tx.Error).Msg("查询失败")
+	rows, err := repository.AllChargingStations()
+	if err != nil {
+		logger.Mylog.Err(err).Msg("查询失败")
 	}
 	list := make([]chargeStationDTO, 0, len(rows))
 	for _, r := range rows {
@@ -232,18 +215,14 @@ func (c *ReOrderPowerController) Add(ctx *gin.Context) {
 			meterValue = v
 		}
 	}
-	err := conf.Db.Exec(
-		"INSERT INTO re_order_electronic_tbl (order_id, start_value, over_value, price_time_id) "+
-			"VALUES (?,?,?,(SELECT id FROM tab_price_time WHERE start_time < curtime() AND over_time >= curtime()))",
-		orderID, meterValue, meterValue,
-	).Error
+	err := repository.InsertReOrderPower(orderID, meterValue)
 	ctx.JSON(http.StatusOK, ResultSuccess(err == nil))
 }
 
 // GetById GET /receptacle/order/power/getById?id= 对齐 Java getById。
 func (c *ReOrderPowerController) GetById(ctx *gin.Context) {
 	var r model.ReOrderElectronicTbl
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&r).Error; err != nil {
+	if err := repository.FindByID(&r, ctx.Query("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -254,9 +233,9 @@ func (c *ReOrderPowerController) GetById(ctx *gin.Context) {
 func (c *ReOrderPowerController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.ReOrderElectronicTbl{}).Count(&total)
+	repository.Count(&model.ReOrderElectronicTbl{}, &total)
 	var rows []model.ReOrderElectronicTbl
-	conf.Db.Model(&model.ReOrderElectronicTbl{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.ReOrderElectronicTbl{}, "", pageOffset(current, size), size, &rows)
 	list := make([]reOrderPowerDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, reOrderPowerToDTO(r))
@@ -266,7 +245,7 @@ func (c *ReOrderPowerController) GetAll(ctx *gin.Context) {
 
 // GetValueByOrderid GET /receptacle/order/power/getValueByOrderid?orderid= 对齐 Java getValueByOrderid。
 func (c *ReOrderPowerController) GetValueByOrderid(ctx *gin.Context) {
-	d := queryFeeDecimal("SELECT (MAX(over_value)-MIN(start_value)) FROM re_order_electronic_tbl WHERE order_id = ?", ctx.Query("orderid"))
+	d := repository.ReOrderPowerValueByOrderid(ctx.Query("orderid"))
 	if d == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
@@ -276,11 +255,7 @@ func (c *ReOrderPowerController) GetValueByOrderid(ctx *gin.Context) {
 
 // GetFeesByOrderid GET /receptacle/order/power/getFeesByOrderid?orderid= 对齐 Java getFeesByOrderid。
 func (c *ReOrderPowerController) GetFeesByOrderid(ctx *gin.Context) {
-	d := queryFeeDecimal(`SELECT SUM((over_value - start_value) * (charging_price_tbl.total + charging_price_tbl.service))
-		FROM re_order_electronic_tbl
-		LEFT JOIN tab_price_time ON tab_price_time.id = re_order_electronic_tbl.price_time_id
-		LEFT JOIN charging_price_tbl ON charging_price_tbl.id = tab_price_time.price_id
-		WHERE re_order_electronic_tbl.order_id = ?`, ctx.Query("orderid"))
+	d := repository.ReOrderPowerFeesByOrderid(ctx.Query("orderid"))
 	if d == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
@@ -291,16 +266,7 @@ func (c *ReOrderPowerController) GetFeesByOrderid(ctx *gin.Context) {
 // GetElectronicByOrderid GET /receptacle/order/power/getElectronicByOrderid?orderid=
 // 对齐 Java getElectronicByOrderid（返回 {totalFee, serviceFee}）。
 func (c *ReOrderPowerController) GetElectronicByOrderid(ctx *gin.Context) {
-	var totalFee, serviceFee decimal.Decimal
-	if err := conf.Db.Raw(`SELECT
-			SUM((over_value - start_value) * charging_price_tbl.total) AS totalFee,
-			SUM((over_value - start_value) * charging_price_tbl.service) AS serviceFee
-		FROM re_order_electronic_tbl
-		LEFT JOIN tab_price_time ON tab_price_time.id = re_order_electronic_tbl.price_time_id
-		LEFT JOIN charging_price_tbl ON charging_price_tbl.id = tab_price_time.price_id
-		WHERE re_order_electronic_tbl.order_id = ?`, ctx.Query("orderid")).Row().Scan(&totalFee, &serviceFee); err != nil {
-		totalFee, serviceFee = decimal.Zero, decimal.Zero
-	}
+	totalFee, serviceFee := repository.ReOrderPowerElectronicByOrderid(ctx.Query("orderid"))
 	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{
 		"totalFee":   totalFee.Round(2),
 		"serviceFee": serviceFee.Round(2),
@@ -308,8 +274,7 @@ func (c *ReOrderPowerController) GetElectronicByOrderid(ctx *gin.Context) {
 }
 
 func (c *ReOrderPowerController) GetMaxPowerByOrderid(context *gin.Context) {
-	var maxPower decimal.Decimal
-	conf.Db.Raw("SELECT COALESCE(max_power,0) FROM re_order_electronic_tbl WHERE order_id = ? LIMIT 1", context.Query("orderid")).Row().Scan(&maxPower)
+	maxPower := repository.ReOrderPowerMaxByOrderid(context.Query("orderid"))
 	context.JSON(http.StatusOK, ResultSuccess(gin.H{
 		"maxPower": maxPower.Round(2),
 	}))
