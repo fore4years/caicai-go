@@ -265,3 +265,48 @@ func HasRecentInvoiceApply() bool {
 		Count(&n)
 	return n > 0
 }
+
+// UserBankCardByOpenid 按 openid 查询银行卡。
+func UserBankCardByOpenid(openid string) (*model.UserBankCardTbl, error) {
+	var m model.UserBankCardTbl
+	if err := conf.Db.Where("openid = ?", openid).First(&m).Error; err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// UserBluetoothBindingsByOpenid 按 openid 查询蓝牙绑定。
+func UserBluetoothBindingsByOpenid(openid string) (*model.UserBluetoothBindingsTbl, error) {
+	var m model.UserBluetoothBindingsTbl
+	if err := conf.Db.Where("openid = ?", openid).First(&m).Error; err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// AccountPublicByOrderID 按 order_id 查询公司账户。
+func AccountPublicByOrderID(orderID string) (*model.AccountPublicTbl, error) {
+	var a model.AccountPublicTbl
+	if err := conf.Db.Where("order_id = ?", orderID).First(&a).Error; err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+// AccountPrivateByOrderID 按 order_id 查询私人账户。
+func AccountPrivateByOrderID(orderID string) (*model.AccountPrivateTbl, error) {
+	var a model.AccountPrivateTbl
+	if err := conf.Db.Where("order_id = ?", orderID).First(&a).Error; err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+// BalanceRecordsByOpenid 按 openid 分页查询余额明细。
+func BalanceRecordsByOpenid(openid string, offset, limit int) (int64, []model.TabBalanceRecord) {
+	var total int64
+	conf.Db.Model(&model.TabBalanceRecord{}).Where("openid = ?", openid).Count(&total)
+	var rows []model.TabBalanceRecord
+	conf.Db.Model(&model.TabBalanceRecord{}).Where("openid = ?", openid).Order("create_time desc").Offset(offset).Limit(limit).Find(&rows)
+	return total, rows
+}
