@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ UserInvoiceController（/invoice，用户侧） ============
@@ -44,7 +44,7 @@ func invoiceTitleToDTO(t model.InvoiceTitle) invoiceTitleDTO {
 // GetByInvoiceId 对应 Java InvoiceController.getByInvoiceId。
 func (c *UserInvoiceController) GetByInvoiceId(ctx *gin.Context) {
 	var inv model.Invoice
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&inv).Error; err != nil {
+	if err := repository.FindByID(&inv, ctx.Query("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -53,7 +53,7 @@ func (c *UserInvoiceController) GetByInvoiceId(ctx *gin.Context) {
 
 // UpdateById 对应 Java InvoiceController.updateById：state=1、invoice_id=titleId、apply_time=now。
 func (c *UserInvoiceController) UpdateById(ctx *gin.Context) {
-	res := conf.Db.Model(&model.Invoice{}).Where("id = ?", ctx.Query("id")).Updates(map[string]interface{}{
+	res := repository.UpdateByID(&model.Invoice{}, ctx.Query("id"), map[string]interface{}{
 		"state":      1,
 		"invoice_id": ctx.Query("titleId"),
 		"apply_time": time.Now(),
@@ -63,8 +63,7 @@ func (c *UserInvoiceController) UpdateById(ctx *gin.Context) {
 
 // GetInvoiceByOpenid 对应 Java InvoiceController.getInvoiceByOpenid。
 func (c *UserInvoiceController) GetInvoiceByOpenid(ctx *gin.Context) {
-	var rows []model.Invoice
-	conf.Db.Where("openid = ?", ctx.Query("openid")).Find(&rows)
+	rows := repository.InvoicesByOpenid(ctx.Query("openid"))
 	list := make([]invoiceDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, invoiceToDTO(r))
@@ -89,13 +88,12 @@ func (c *UserInvoiceController) Add(ctx *gin.Context) {
 		Email:       req.Email,
 		Openid:      ctx.GetString("openid"),
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&t).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&t).Error == nil))
 }
 
 // GetByOpenid 对应 Java InvoiceController.getByOpenid：按当前登录用户 openid 查抬头。
 func (c *UserInvoiceController) GetByOpenid(ctx *gin.Context) {
-	var rows []model.InvoiceTitle
-	conf.Db.Where("openid = ?", ctx.GetString("openid")).Find(&rows)
+	rows := repository.InvoiceTitlesByOpenid(ctx.GetString("openid"))
 	list := make([]invoiceTitleDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, invoiceTitleToDTO(r))
@@ -106,7 +104,7 @@ func (c *UserInvoiceController) GetByOpenid(ctx *gin.Context) {
 // GetById 对应 Java InvoiceController.getById。
 func (c *UserInvoiceController) GetById(ctx *gin.Context) {
 	var t model.InvoiceTitle
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&t).Error; err != nil {
+	if err := repository.FindByID(&t, ctx.Query("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -116,8 +114,8 @@ func (c *UserInvoiceController) GetById(ctx *gin.Context) {
 // DeleteById 对应 Java InvoiceController.deleteById：先置发票 state=0 再删抬头。
 func (c *UserInvoiceController) DeleteById(ctx *gin.Context) {
 	id := ctx.Query("id")
-	conf.Db.Model(&model.Invoice{}).Where("invoice_id = ?", id).Update("state", 0)
-	res := conf.Db.Where("id = ?", id).Delete(&model.InvoiceTitle{})
+	repository.UpdateInvoiceStateByInvoiceID(id, 0)
+	res := repository.DeleteByID(&model.InvoiceTitle{}, id)
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected))
 }
 
@@ -128,7 +126,7 @@ func (c *UserInvoiceController) UpdetaById(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(0))
 		return
 	}
-	res := conf.Db.Model(&model.InvoiceTitle{}).Where("id = ?", req.ID).Updates(invoiceTitleUpdates(req))
+	res := repository.UpdateByID(&model.InvoiceTitle{}, req.ID, invoiceTitleUpdates(req))
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected))
 }
 
@@ -139,7 +137,7 @@ func (c *UserInvoiceController) AddInvoice(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(0))
 		return
 	}
-	res := conf.Db.Model(&model.InvoiceTitle{}).Where("id = ?", req.ID).Updates(invoiceTitleUpdates(req))
+	res := repository.UpdateByID(&model.InvoiceTitle{}, req.ID, invoiceTitleUpdates(req))
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected))
 }
 

@@ -101,3 +101,22 @@ func UpdateFaultByLockmac(lockmac string, updates map[string]interface{}) int64 
 	res := conf.Db.Model(&model.FaultTbl{}).Where("lockmac = ?", lockmac).Updates(updates)
 	return res.RowsAffected
 }
+
+// InvoicesByOpenid 查询某用户发票。
+func InvoicesByOpenid(openid string) []model.Invoice {
+	var rows []model.Invoice
+	conf.Db.Where("openid = ?", openid).Find(&rows)
+	return rows
+}
+
+// InvoiceTitlesByOpenid 查询某用户发票抬头。
+func InvoiceTitlesByOpenid(openid string) []model.InvoiceTitle {
+	var rows []model.InvoiceTitle
+	conf.Db.Where("openid = ?", openid).Find(&rows)
+	return rows
+}
+
+// UpdateInvoiceStateByInvoiceID 按抬头 id 更新发票状态。
+func UpdateInvoiceStateByInvoiceID(invoiceID string, state int) {
+	conf.Db.Model(&model.Invoice{}).Where("invoice_id = ?", invoiceID).Update("state", state)
+}
