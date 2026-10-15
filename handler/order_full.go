@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,9 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
 	"caicai-go/protocol"
@@ -27,8 +24,8 @@ func newOrderID() string {
 
 // orderDeviceID 根据订单解析设备标识（产品 IMEI 或 NID）。用于二轮车等 pid 直接关联产品的订单。
 func orderDeviceID(orderID string) string {
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil || order.Pid == "" {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil || order.Pid == "" {
 		return ""
 	}
 	prod := repository.ProductByPid(order.Pid)
@@ -43,12 +40,7 @@ func orderDeviceID(orderID string) string {
 
 // getNotFinishOrder 查询当前 openid 的未完成订单（state 非「已完成」「已取消」），不存在返回 nil。
 func getNotFinishOrder(openid string) *model.OrderTbl {
-	var o model.OrderTbl
-	if err := conf.Db.Where("openid = ? AND state <> ? AND state <> ?", openid, repository.OrderStateFinished, repository.OrderStateRevoked).
-		First(&o).Error; err != nil {
-		return nil
-	}
-	return &o
+	return repository.FirstUnfinishedOrderByOpenid(openid)
 }
 
 // getByOpenidNotFinish 按 openid 查询未完成订单（对齐 Java getByOpenidNotFinish）。
@@ -58,9 +50,7 @@ func getByOpenidNotFinish(openid string) *model.OrderTbl {
 
 // getNotFinishBySpacesIdList 根据车位查询未完成订单（含一桩一锁关联车位），对齐 Java getNotFinishBySpacesId。
 func getNotFinishBySpacesIdList(spacesID int32) []model.OrderTbl {
-	var list []model.OrderTbl
-	conf.Db.Where("spaces_id = ? AND state <> ? AND state <> ? AND consumption_type <> ?",
-		spacesID, repository.OrderStateRevoked, repository.OrderStateFinished, repository.ConsumeTypeNeighbor).Find(&list)
+	list := repository.UnfinishedNonNeighborOrdersBySpacesID(spacesID)
 
 	spaces := repository.SpacesByID(spacesID)
 	if spaces == nil || spaces.LockID == "" {
@@ -73,8 +63,7 @@ func getNotFinishBySpacesIdList(spacesID int32) []model.OrderTbl {
 	if otherID == 0 {
 		return list
 	}
-	var list1 []model.OrderTbl
-	conf.Db.Where("spaces_id = ? AND state <> ? AND state <> ?", otherID, repository.OrderStateRevoked, repository.OrderStateFinished).Find(&list1)
+	list1 := repository.UnfinishedOrdersBySpacesID(otherID)
 	return append(list, list1...)
 }
 
@@ -86,17 +75,16 @@ func (o *OrderController) GetByOrderId(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(1, "订单id为空"))
 		return
 	}
-	var order model.OrderTbl
-	if err := conf.Db.Where("orderid = ?", orderID).First(&order).Error; err != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(orderToDTO(order)))
+	c.JSON(http.StatusOK, ResultSuccess(orderToDTO(*order)))
 }
 
 func (o *OrderController) GetAllOrders(c *gin.Context) {
-	var orders []model.OrderTbl
-	conf.Db.Where("openid = ?", c.Query("openid")).Order("reserve_time desc").Limit(20).Find(&orders)
+	orders := repository.LatestOrdersByOpenid(c.Query("openid"), 20)
 	list := make([]OrderDTO, 0, len(orders))
 	for _, od := range orders {
 		list = append(list, orderToDTO(od))
@@ -107,10 +95,7 @@ func (o *OrderController) GetAllOrders(c *gin.Context) {
 func (o *OrderController) GetOrdersByPage(c *gin.Context) {
 	current, size := parsePage(c)
 	openid := c.Query("openid")
-	var total int64
-	conf.Db.Model(&model.OrderTbl{}).Where("openid = ?", openid).Count(&total)
-	var orders []model.OrderTbl
-	conf.Db.Where("openid = ?", openid).Order("reserve_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&orders)
+	total, orders := repository.PageOrdersByOpenid(openid, pageOffset(current, size), size)
 	list := make([]OrderDTO, 0, len(orders))
 	for _, od := range orders {
 		list = append(list, orderToDTO(od))
@@ -119,8 +104,7 @@ func (o *OrderController) GetOrdersByPage(c *gin.Context) {
 }
 
 func (o *OrderController) GetOngoingOrders(c *gin.Context) {
-	var orders []model.OrderTbl
-	conf.Db.Where("openid = ? AND state IN ('使用中','已预约','预约中')", c.Query("openid")).Find(&orders)
+	orders := repository.OngoingOrdersByOpenid(c.Query("openid"))
 	list := make([]OrderDTO, 0, len(orders))
 	for _, od := range orders {
 		list = append(list, orderToDTO(od))
@@ -129,8 +113,7 @@ func (o *OrderController) GetOngoingOrders(c *gin.Context) {
 }
 
 func (o *OrderController) GetDoneOrders(c *gin.Context) {
-	var orders []model.OrderTbl
-	conf.Db.Where("openid = ? AND state = '已完成'", c.Query("openid")).Find(&orders)
+	orders := repository.OrdersByOpenidAndState(c.Query("openid"), repository.OrderStateFinished)
 	list := make([]OrderDTO, 0, len(orders))
 	for _, od := range orders {
 		list = append(list, orderToDTO(od))
@@ -139,8 +122,7 @@ func (o *OrderController) GetDoneOrders(c *gin.Context) {
 }
 
 func (o *OrderController) GetWaitPayOrders(c *gin.Context) {
-	var orders []model.OrderTbl
-	conf.Db.Where("openid = ? AND state = '待支付'", c.Query("openid")).Find(&orders)
+	orders := repository.OrdersByOpenidAndState(c.Query("openid"), repository.OrderStateWaitPay)
 	list := make([]OrderDTO, 0, len(orders))
 	for _, od := range orders {
 		list = append(list, orderToDTO(od))
@@ -151,10 +133,7 @@ func (o *OrderController) GetWaitPayOrders(c *gin.Context) {
 func (o *OrderController) GetOrdersByPageForCaiCai(c *gin.Context) {
 	current, size := parsePage(c)
 	openid := c.Query("openid")
-	var total int64
-	conf.Db.Model(&model.OrderTbl{}).Where("openid = ? AND consumption_type = '踩踩停车'", openid).Count(&total)
-	var orders []model.OrderTbl
-	conf.Db.Where("openid = ? AND consumption_type = '踩踩停车'", openid).Order("reserve_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&orders)
+	total, orders := repository.PageOrdersByOpenidAndConsumption(openid, repository.ConsumeTypeCaiParking, pageOffset(current, size), size)
 	list := make([]OrderDTO, 0, len(orders))
 	for _, od := range orders {
 		list = append(list, orderToDTO(od))
@@ -172,16 +151,12 @@ func (o *OrderController) GetNotFinishBySpacesId(c *gin.Context) {
 }
 
 func (o *OrderController) GetWaitReturnGunOrderBySpacesId(c *gin.Context) {
-	var order model.OrderTbl
-	err := conf.Db.Raw(
-		`SELECT o.* FROM order_tbl o LEFT JOIN private_place_tbl p ON p.id = o.spaces_id WHERE p.id = ? AND o.state = '待还枪'`,
-		c.Query("spacesId"),
-	).Scan(&order).Error
-	if err != nil || order.Orderid == "" {
+	order, err := repository.WaitReturnGunOrderByPrivatePlaceID(c.Query("spacesId"))
+	if err != nil || order == nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(orderToDTO(order)))
+	c.JSON(http.StatusOK, ResultSuccess(orderToDTO(*order)))
 }
 
 func (o *OrderController) GetOrderState(c *gin.Context) {
@@ -193,8 +168,7 @@ func (o *OrderController) GetOrderState(c *gin.Context) {
 }
 
 func (o *OrderController) GetplaceUsable(c *gin.Context) {
-	var orders []model.OrderTbl
-	conf.Db.Where("lockid = ? AND consumption_type = '踩踩停车' AND state IN ('使用中','已预约','预约中')", c.Query("lockId")).Find(&orders)
+	orders := repository.ActiveCaiParkingOrdersByLockid(c.Query("lockId"))
 	if len(orders) > 0 {
 		c.JSON(http.StatusOK, ResultSuccess("fail"))
 		return
@@ -218,7 +192,7 @@ func (o *OrderController) Add(c *gin.Context) {
 		State:       repository.OrderStateBooking,
 		ReserveTime: timePtr(time.Now()),
 	}
-	if conf.Db.Create(&order).Error != nil {
+	if err := repository.CreateOrder(&order); err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
 		return
 	}
@@ -268,7 +242,7 @@ func (o *OrderController) AddByLock(c *gin.Context) {
 		BeginTime:       timePtr(time.Now()),
 		ChargingRates:   rate,
 	}
-	if conf.Db.Create(&order).Error != nil {
+	if err := repository.CreateOrder(&order); err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
 		return
 	}
@@ -302,11 +276,11 @@ func (o *OrderController) AddByCharge(c *gin.Context) {
 		ReserveTime: timePtr(time.Now()),
 		State:       repository.OrderStateBooking,
 	}
-	if conf.Db.Create(&order).Error != nil {
+	if err := repository.CreateOrder(&order); err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
 		return
 	}
-	conf.Db.Create(&model.ConfigTbl{Orderid: order.Orderid, ChargeGun: 0})
+	repository.CreateConfig(order.Orderid)
 	c.JSON(http.StatusOK, ResultSuccess(order.Orderid))
 }
 
@@ -317,8 +291,8 @@ func (o *OrderController) AddByTwiceCharge(c *gin.Context) {
 	receptacleID := int32(queryInt(c, "ReceptacleId", 0))
 	chargeTime := c.Query("ChargeTime")
 
-	var station model.ChargingStationTbl
-	if conf.Db.Where("pid = ?", pid).First(&station).Error != nil {
+	station, err := repository.ChargingStationByPid(pid)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "充电站不存在"))
 		return
 	}
@@ -355,8 +329,8 @@ func (o *OrderController) AddByTwiceCharge(c *gin.Context) {
 	if chargeType == "TimeSelected" {
 		order.TwiceChargeTime = chargeTime
 	}
-	if tx := conf.Db.Create(&order); tx.Error != nil {
-		logger.Mylog.Err(tx.Error).Msg("预约失败")
+	if err := repository.CreateOrder(&order); err != nil {
+		logger.Mylog.Err(err).Msg("预约失败")
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
 		return
 	}
@@ -377,9 +351,7 @@ func (o *OrderController) AddByPrivateCharge(c *gin.Context) {
 		return
 	}
 
-	var existing model.OrderTbl
-	if err := conf.Db.Where("consumption_type = ? AND spaces_id = ? AND state IN ('进行中','使用中','待还枪')",
-		repository.ConsumeTypeNeighbor, privatePlaceID).First(&existing).Error; err == nil {
+	if existing, err := repository.UnfinishedNeighborOrderBySpacesID(privatePlaceID); err == nil {
 		switch existing.State {
 		case repository.OrderStateConduct:
 			c.JSON(http.StatusOK, ResultError(1, "前序订单正在进行中,请等待"))
@@ -408,11 +380,11 @@ func (o *OrderController) AddByPrivateCharge(c *gin.Context) {
 		StopMode:            "扫码自停",
 		State:               repository.OrderStateConduct,
 	}
-	if conf.Db.Create(&order).Error != nil {
+	if err := repository.CreateOrder(&order); err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "生成订单失败"))
 		return
 	}
-	conf.Db.Create(&model.OrderPrivateTbl{Orderid: order.Orderid, IsPrivateUser: int32(queryInt(c, "isPrivateUser", 0))})
+	repository.InsertOrderPrivate(&model.OrderPrivateTbl{Orderid: order.Orderid, IsPrivateUser: int32(queryInt(c, "isPrivateUser", 0))})
 	c.JSON(http.StatusOK, ResultSuccess(order.Orderid))
 }
 
@@ -454,7 +426,7 @@ func (o *OrderController) Booking(c *gin.Context) {
 	if parkingSpaces != nil {
 		order.ConsumptionLocation = parkingSpaces.Place
 	}
-	if conf.Db.Create(&order).Error != nil {
+	if err := repository.CreateOrder(&order); err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
 		return
 	}
@@ -508,7 +480,7 @@ func (o *OrderController) BookingByYiXiang(c *gin.Context) {
 	if parkingSpaces != nil {
 		order.ConsumptionLocation = parkingSpaces.Place
 	}
-	if conf.Db.Create(&order).Error != nil {
+	if err := repository.CreateOrder(&order); err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
 		return
 	}
@@ -554,7 +526,7 @@ func (o *OrderController) NewBookingByYiXiang(c *gin.Context) {
 	if parkingSpaces != nil {
 		order.ConsumptionLocation = parkingSpaces.Place
 	}
-	if conf.Db.Create(&order).Error != nil {
+	if err := repository.CreateOrder(&order); err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "创建订单失败"))
 		return
 	}
@@ -565,8 +537,8 @@ func (o *OrderController) NewBookingByYiXiang(c *gin.Context) {
 
 // cancelOrderInternal 取消订单（内部调用，对齐 Java OrderServiceImpl.cancelOrder）。
 func cancelOrderInternal(orderID, price string) bool {
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		return false
 	}
 
@@ -591,7 +563,7 @@ func cancelOrderInternal(orderID, price string) bool {
 		}
 	}
 
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
+	repository.UpdateOrderFields(orderID, map[string]interface{}{
 		"close_time":        time.Now(),
 		"basic_consumption": decimal.Zero,
 		"charging_degree":   decimal.Zero,
@@ -599,17 +571,15 @@ func cancelOrderInternal(orderID, price string) bool {
 
 	if order.ConsumptionType != repository.ConsumeTypeTwice && order.ConsumptionType != repository.ConsumeTypeNeighbor {
 		if spaces := repository.SpacesByID(order.SpacesID); spaces != nil && spaces.SpacesCode != "" {
-			conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", spaces.SpacesCode).Update("state", "可使用")
+			repository.UpdatePlaceState(spaces.SpacesCode, "可使用")
 		}
 	}
 
 	if du := repository.DriverUseByOpenid(order.Openid); du != nil && du.ReserveNumber > 0 {
-		conf.Db.Model(&model.DriveruseTbl{}).Where("openid = ?", order.Openid).
-			Update("reserveNumber", du.ReserveNumber-1)
+		repository.UpdateDriverUseReserveNumber(order.Openid, du.ReserveNumber-1)
 	}
 
-	res := conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("state", repository.OrderStateRevoked)
-	return res.RowsAffected > 0
+	return repository.UpdateOrderState(orderID, repository.OrderStateRevoked) > 0
 }
 
 func (o *OrderController) CancelOrder(c *gin.Context) {
@@ -618,8 +588,8 @@ func (o *OrderController) CancelOrder(c *gin.Context) {
 
 func (o *OrderController) Close(c *gin.Context) {
 	orderID := c.Query("orderId")
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "查无此订单!"))
 		return
 	}
@@ -628,15 +598,15 @@ func (o *OrderController) Close(c *gin.Context) {
 		return
 	}
 	if order.ConsumptionType == repository.ConsumeTypeNeighbor {
-		linXiangCloseOrder(&order)
+		linXiangCloseOrder(order)
 	} else {
-		normalCloseOrder(&order)
+		normalCloseOrder(order)
 	}
-	res := conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
+	res := repository.UpdateOrderFields(orderID, map[string]interface{}{
 		"close_time": time.Now(),
 		"state":      repository.OrderStateWaitPay,
 	})
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	c.JSON(http.StatusOK, ResultSuccess(res > 0))
 }
 
 // normalCloseOrder 结束普通订单（非邻享充电），对齐 Java NormalCloseOrder。
@@ -654,7 +624,7 @@ func normalCloseOrder(order *model.OrderTbl) {
 		// Java 抛「请先归还充电枪」；保守继续
 		logger.Mylog.Warn().Msgf("请先归还充电枪, 后结束订单~ orderId: %s", order.Orderid)
 	}
-	updateChargingDegreeForOrder(order.Orderid)
+	repository.UpdateChargingDegreeForOrder(order.Orderid)
 	updateBasicConsumptionForOrder(order.Orderid)
 
 	if lock := repository.LockByOrder(order.Orderid); lock != nil {
@@ -673,7 +643,7 @@ func linXiangCloseOrder(order *model.OrderTbl) {
 	if order.ChargeGunPull == 1 && order.ChargingDegree.IsZero() {
 		logger.Mylog.Warn().Msgf("请先归还充电枪后, 再结束订单~ orderId: %s", order.Orderid)
 	}
-	updateChargingDegreeForOrder(order.Orderid)
+	repository.UpdateChargingDegreeForOrder(order.Orderid)
 
 	orderPrivate := repository.OrderPrivateByOrderid(order.Orderid)
 	if orderPrivate == nil {
@@ -697,8 +667,7 @@ func linXiangCloseOrder(order *model.OrderTbl) {
 		neighborOvertimeFee := calculateNeighborOvertimeFee(order)
 		fee = baseFee.Add(neighborOvertimeFee)
 	}
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", order.Orderid).
-		Update("basic_consumption", fee.Round(2))
+	repository.UpdateOrderBasicConsumption(order.Orderid, fee.Round(2))
 }
 
 func (o *OrderController) UpdateOrderState(c *gin.Context) {
@@ -710,8 +679,8 @@ func (o *OrderController) UpdateOrderState(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
@@ -719,19 +688,19 @@ func (o *OrderController) UpdateOrderState(c *gin.Context) {
 	switch order.ConsumptionType {
 	case repository.ConsumeTypeCaiParking:
 		if order.State == repository.OrderStateConduct {
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateConduct).
-				Updates(map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateConduct,
+				map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
 		} else {
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateBooking).
-				Updates(map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateBooking,
+				map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
 		}
 		c.JSON(http.StatusOK, ResultSuccess(true))
 	case repository.ConsumeTypeYiXiang:
 		if repository.ConfigByOrderid(orderID) == nil {
-			conf.Db.Create(&model.ConfigTbl{Orderid: orderID, ChargeGun: 0})
+			repository.CreateConfig(orderID)
 		}
-		conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state IN (?,?)", orderID, repository.OrderStateBooking, repository.OrderStateWaitUse).
-			Updates(map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
+		repository.UpdateOrderFieldsByStates(orderID, []string{repository.OrderStateBooking, repository.OrderStateWaitUse},
+			map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
 		c.JSON(http.StatusOK, ResultSuccess(true))
 	case repository.ConsumeTypeNeighbor:
 		gun := repository.ChargingGunByPrivateOrder(orderID)
@@ -739,16 +708,15 @@ func (o *OrderController) UpdateOrderState(c *gin.Context) {
 			c.JSON(http.StatusOK, ResultError(1, "开充电枪失败"))
 			return
 		}
-		conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateConduct).
-			Updates(map[string]interface{}{"state": repository.OrderStateUse, "decide_amount": amount, "begin_time": time.Now()})
+		repository.UpdateOrderFieldsByState(orderID, repository.OrderStateConduct,
+			map[string]interface{}{"state": repository.OrderStateUse, "decide_amount": amount, "begin_time": time.Now()})
 		c.JSON(http.StatusOK, ResultSuccess(true))
 	default: // 二轮车充电
 		if !openGauge(orderID) {
 			c.JSON(http.StatusOK, ResultError(1, "开闸失败"))
 			return
 		}
-		conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).
-			Updates(map[string]interface{}{"state": repository.OrderStateUse, "decide_amount": amount})
+		repository.UpdateOrderFields(orderID, map[string]interface{}{"state": repository.OrderStateUse, "decide_amount": amount})
 		c.JSON(http.StatusOK, ResultSuccess(true))
 	}
 }
@@ -763,8 +731,8 @@ func (o *OrderController) StopLock(c *gin.Context) {
 
 func (o *OrderController) Start(c *gin.Context) {
 	orderID := c.Query("orderId")
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "查无此订单"))
 		return
 	}
@@ -802,9 +770,7 @@ func (o *OrderController) Start(c *gin.Context) {
 	} else {
 		if repository.IsOneLockPerSpot(order.SpacesID) {
 			otherID := repository.OtherSpacesIDBySpacesID(order.SpacesID)
-			var cnt int64
-			conf.Db.Model(&model.OrderTbl{}).Where("spaces_id = ? AND state = ?", otherID, repository.OrderStateUse).Count(&cnt)
-			if cnt > 0 {
+			if repository.CountOrdersBySpacesIDState(otherID, repository.OrderStateUse) > 0 {
 				c.JSON(http.StatusOK, ResultError(1, "当前车位车辆还未驶离,请稍后再试!"))
 				return
 			}
@@ -818,9 +784,8 @@ func (o *OrderController) Start(c *gin.Context) {
 		service.SetRedisValue("orderState:"+orderID, "驱车入位")
 	}
 
-	res := conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).
-		Updates(map[string]interface{}{"state": repository.OrderStateUse, "begin_time": time.Now()})
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	res := repository.UpdateOrderFields(orderID, map[string]interface{}{"state": repository.OrderStateUse, "begin_time": time.Now()})
+	c.JSON(http.StatusOK, ResultSuccess(res > 0))
 }
 
 func (o *OrderController) Stop(c *gin.Context) {
@@ -875,8 +840,8 @@ func (o *OrderController) CloseTwiceOrderWithoutGauge(c *gin.Context) {
 
 func (o *OrderController) SetOrderStateIsWaitReturnGun(c *gin.Context) {
 	orderID := c.Query("orderId")
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "未找到此订单"))
 		return
 	}
@@ -887,7 +852,7 @@ func (o *OrderController) SetOrderStateIsWaitReturnGun(c *gin.Context) {
 	gun := repository.ChargingGunByPrivateOrder(orderID)
 	if gun != nil {
 		service.SendCommand(gun.DeviceID(), protocol.OpCloseEle, -1)
-		updateChargingDegreeForOrder(orderID)
+		repository.UpdateChargingDegreeForOrder(orderID)
 		orderPrivate := repository.OrderPrivateByOrderid(orderID)
 		if orderPrivate != nil {
 			var fee decimal.Decimal
@@ -896,27 +861,27 @@ func (o *OrderController) SetOrderStateIsWaitReturnGun(c *gin.Context) {
 			} else {
 				fee = repository.PrivateFeesByOrderid(orderID)
 			}
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("basic_consumption", fee.Round(2))
+			repository.UpdateOrderBasicConsumption(orderID, fee.Round(2))
 		}
 	}
-	res := conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("state", repository.OrderStateWaitGun)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	res := repository.UpdateOrderState(orderID, repository.OrderStateWaitGun)
+	c.JSON(http.StatusOK, ResultSuccess(res > 0))
 }
 
 func (o *OrderController) ManualDetectionIsReturnGun(c *gin.Context) {
 	orderID := c.Query("orderId")
 	time.Sleep(time.Second)
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
 	if !isZeroTime(order.OverTime) {
-		res := conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
+		res := repository.UpdateOrderFields(orderID, map[string]interface{}{
 			"close_time": time.Now(),
 			"state":      repository.OrderStateWaitPay,
 		})
-		c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+		c.JSON(http.StatusOK, ResultSuccess(res > 0))
 		return
 	}
 	c.JSON(http.StatusOK, ResultSuccess(false))
@@ -938,8 +903,8 @@ func (o *OrderController) ByOrderIdSendCloseEleAndMessage(c *gin.Context) {
 
 func (o *OrderController) PayScore(c *gin.Context) {
 	orderID := c.Query("orderId")
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "订单不存在: "+orderID))
 		return
 	}
@@ -957,8 +922,8 @@ func (o *OrderController) QueryPayScore(c *gin.Context) {
 	orderID := c.Query("orderId")
 	amount := decimal.NewFromFloat(queryFloat(c, "amount"))
 
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(wxPayStateCancel))
 		return
 	}
@@ -968,23 +933,23 @@ func (o *OrderController) QueryPayScore(c *gin.Context) {
 	case repository.ConsumeTypeCaiParking:
 		switch state {
 		case wxPayStateDone, wxPayStateDoing:
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateBooking).
-				Updates(map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateBooking,
+				map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
 		case wxPayStateRevoke:
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateBooking).
-				Updates(map[string]interface{}{"state": repository.OrderStateRevoked, "decide_amount": amount})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateBooking,
+				map[string]interface{}{"state": repository.OrderStateRevoked, "decide_amount": amount})
 		}
 	case repository.ConsumeTypeYiXiang:
 		switch state {
 		case wxPayStateDone, wxPayStateDoing:
 			if repository.ConfigByOrderid(orderID) == nil {
-				conf.Db.Create(&model.ConfigTbl{Orderid: orderID, ChargeGun: 0})
+				repository.CreateConfig(orderID)
 			}
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateBooking).
-				Updates(map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateBooking,
+				map[string]interface{}{"state": repository.OrderStateBooked, "decide_amount": amount})
 		case wxPayStateRevoke:
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateBooking).
-				Updates(map[string]interface{}{"state": repository.OrderStateRevoked, "decide_amount": amount})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateBooking,
+				map[string]interface{}{"state": repository.OrderStateRevoked, "decide_amount": amount})
 		}
 	case repository.ConsumeTypeNeighbor:
 		switch state {
@@ -994,11 +959,11 @@ func (o *OrderController) QueryPayScore(c *gin.Context) {
 				c.JSON(http.StatusOK, ResultError(1, "开充电枪失败"))
 				return
 			}
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateConduct).
-				Updates(map[string]interface{}{"state": repository.OrderStateUse, "decide_amount": amount, "begin_time": time.Now()})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateConduct,
+				map[string]interface{}{"state": repository.OrderStateUse, "decide_amount": amount, "begin_time": time.Now()})
 		case wxPayStateRevoke:
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateBooking).
-				Updates(map[string]interface{}{"state": repository.OrderStateRevoked, "decide_amount": amount})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateBooking,
+				map[string]interface{}{"state": repository.OrderStateRevoked, "decide_amount": amount})
 		}
 	default: // 二轮车充电
 		switch state {
@@ -1007,11 +972,11 @@ func (o *OrderController) QueryPayScore(c *gin.Context) {
 				c.JSON(http.StatusOK, ResultError(1, "开闸失败"))
 				return
 			}
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateConduct).
-				Updates(map[string]interface{}{"state": repository.OrderStateUse, "decide_amount": amount})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateConduct,
+				map[string]interface{}{"state": repository.OrderStateUse, "decide_amount": amount})
 		case wxPayStateRevoke:
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ? AND state = ?", orderID, repository.OrderStateConduct).
-				Updates(map[string]interface{}{"state": repository.OrderStateRevoked, "decide_amount": amount})
+			repository.UpdateOrderFieldsByState(orderID, repository.OrderStateConduct,
+				map[string]interface{}{"state": repository.OrderStateRevoked, "decide_amount": amount})
 		}
 	}
 	c.JSON(http.StatusOK, ResultSuccess(state))
@@ -1034,14 +999,14 @@ func (o *OrderController) Finish(c *gin.Context) {
 	orderID := c.Query("orderId")
 	isPrivateUser := c.Query("isPrivateUser")
 
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "订单不存在: "+orderID))
 		return
 	}
 	if strings.TrimSpace(order.WechatTransactionID) != "" {
 		if order.State != repository.OrderStateFinished {
-			conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("state", repository.OrderStateFinished)
+			repository.UpdateOrderState(orderID, repository.OrderStateFinished)
 		}
 		c.JSON(http.StatusOK, ResultSuccess(true))
 		return
@@ -1053,15 +1018,16 @@ func (o *OrderController) Finish(c *gin.Context) {
 		fees = order.BasicConsumption
 		if fees.IsZero() && order.ConsumptionType == repository.ConsumeTypeYiXiang {
 			updateBasicConsumptionForOrder(orderID)
-			conf.Db.Where("orderid = ?", orderID).First(&order)
+			if refetched, err := repository.FindOrderByOrderid(orderID); err == nil {
+				order = refetched
+			}
 			fees = order.BasicConsumption
 		}
 		if fees.IsZero() {
 			fees = decimal.Zero
 		}
 		amount = fees.Mul(decimal.NewFromInt(100)).RoundDown(0).IntPart()
-		res := conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("state", repository.OrderStateFinished)
-		if res.RowsAffected == 0 {
+		if repository.UpdateOrderState(orderID, repository.OrderStateFinished) == 0 {
 			c.JSON(http.StatusOK, ResultSuccess(false))
 			return
 		}
@@ -1079,8 +1045,8 @@ func (o *OrderController) Finish(c *gin.Context) {
 	if amount > 0 {
 		completeWxOrder(orderID, int(amount))
 		paid := decimal.NewFromInt(amount).Div(decimal.NewFromInt(100))
-		conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("basic_consumption", paid)
-		repository.InvoiceForOrder(order, paid)
+		repository.UpdateOrderBasicConsumption(orderID, paid)
+		repository.InvoiceForOrder(*order, paid)
 	} else {
 		cancelWxOrder(orderID)
 	}
@@ -1089,16 +1055,15 @@ func (o *OrderController) Finish(c *gin.Context) {
 
 func (o *OrderController) FinishBalans(c *gin.Context) {
 	orderID := c.Query("orderId")
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "订单不存在: "+orderID))
 		return
 	}
 	var amount decimal.Decimal
 	if order.ConsumptionType != repository.ConsumeTypeCaiParking {
 		amount = order.BasicConsumption
-		res := conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("state", repository.OrderStateFinished)
-		if res.RowsAffected == 0 {
+		if repository.UpdateOrderState(orderID, repository.OrderStateFinished) == 0 {
 			c.JSON(http.StatusOK, ResultSuccess(false))
 			return
 		}
@@ -1115,8 +1080,8 @@ func (o *OrderController) FinishBalans(c *gin.Context) {
 			c.JSON(http.StatusOK, ResultError(1, "余额支付失败"))
 			return
 		}
-		conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("basic_consumption", amount)
-		repository.InvoiceForOrder(order, amount)
+		repository.UpdateOrderBasicConsumption(orderID, amount)
+		repository.InvoiceForOrder(*order, amount)
 		if order.ConsumptionType == repository.ConsumeTypeCaiParking {
 			repository.SaveBalanceRecord(order.Openid, "停车消费", amount)
 		} else {
@@ -1139,8 +1104,8 @@ func (o *OrderController) CancelPayScore(c *gin.Context) {
 
 func (o *OrderController) UnfreezeOrder(c *gin.Context) {
 	orderID := c.Query("orderId")
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil || strings.TrimSpace(order.WechatTransactionID) == "" {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil || strings.TrimSpace(order.WechatTransactionID) == "" {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
@@ -1226,14 +1191,6 @@ func (o *OrderController) AddImage(c *gin.Context) {
 }
 
 // ============ 内部结算工具 ============
-
-// updateChargingDegreeForOrder 设置订单充电度数（对齐 Java repository.UpdateChargingDegree）。
-func updateChargingDegreeForOrder(orderID string) {
-	var degree decimal.Decimal
-	conf.Db.Raw("SELECT COALESCE(SUM(over_value - start_value),0)/100 FROM tab_order_electronic WHERE order_id = ?", orderID).
-		Row().Scan(&degree)
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("charging_degree", degree)
-}
 
 // isAfterNextMidnight 判断时间是否在凌晨 0 点以后、8 点以前（对齐 Java DateTimeUtil.isAfterNextMidnight）。
 func isAfterNextMidnight(t time.Time) bool {
@@ -1356,8 +1313,8 @@ func neighborOvertimeFeeFromTime(startTime, leaveTime time.Time) decimal.Decimal
 // updateBasicConsumptionForOrder 计算并更新订单基本消费（对齐 Java updateBasicConsumption）。
 func updateBasicConsumptionForOrder(orderID string) {
 	fee, _ := electronicFeesByOrderid(orderID)
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		return
 	}
 	if order.ChargeGunPull == 0 && isZeroTime(order.OverTime) {
@@ -1367,7 +1324,7 @@ func updateBasicConsumptionForOrder(orderID string) {
 			nowTime = timeOrZero(order.LeaveTime)
 		} else {
 			if repository.LockByOrder(orderID) == nil {
-				conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("basic_consumption", fee.Round(2))
+				repository.UpdateOrderBasicConsumption(orderID, fee.Round(2))
 				return
 			}
 			return // 正在检测车辆是否正确驶离
@@ -1410,58 +1367,20 @@ func updateBasicConsumptionForOrder(orderID string) {
 				if spaces := repository.SpacesByID(order.SpacesID); spaces != nil && !spaces.OvertimeFee {
 					// 车位设置不收取超时占位费
 				} else {
-					fee = calculateOvertimeFee(order, fee, orderID)
+					fee = calculateOvertimeFee(*order, fee, orderID)
 				}
 			} else {
-				fee = calculateOvertimeFee(order, fee, orderID)
+				fee = calculateOvertimeFee(*order, fee, orderID)
 			}
 		}
 	}
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("basic_consumption", fee.Round(2))
+	repository.UpdateOrderBasicConsumption(orderID, fee.Round(2))
 }
 
 // ============ 二轮车计费 ============
-// reOrderPowerValue 计算订单期间充电量
-func reOrderPowerValue(orderID string) decimal.Decimal {
-	var v decimal.Decimal
-	conf.Db.Raw("SELECT COALESCE((MAX(over_value)-MIN(start_value)),0) FROM re_order_electronic_tbl WHERE order_id = ?", orderID).Row().Scan(&v)
-	return v
-}
-
+// reOrderPowerNoServiceFees 查询订单电费（不含服务费）。被 wechat_pay.go 复用，故保留薄包装。
 func reOrderPowerNoServiceFees(orderID string) decimal.Decimal {
-	var v decimal.Decimal
-	conf.Db.Raw(`SELECT COALESCE(SUM((over_value - start_value) * charging_price_tbl.total),0)
-		FROM re_order_electronic_tbl
-		LEFT JOIN tab_price_time ON tab_price_time.id = re_order_electronic_tbl.price_time_id
-		LEFT JOIN charging_price_tbl ON charging_price_tbl.id = tab_price_time.price_id
-		WHERE re_order_electronic_tbl.order_id = ?`, orderID).Row().Scan(&v)
-	return v
-}
-
-func reOrderPowerMaxPower(orderID string) float64 {
-	var v float64
-	conf.Db.Raw("SELECT COALESCE(max_power,0) FROM re_order_electronic_tbl WHERE order_id = ? LIMIT 1", orderID).Row().Scan(&v)
-	return v
-}
-
-func serviceFeeByPowerRange(maxPower float64) decimal.Decimal {
-	if maxPower <= 0 {
-		return maxServiceFee()
-	}
-	var v decimal.Decimal
-	if conf.Db.Raw("SELECT service FROM charging_price_tbl WHERE ? >= min_power AND ? <= max_power LIMIT 1", maxPower, maxPower).Row().Scan(&v) != nil {
-		return maxServiceFee()
-	}
-	return v
-}
-
-// maxServiceFee 返回充电价格表中的最高服务费率（对齐 Java getMaxServiceFee，表空默认 0.4）。
-func maxServiceFee() decimal.Decimal {
-	var v decimal.Decimal
-	if conf.Db.Raw("SELECT COALESCE(MAX(service), 0.4) FROM charging_price_tbl").Row().Scan(&v) != nil {
-		return decimal.RequireFromString("0.4")
-	}
-	return v
+	return repository.ReOrderPowerNoServiceFees(orderID)
 }
 
 // ceilHours 充电时长分钟数向上取整为小时数（不足 1 小时按 1 小时），对齐 Java chargingHours 计算。
@@ -1471,26 +1390,6 @@ func ceilHours(minutes int64) int64 {
 		h++
 	}
 	return h
-}
-
-// userIsFreeServiceByOrder 判断订单用户是否享受免服务费（对齐 FreeChargingUserServiceImpl.getUserIsNotFreeByOrderId）。
-func userIsFreeServiceByOrder(orderID string) bool {
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
-		return false
-	}
-	var users []model.FreeChargingUsersTbl
-	conf.Db.Raw(`SELECT fcu.* FROM free_charging_users_tbl fcu
-		LEFT JOIN order_tbl o ON o.openid = fcu.openid
-		WHERE o.orderid = ? AND fcu.status = 1`, orderID).Scan(&users)
-	for _, u := range users {
-		var productID string
-		conf.Db.Raw("SELECT station.product_id FROM charging_station_management_tbl station WHERE station.id = ?", u.ChargingStationID).Scan(&productID)
-		if order.Pid == productID {
-			return true
-		}
-	}
-	return false
 }
 
 // closeGauge 二轮车关闸（对齐 Java CloseGAUGE）。
@@ -1509,8 +1408,8 @@ func closeGauge(orderID string) {
 
 // openGauge 二轮车开闸（对齐 Java OpenGAUGE，含开始时间/状态/插座状态更新）。
 func openGauge(orderID string) bool {
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		return false
 	}
 	receptacle := repository.ReceptacleByOrderid(orderID)
@@ -1526,26 +1425,18 @@ func openGauge(orderID string) bool {
 		return false
 	}
 	// 始终创建订单电量记录（对齐 Java reOrderPowerService.add 的幂等插入）。
-	// start_value 取插座当前累计电量表底（对齐 Java OpenGAUGE：getPowerByRidAndPid → add(orderId, meterValue)），
-	// over_value 初始等于 start_value，之后由设备上报的累计电量覆盖。
-	// price_time_id 关联 tab_price_time 当前时段，供计费时关联电价。
-	var count int64
-	conf.Db.Model(&model.ReOrderElectronicTbl{}).Where("order_id = ?", orderID).Count(&count)
-	if count == 0 {
+	if repository.CountReOrderElectronicsByOrderID(orderID) == 0 {
 		startValue := decimal.Zero
 		if rp := repository.ReceptaclePowerByPidAndRid(product.Pid, strconv.Itoa(rid)); rp != nil {
 			startValue = rp.MeterValue
 		}
-		conf.Db.Exec(
-			"INSERT INTO re_order_electronic_tbl (order_id, start_value, over_value, price_time_id) VALUES (?, ?, ?, (SELECT id FROM tab_price_time WHERE start_time < CURTIME() AND over_time >= CURTIME() LIMIT 1))",
-			orderID, startValue, startValue,
-		)
+		repository.InsertReOrderElectronic(orderID, startValue)
 	}
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
+	repository.UpdateOrderFields(orderID, map[string]interface{}{
 		"begin_time": time.Now(),
 		"state":      repository.OrderStateUse,
 	})
-	conf.Db.Model(&model.ReceptacleTbl{}).Where("id = ? AND status = 0", receptacle.ID).Update("status", 1)
+	repository.ActivateReceptacle(receptacle.ID)
 	return true
 }
 
@@ -1562,21 +1453,21 @@ func closeTwiceOrderWithoutGauge(orderID string) bool {
 
 // settleTwiceOrder 二轮车订单结算：计算电费/服务费 → 关闸 → 扣款 → 落库（整体事务）。
 func settleTwiceOrder(orderID string, withGauge bool) bool {
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		return false
 	}
 
-	meterValue := reOrderPowerValue(orderID).Round(2)
+	meterValue := repository.ReOrderPowerValue(orderID).Round(2)
 	now := time.Now()
 
 	// 套餐抵扣判断
 	hasValidPackage := false
 	var chargingMinutes int64
 	var packageRecord *model.PackageRecordTbl
-	if pr := latestValidPackage(order.Openid); pr != nil {
+	if pr, err := repository.LatestValidPackageByOpenid(order.Openid); err == nil {
 		packageRecord = pr
-		orderMaxPower := reOrderPowerMaxPower(orderID)
+		orderMaxPower := repository.ReOrderPowerMaxPower(orderID)
 		packageMaxPower := float64(pr.MaxPower)
 		if packageMaxPower > 0 && orderMaxPower > packageMaxPower {
 			hasValidPackage = false
@@ -1607,15 +1498,15 @@ func settleTwiceOrder(orderID string, withGauge bool) bool {
 				if !withGauge {
 					// closeTwiceOrderWithoutGauge：超出部分按比例计费
 					overtimeMinutes := -remaining
-					totalPowerFee := reOrderPowerNoServiceFees(orderID)
+					totalPowerFee := repository.ReOrderPowerNoServiceFees(orderID)
 					var overtimePowerFee decimal.Decimal
 					if chargingMinutes > 0 && totalPowerFee.IsPositive() {
 						overtimePowerFee = totalPowerFee.Mul(decimal.NewFromInt(overtimeMinutes)).
 							Div(decimal.NewFromInt(chargingMinutes)).Round(2)
 					}
-					calculatedServiceFee = serviceFeeByPowerRange(reOrderPowerMaxPower(orderID)).
+					calculatedServiceFee = repository.ServiceFeeByPowerRange(repository.ReOrderPowerMaxPower(orderID)).
 						Mul(decimal.NewFromInt(ceilHours(overtimeMinutes)))
-					if reOrderPowerValue(orderID).IsZero() && totalPowerFee.IsZero() {
+					if repository.ReOrderPowerValue(orderID).IsZero() && totalPowerFee.IsZero() {
 						calculatedServiceFee = decimal.Zero
 						overtimePowerFee = decimal.Zero
 					}
@@ -1634,8 +1525,8 @@ func settleTwiceOrder(orderID string, withGauge bool) bool {
 				newPackageDuration = &rem
 			}
 		}
-	} else if userIsFreeServiceByOrder(orderID) {
-		fee = reOrderPowerNoServiceFees(orderID)
+	} else if repository.UserIsFreeServiceByOrder(orderID) {
+		fee = repository.ReOrderPowerNoServiceFees(orderID)
 		calculatedServiceFee = decimal.Zero
 		powerRate = fee
 	} else {
@@ -1643,13 +1534,13 @@ func settleTwiceOrder(orderID string, withGauge bool) bool {
 		if !isZeroTime(order.BeginTime) {
 			betweenMinute = int64(time.Since(timeOrZero(order.BeginTime)).Minutes())
 		}
-		calculatedServiceFee = serviceFeeByPowerRange(reOrderPowerMaxPower(orderID)).
+		calculatedServiceFee = repository.ServiceFeeByPowerRange(repository.ReOrderPowerMaxPower(orderID)).
 			Mul(decimal.NewFromInt(ceilHours(betweenMinute)))
 		logger.Mylog.Info().Msgf("calculatedServiceFee ========>>> %v", calculatedServiceFee)
-		fee = reOrderPowerNoServiceFees(orderID)
+		fee = repository.ReOrderPowerNoServiceFees(orderID)
 		logger.Mylog.Info().Msgf("Fee ========>>> %v", fee)
 		powerRate = fee
-		if reOrderPowerValue(orderID).IsZero() && powerRate.IsZero() {
+		if repository.ReOrderPowerValue(orderID).IsZero() && powerRate.IsZero() {
 			calculatedServiceFee = decimal.Zero
 		}
 		fee = fee.Add(calculatedServiceFee)
@@ -1670,77 +1561,20 @@ func settleTwiceOrder(orderID string, withGauge bool) bool {
 		chargingTime = time.Time{}.Add(time.Since(timeOrZero(order.BeginTime))).Format("15:04:05")
 	}
 
-	// 落库 + 扣款（整体事务，对齐 Java transactionManager，任何一步失败整体回滚）
-	err := conf.Db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&model.OrderTwiceTbl{
-			Orderid:     orderID,
-			ServiceRate: calculatedServiceFee.Round(2),
-			PowerRate:   powerRate.Round(2),
-		}).Error; err != nil {
-			return err
-		}
-		if newPackageDuration != nil {
-			if err := tx.Model(&model.PackageRecordTbl{}).Where("order_no = ?", packageRecord.OrderNo).
-				Update("duration", *newPackageDuration).Error; err != nil {
-				return err
-			}
-		}
-
-		state := queryWxOrderState(orderID)
-		if state != wxPayStateCancel {
-			completeWxOrder(orderID, int(fee.Mul(decimal.NewFromInt(100)).IntPart()))
-		} else if fee.IsPositive() {
-			ok, _, cerr := repository.ConsumeBalanceTx(tx, order.Openid, fee)
-			if cerr != nil {
-				return cerr
-			}
-			if !ok {
-				return errors.New("余额不足")
-			}
-			if err := tx.Create(&model.TabBalanceRecord{Openid: order.Openid, Type: "充电消费", Amount: fee}).Error; err != nil {
-				return err
-			}
-		} else {
-			if err := tx.Exec("UPDATE user_tbl SET balans = balans + freeze_balans, freeze_balans = 0 WHERE openid = ?", order.Openid).Error; err != nil {
-				return err
-			}
-		}
-
-		if receptacleID != 0 {
-			if err := tx.Model(&model.ReceptacleTbl{}).Where("id = ?", receptacleID).Update("status", 0).Error; err != nil {
-				return err
-			}
-		}
-
-		if err := tx.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("over_time", now).Error; err != nil {
-			return err
-		}
-		if chargingTime != "" {
-			if err := tx.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("charging_time", chargingTime).Error; err != nil {
-				return err
-			}
-		}
-		if err := tx.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
-			"state":             repository.OrderStateFinished,
-			"close_time":        now,
-			"charging_degree":   meterValue,
-			"basic_consumption": fee.Round(2),
-		}).Error; err != nil {
-			return err
-		}
-		return nil
-	})
-	return err == nil
-}
-
-// latestValidPackage 查询用户最早购买且未过期的套餐（对齐 Java PackageRecordService.getLatestValidPackage）。
-func latestValidPackage(openid string) *model.PackageRecordTbl {
-	var pr model.PackageRecordTbl
-	if err := conf.Db.Where("openid = ? AND status = 'paid' AND end_time > ?", openid, time.Now()).
-		Order("create_time asc").First(&pr).Error; err != nil {
-		return nil
+	packageOrderNo := ""
+	if newPackageDuration != nil {
+		packageOrderNo = packageRecord.OrderNo
 	}
-	return &pr
+
+	// 落库 + 扣款（整体事务，对齐 Java transactionManager，任何一步失败整体回滚）
+	state := queryWxOrderState(orderID)
+	err = repository.SettleTwiceOrderTx(
+		orderID, order.Openid,
+		powerRate.Round(2), calculatedServiceFee.Round(2), fee, meterValue,
+		newPackageDuration, packageOrderNo, receptacleID, chargingTime, now,
+		state != wxPayStateCancel, completeWxOrder,
+	)
+	return err == nil
 }
 
 // parseTimePtr 解析时间字符串为 time.Time（零值表示空）。
