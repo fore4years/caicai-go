@@ -6,64 +6,48 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
-
-// priceDTO 对应 Java ChargingPriceBean / PriceBean（字段一致：id/total/name/service）。
-type priceDTO struct {
-	ID      int32           `json:"id,omitempty"`
-	Total   decimal.Decimal `json:"total,omitempty"`
-	Name    string          `json:"name,omitempty"`
-	Service decimal.Decimal `json:"service,omitempty"`
-}
 
 // priceTimeDTO 对应 Java ChargingPriceTimeBean / PriceTimeBean。
 // startTime/overTime 对齐 Java LocalTime 的 ISO 序列化（HH:mm:ss）。
 type priceTimeDTO struct {
-	Price     *priceDTO `json:"price,omitempty"`
-	StartTime string    `json:"startTime,omitempty"`
-	OverTime  string    `json:"overTime,omitempty"`
-	ID        int32     `json:"id,omitempty"`
-	PriceID   int32     `json:"priceId,omitempty"`
+	Price     *repository.PriceDTO `json:"price,omitempty"`
+	StartTime string               `json:"startTime,omitempty"`
+	OverTime  string               `json:"overTime,omitempty"`
+	ID        int32                `json:"id,omitempty"`
+	PriceID   int32                `json:"priceId,omitempty"`
 }
 
-// chargingPriceToDTO 将 model.ChargingPriceTbl 转为 priceDTO（只保留 Java bean 的四列）。
-func chargingPriceToDTO(p model.ChargingPriceTbl) priceDTO {
-	return priceDTO{ID: p.ID, Total: p.Total, Name: p.Name, Service: p.Service}
+// chargingPriceToDTO 将 model.ChargingPriceTbl 转为 repository.PriceDTO（只保留 Java bean 的四列）。
+func chargingPriceToDTO(p model.ChargingPriceTbl) repository.PriceDTO {
+	return repository.PriceDTO{ID: p.ID, Total: p.Total, Name: p.Name, Service: p.Service}
 }
 
-// tabPriceToDTO 将 model.TabPrice 转为 priceDTO（只保留 Java bean 的四列）。
-func tabPriceToDTO(p model.TabPrice) priceDTO {
-	return priceDTO{ID: p.ID, Total: p.Total, Name: p.Name, Service: p.Service}
+// tabPriceToDTO 将 model.TabPrice 转为 repository.PriceDTO（只保留 Java bean 的四列）。
+func tabPriceToDTO(p model.TabPrice) repository.PriceDTO {
+	return repository.PriceDTO{ID: p.ID, Total: p.Total, Name: p.Name, Service: p.Service}
 }
 
 // findChargingPrice 按 price_id 查询 charging_price_tbl（Java 的 collection select N+1）。
-func findChargingPrice(id int32) *priceDTO {
-	var p model.ChargingPriceTbl
-	if err := conf.Db.Where("id = ?", id).First(&p).Error; err != nil {
+func findChargingPrice(id int32) *repository.PriceDTO {
+	p, err := repository.ChargingPriceByID(id)
+	if err != nil {
 		return nil
 	}
-	v := chargingPriceToDTO(p)
+	v := chargingPriceToDTO(*p)
 	return &v
 }
 
 // findTabPrice 按 price_id 查询 tab_price（Java 的 collection select N+1）。
-func findTabPrice(id int32) *priceDTO {
-	var p model.TabPrice
-	if err := conf.Db.Where("id = ?", id).First(&p).Error; err != nil {
+func findTabPrice(id int32) *repository.PriceDTO {
+	p, err := repository.TabPriceByID(id)
+	if err != nil {
 		return nil
 	}
-	v := tabPriceToDTO(p)
+	v := tabPriceToDTO(*p)
 	return &v
-}
-
-// priceTimeRow 用于扫描 tab_price_time 的行（时间列转 HH:mm:ss 字符串，避免 TIME 扫描歧义）。
-type priceTimeRow struct {
-	StartTime string
-	OverTime  string
-	ID        int32
-	PriceID   int32
 }
 
 // ============ ChargingPriceController（/ChargingPrice，表 charging_price_tbl） ============
@@ -72,12 +56,12 @@ type ChargingPriceController struct{}
 
 // GetById GET /ChargingPrice/getById 对齐 Java getById：按主键查 charging_price_tbl。
 func (c *ChargingPriceController) GetById(ctx *gin.Context) {
-	var p model.ChargingPriceTbl
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&p).Error; err != nil {
+	p, err := repository.ChargingPriceByID(ctx.Query("id"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(chargingPriceToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(chargingPriceToDTO(*p)))
 }
 
 // Add POST /ChargingPrice/add 对齐 Java add：insert 一条 charging_price_tbl（仅 total/name/service）。
@@ -87,18 +71,18 @@ func (c *ChargingPriceController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Select("total", "name", "service").Create(&v)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.Error == nil))
+	err := repository.InsertChargingPrice(&v)
+	ctx.JSON(http.StatusOK, ResultSuccess(err == nil))
 }
 
 // GetAll GET /ChargingPrice/getAll 对齐 Java getAll：MyBatis-Plus 分页（无排序）。
 func (c *ChargingPriceController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.ChargingPriceTbl{}).Count(&total)
+	repository.Count(&model.ChargingPriceTbl{}, &total)
 	var rows []model.ChargingPriceTbl
-	conf.Db.Model(&model.ChargingPriceTbl{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
-	list := make([]priceDTO, 0, len(rows))
+	repository.Page(&model.ChargingPriceTbl{}, "", pageOffset(current, size), size, &rows)
+	list := make([]repository.PriceDTO, 0, len(rows))
 	for _, p := range rows {
 		list = append(list, chargingPriceToDTO(p))
 	}
@@ -107,12 +91,12 @@ func (c *ChargingPriceController) GetAll(ctx *gin.Context) {
 
 // GetMix GET /ChargingPrice/getMix 对齐 Java getMix：按 total 升序取第一条（最低电价）。
 func (c *ChargingPriceController) GetMix(ctx *gin.Context) {
-	var p model.ChargingPriceTbl
-	if err := conf.Db.Order("total asc").First(&p).Error; err != nil {
+	p, err := repository.LowestChargingPrice()
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(chargingPriceToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(chargingPriceToDTO(*p)))
 }
 
 // GetByTime GET /ChargingPrice/getByTime 对齐 Java getMixByTime：
@@ -121,16 +105,8 @@ func (c *ChargingPriceController) GetMix(ctx *gin.Context) {
 func (c *ChargingPriceController) GetByTime(ctx *gin.Context) {
 	start := ctx.Query("start")
 	end := ctx.Query("end")
-	var rows []priceDTO
-	err := conf.Db.Raw(
-		`SELECT charging_price_tbl.id, charging_price_tbl.total, charging_price_tbl.name, charging_price_tbl.service
-		 FROM tab_price_time
-		 LEFT JOIN charging_price_tbl ON tab_price_time.price_id = charging_price_tbl.id
-		 WHERE tab_price_time.over_time >= ? AND tab_price_time.start_time <= ?
-		 ORDER BY (charging_price_tbl.total + charging_price_tbl.service) LIMIT 1`,
-		start, end,
-	).Scan(&rows).Error
-	if err != nil || len(rows) == 0 {
+	rows := repository.ChargingPriceByTime(start, end)
+	if len(rows) == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -143,13 +119,8 @@ type ChargingPriceTimeController struct{}
 
 // GetById GET /ChargingPriceTime/getById 对齐 Java getById：查时段 + 嵌套电价。
 func (c *ChargingPriceTimeController) GetById(ctx *gin.Context) {
-	var rows []priceTimeRow
-	err := conf.Db.Raw(
-		`SELECT id, TIME_FORMAT(start_time,'%H:%i:%s') AS start_time,
-		        TIME_FORMAT(over_time,'%H:%i:%s') AS over_time, price_id
-		 FROM tab_price_time WHERE id = ?`, ctx.Query("id"),
-	).Scan(&rows).Error
-	if err != nil || len(rows) == 0 {
+	rows := repository.PriceTimeRowByID(ctx.Query("id"))
+	if len(rows) == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -170,25 +141,16 @@ func (c *ChargingPriceTimeController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Exec(
-		"INSERT INTO tab_price_time (start_time, over_time, price_id) VALUES (?, ?, ?)",
-		req.StartTime, req.OverTime, req.PriceID,
-	)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.Error == nil))
+	err := repository.InsertTabPriceTime(req.StartTime, req.OverTime, req.PriceID)
+	ctx.JSON(http.StatusOK, ResultSuccess(err == nil))
 }
 
 // GetAll GET /ChargingPriceTime/getAll 对齐 Java getAll：MyBatis-Plus 分页（无排序）。
 func (c *ChargingPriceTimeController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.TabPriceTime{}).Count(&total)
-	var rows []priceTimeRow
-	conf.Db.Raw(
-		`SELECT id, TIME_FORMAT(start_time,'%H:%i:%s') AS start_time,
-		        TIME_FORMAT(over_time,'%H:%i:%s') AS over_time, price_id
-		 FROM tab_price_time LIMIT ? OFFSET ?`,
-		size, pageOffset(current, size),
-	).Scan(&rows)
+	repository.Count(&model.TabPriceTime{}, &total)
+	rows := repository.PriceTimeRowsAll(pageOffset(current, size), size)
 	list := make([]priceTimeDTO, 0, len(rows))
 	for _, r := range rows {
 		dto := priceTimeDTO{ID: r.ID, StartTime: r.StartTime, OverTime: r.OverTime, PriceID: r.PriceID}
@@ -204,17 +166,8 @@ func (c *ChargingPriceTimeController) GetAll(ctx *gin.Context) {
 func (c *ChargingPriceTimeController) GetByTime(ctx *gin.Context) {
 	start := ctx.Query("start")
 	end := ctx.Query("end")
-	var rows []priceTimeRow
-	err := conf.Db.Raw(
-		`SELECT tab_price_time.id, TIME_FORMAT(tab_price_time.start_time,'%H:%i:%s') AS start_time,
-		        TIME_FORMAT(tab_price_time.over_time,'%H:%i:%s') AS over_time, tab_price_time.price_id
-		 FROM tab_price_time
-		 LEFT JOIN charging_price_tbl ON tab_price_time.price_id = charging_price_tbl.id
-		 WHERE tab_price_time.over_time >= ? AND tab_price_time.start_time <= ?
-		 ORDER BY (charging_price_tbl.total + charging_price_tbl.service) LIMIT 1`,
-		start, end,
-	).Scan(&rows).Error
-	if err != nil || len(rows) == 0 {
+	rows := repository.ChargingPriceTimeByTime(start, end)
+	if len(rows) == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -227,15 +180,8 @@ func (c *ChargingPriceTimeController) GetByTime(ctx *gin.Context) {
 // GetNow GET /ChargingPriceTime/getNow 对齐 Java getNow：
 // start_time<now AND over_time>=now，按 over_time 降序取第一条的 price.total。
 func (c *ChargingPriceTimeController) GetNow(ctx *gin.Context) {
-	var totals []decimal.Decimal
-	err := conf.Db.Raw(
-		`SELECT charging_price_tbl.total
-		 FROM tab_price_time
-		 LEFT JOIN charging_price_tbl ON tab_price_time.price_id = charging_price_tbl.id
-		 WHERE tab_price_time.start_time < CURTIME() AND tab_price_time.over_time >= CURTIME()
-		 ORDER BY tab_price_time.over_time DESC LIMIT 1`,
-	).Scan(&totals).Error
-	if err != nil || len(totals) == 0 {
+	totals := repository.ChargingPriceTotalNow()
+	if len(totals) == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -248,12 +194,12 @@ type PriceController struct{}
 
 // GetById GET /price/getById 对齐 Java getById：按主键查 tab_price。
 func (c *PriceController) GetById(ctx *gin.Context) {
-	var p model.TabPrice
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&p).Error; err != nil {
+	p, err := repository.TabPriceByID(ctx.Query("id"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(tabPriceToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(tabPriceToDTO(*p)))
 }
 
 // Add POST /price/add 对齐 Java add：insert 一条 tab_price（仅 total/name/service）。
@@ -263,18 +209,18 @@ func (c *PriceController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Select("total", "name", "service").Create(&v)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.Error == nil))
+	err := repository.InsertTabPrice(&v)
+	ctx.JSON(http.StatusOK, ResultSuccess(err == nil))
 }
 
 // GetAll GET /price/getAll 对齐 Java getAll：MyBatis-Plus 分页（无排序）。
 func (c *PriceController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.TabPrice{}).Count(&total)
+	repository.Count(&model.TabPrice{}, &total)
 	var rows []model.TabPrice
-	conf.Db.Model(&model.TabPrice{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
-	list := make([]priceDTO, 0, len(rows))
+	repository.Page(&model.TabPrice{}, "", pageOffset(current, size), size, &rows)
+	list := make([]repository.PriceDTO, 0, len(rows))
 	for _, p := range rows {
 		list = append(list, tabPriceToDTO(p))
 	}
@@ -283,12 +229,12 @@ func (c *PriceController) GetAll(ctx *gin.Context) {
 
 // GetMix GET /price/getMix 对齐 Java getMix：按 total 升序取第一条（最低电价）。
 func (c *PriceController) GetMix(ctx *gin.Context) {
-	var p model.TabPrice
-	if err := conf.Db.Order("total asc").First(&p).Error; err != nil {
+	p, err := repository.LowestTabPrice()
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(tabPriceToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(tabPriceToDTO(*p)))
 }
 
 // GetByTime GET /price/getByTime 对齐 Java getMixByTime：
@@ -297,16 +243,8 @@ func (c *PriceController) GetMix(ctx *gin.Context) {
 func (c *PriceController) GetByTime(ctx *gin.Context) {
 	start := ctx.Query("start")
 	end := ctx.Query("end")
-	var rows []priceDTO
-	err := conf.Db.Raw(
-		`SELECT tab_price.id, tab_price.total, tab_price.name, tab_price.service
-		 FROM tab_price_time
-		 LEFT JOIN tab_price ON tab_price_time.price_id = tab_price.id
-		 WHERE tab_price_time.over_time >= ? AND tab_price_time.start_time <= ?
-		 ORDER BY (tab_price.total + tab_price.service) LIMIT 1`,
-		start, end,
-	).Scan(&rows).Error
-	if err != nil || len(rows) == 0 {
+	rows := repository.TabPriceByTime(start, end)
+	if len(rows) == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -319,13 +257,8 @@ type PriceTimeController struct{}
 
 // GetById GET /priceTime/getById 对齐 Java getById：查时段 + 嵌套电价。
 func (c *PriceTimeController) GetById(ctx *gin.Context) {
-	var rows []priceTimeRow
-	err := conf.Db.Raw(
-		`SELECT id, TIME_FORMAT(start_time,'%H:%i:%s') AS start_time,
-		        TIME_FORMAT(over_time,'%H:%i:%s') AS over_time, price_id
-		 FROM tab_price_time WHERE id = ?`, ctx.Query("id"),
-	).Scan(&rows).Error
-	if err != nil || len(rows) == 0 {
+	rows := repository.PriceTimeRowByID(ctx.Query("id"))
+	if len(rows) == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -346,25 +279,16 @@ func (c *PriceTimeController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Exec(
-		"INSERT INTO tab_price_time (start_time, over_time, price_id) VALUES (?, ?, ?)",
-		req.StartTime, req.OverTime, req.PriceID,
-	)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.Error == nil))
+	err := repository.InsertTabPriceTime(req.StartTime, req.OverTime, req.PriceID)
+	ctx.JSON(http.StatusOK, ResultSuccess(err == nil))
 }
 
 // GetAll GET /priceTime/getAll 对齐 Java getAll：MyBatis-Plus 分页（无排序）。
 func (c *PriceTimeController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.TabPriceTime{}).Count(&total)
-	var rows []priceTimeRow
-	conf.Db.Raw(
-		`SELECT id, TIME_FORMAT(start_time,'%H:%i:%s') AS start_time,
-		        TIME_FORMAT(over_time,'%H:%i:%s') AS over_time, price_id
-		 FROM tab_price_time LIMIT ? OFFSET ?`,
-		size, pageOffset(current, size),
-	).Scan(&rows)
+	repository.Count(&model.TabPriceTime{}, &total)
+	rows := repository.PriceTimeRowsAll(pageOffset(current, size), size)
 	list := make([]priceTimeDTO, 0, len(rows))
 	for _, r := range rows {
 		dto := priceTimeDTO{ID: r.ID, StartTime: r.StartTime, OverTime: r.OverTime, PriceID: r.PriceID}
@@ -380,17 +304,8 @@ func (c *PriceTimeController) GetAll(ctx *gin.Context) {
 func (c *PriceTimeController) GetByTime(ctx *gin.Context) {
 	start := ctx.Query("start")
 	end := ctx.Query("end")
-	var rows []priceTimeRow
-	err := conf.Db.Raw(
-		`SELECT tab_price_time.id, TIME_FORMAT(tab_price_time.start_time,'%H:%i:%s') AS start_time,
-		        TIME_FORMAT(tab_price_time.over_time,'%H:%i:%s') AS over_time, tab_price_time.price_id
-		 FROM tab_price_time
-		 LEFT JOIN tab_price ON tab_price_time.price_id = tab_price.id
-		 WHERE tab_price_time.over_time >= ? AND tab_price_time.start_time <= ?
-		 ORDER BY (tab_price.total + tab_price.service) LIMIT 1`,
-		start, end,
-	).Scan(&rows).Error
-	if err != nil || len(rows) == 0 {
+	rows := repository.TabPriceTimeByTime(start, end)
+	if len(rows) == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -404,39 +319,20 @@ func (c *PriceTimeController) GetByTime(ctx *gin.Context) {
 // 当前时段（start_time<now AND over_time>=now，over_time 降序第一条）的 price，
 // 返回 total + service*0.8。
 func (c *PriceTimeController) GetNow(ctx *gin.Context) {
-	type row struct {
-		Total   decimal.Decimal
-		Service decimal.Decimal
-	}
-	var rows []row
-	err := conf.Db.Raw(
-		`SELECT tab_price.total, tab_price.service
-		 FROM tab_price_time
-		 LEFT JOIN tab_price ON tab_price_time.price_id = tab_price.id
-		 WHERE tab_price_time.start_time < CURTIME() AND tab_price_time.over_time >= CURTIME()
-		 ORDER BY tab_price_time.over_time DESC LIMIT 1`,
-	).Scan(&rows).Error
-	if err != nil || len(rows) == 0 {
+	total, service, ok := repository.TabPriceNow()
+	if !ok {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	r := rows[0]
-	result := r.Total.Add(r.Service.Mul(decimal.NewFromFloat(0.8)))
+	result := total.Add(service.Mul(decimal.NewFromFloat(0.8)))
 	ctx.JSON(http.StatusOK, ResultSuccess(result))
 }
 
 // GetAllNow GET /priceTime/getAllNow 对齐 Java getAllNow：
 // 当前时段（同上）的第一条的嵌套 price（PriceBean）。
 func (c *PriceTimeController) GetAllNow(ctx *gin.Context) {
-	var rows []priceDTO
-	err := conf.Db.Raw(
-		`SELECT tab_price.id, tab_price.total, tab_price.name, tab_price.service
-		 FROM tab_price_time
-		 LEFT JOIN tab_price ON tab_price_time.price_id = tab_price.id
-		 WHERE tab_price_time.start_time < CURTIME() AND tab_price_time.over_time >= CURTIME()
-		 ORDER BY tab_price_time.over_time DESC LIMIT 1`,
-	).Scan(&rows).Error
-	if err != nil || len(rows) == 0 {
+	rows := repository.TabPriceAllNow()
+	if len(rows) == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
