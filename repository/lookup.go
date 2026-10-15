@@ -50,3 +50,54 @@ func ImeiTabByChargingStation(imei string) (*model.ImeiTab, error) {
 	}
 	return &row, nil
 }
+
+// CountUnreadMessages 统计某用户未读消息数。
+func CountUnreadMessages(openid string) (int64, error) {
+	var count int64
+	err := conf.Db.Raw("SELECT count(*) FROM usermessage_tbl WHERE openid = ? AND status = '未读'", openid).Scan(&count).Error
+	return count, err
+}
+
+// MessagesByOpenid 按时间倒序查询某用户消息。
+func MessagesByOpenid(openid string) ([]model.UsermessageTbl, error) {
+	var msgs []model.UsermessageTbl
+	err := conf.Db.Where("openid = ?", openid).Order("msgTime desc").Find(&msgs).Error
+	return msgs, err
+}
+
+// NearbyPlaces 查询附近可用车位（按经纬度距离排序，最多 100 条）。
+func NearbyPlaces(longitude, latitude string) ([]model.PlaceTbl, error) {
+	var places []model.PlaceTbl
+	err := conf.Db.Raw(
+		"SELECT * FROM place_tbl WHERE state = '可使用' AND longitude IS NOT NULL AND latitude IS NOT NULL "+
+			"ORDER BY (POWER(MOD(ABS(longitude - ?), 360), 2) + POWER(ABS(latitude - ?), 2)) LIMIT 100",
+		longitude, latitude,
+	).Scan(&places).Error
+	return places, err
+}
+
+// PlaceidsLike 按前缀查询 placeid 列表（倒序）。
+func PlaceidsLike(prefix string) ([]string, error) {
+	var placeids []string
+	err := conf.Db.Raw("SELECT placeid FROM place_tbl WHERE placeid LIKE ? ORDER BY placeid DESC", prefix).Scan(&placeids).Error
+	return placeids, err
+}
+
+// AllLocks 查询所有车位锁（lockid + lockmac）。
+func AllLocks() ([]map[string]string, error) {
+	var list []map[string]string
+	err := conf.Db.Raw("SELECT lockid, lockmac FROM lock_tbl").Scan(&list).Error
+	return list, err
+}
+
+// UpdateFaultState 更新故障状态，返回受影响行数。
+func UpdateFaultState(faultid, state string) int64 {
+	res := conf.Db.Model(&model.FaultTbl{}).Where("faultid = ?", faultid).Update("state", state)
+	return res.RowsAffected
+}
+
+// UpdateFaultByLockmac 按锁 mac 更新故障记录，返回受影响行数。
+func UpdateFaultByLockmac(lockmac string, updates map[string]interface{}) int64 {
+	res := conf.Db.Model(&model.FaultTbl{}).Where("lockmac = ?", lockmac).Updates(updates)
+	return res.RowsAffected
+}

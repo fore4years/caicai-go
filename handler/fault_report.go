@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ WxGuzhangController（base /wx，故障） ============
@@ -39,14 +39,14 @@ func (c *WxGuzhangController) GuzhangTijiao(ctx *gin.Context) {
 		State:   "待处理",
 	}
 	// Java submit 无论文件存储是否失败均返回 "ok"（IOException 被吞掉）。
-	_ = conf.Db.Create(&rec)
+	_ = repository.Create(&rec)
 	ctx.JSON(http.StatusOK, ResultSuccess("ok"))
 }
 
 // GetAllFault /wx/getAllfault —— 对齐 faultDao.getAll：返回全部故障。
 func (c *WxGuzhangController) GetAllFault(ctx *gin.Context) {
 	var rows []model.FaultTbl
-	conf.Db.Find(&rows)
+	repository.FindAll(&rows)
 	list := make([]faultDTO, 0, len(rows))
 	for _, f := range rows {
 		list = append(list, faultToDTO(f))
@@ -56,10 +56,8 @@ func (c *WxGuzhangController) GetAllFault(ctx *gin.Context) {
 
 // UpdateState /wx/updateState?faultid=&state= —— 对齐 faultDao.updateState，返回受影响行数。
 func (c *WxGuzhangController) UpdateState(ctx *gin.Context) {
-	res := conf.Db.Model(&model.FaultTbl{}).
-		Where("faultid = ?", ctx.Query("faultid")).
-		Update("state", ctx.Query("state"))
-	ctx.JSON(http.StatusOK, ResultSuccess(int(res.RowsAffected)))
+	rows := repository.UpdateFaultState(ctx.Query("faultid"), ctx.Query("state"))
+	ctx.JSON(http.StatusOK, ResultSuccess(int(rows)))
 }
 
 // GetMaintenanceTime /wx/getMaintenance_time?Maintenance_time=&lockmac=&name=
@@ -73,8 +71,7 @@ func (c *WxGuzhangController) GetMaintenanceTime(ctx *gin.Context) {
 	if t := parseTimeLoose(mt); !t.IsZero() {
 		updates["Maintenance_time"] = t
 	}
-	res := conf.Db.Model(&model.FaultTbl{}).Where("lockmac = ?", lockmac).Updates(updates)
-	if res.RowsAffected > 0 {
+	if repository.UpdateFaultByLockmac(lockmac, updates) > 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess("ok"))
 		return
 	}

@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
 	"caicai-go/repository"
@@ -48,8 +47,8 @@ func (y *YezhuController) Zhuce(c *gin.Context) {
 	}
 
 	// selectIdById: 取该城市编号下最大的 placeid
-	var placeids []string
-	if err := conf.Db.Raw("SELECT placeid FROM place_tbl WHERE placeid LIKE ? ORDER BY placeid DESC", no+"%").Scan(&placeids).Error; err != nil {
+	placeids, err := repository.PlaceidsLike(no + "%")
+	if err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 		c.String(http.StatusOK, "注册失败，ser返回可能为null")
 		return
@@ -91,8 +90,8 @@ func (y *YezhuController) Zhuce(c *gin.Context) {
 
 // GetLockList 获取所有车位锁（对应 Java YeZhuSer.getLockList）。
 func (y *YezhuController) GetLockList(c *gin.Context) {
-	var list []map[string]string
-	if err := conf.Db.Raw("SELECT lockid, lockmac FROM lock_tbl").Scan(&list).Error; err != nil {
+	list, err := repository.AllLocks()
+	if err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 		c.JSON(http.StatusOK, []map[string]string{})
 		return

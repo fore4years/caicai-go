@@ -6,9 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/logger"
-	"caicai-go/model"
 	"caicai-go/repository"
 )
 
@@ -18,8 +16,8 @@ type MessageController struct{}
 // GetMsgStatus 获取未读消息数（对应 Java MessageSer.getMsgStatus）。
 func (m *MessageController) GetMsgStatus(c *gin.Context) {
 	openid := c.Query("openid")
-	var count int64
-	if err := conf.Db.Raw("SELECT count(*) FROM usermessage_tbl WHERE openid = ? AND status = '未读'", openid).Scan(&count).Error; err != nil {
+	count, err := repository.CountUnreadMessages(openid)
+	if err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 	}
 	c.JSON(http.StatusOK, count)
@@ -40,8 +38,8 @@ func (m *MessageController) UpdateMsgStatus(c *gin.Context) {
 // GetMsgs 获取消息列表（对应 Java MessageSer.getmsgs）。
 func (m *MessageController) GetMsgs(c *gin.Context) {
 	openid := c.Query("openid")
-	var msgs []model.UsermessageTbl
-	if err := conf.Db.Where("openid = ?", openid).Order("msgTime desc").Find(&msgs).Error; err != nil {
+	msgs, err := repository.MessagesByOpenid(openid)
+	if err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 		c.JSON(http.StatusOK, []UsermessageDTO{})
 		return

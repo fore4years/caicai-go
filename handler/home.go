@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
 	"caicai-go/repository"
@@ -42,12 +41,8 @@ func (s *ShouyeController) GetPlaces(c *gin.Context) {
 	lat, _ := strconv.ParseFloat(latitude, 64)
 
 	// 对应 placeDao.selectnear
-	var places []model.PlaceTbl
-	if err := conf.Db.Raw(
-		"SELECT * FROM place_tbl WHERE state = '可使用' AND longitude IS NOT NULL AND latitude IS NOT NULL "+
-			"ORDER BY (POWER(MOD(ABS(longitude - ?), 360), 2) + POWER(ABS(latitude - ?), 2)) LIMIT 100",
-		longitude, latitude,
-	).Scan(&places).Error; err != nil {
+	places, err := repository.NearbyPlaces(longitude, latitude)
+	if err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 		c.JSON(http.StatusOK, []PlaceDTO{})
 		return
@@ -88,16 +83,12 @@ func (s *ShouyeController) GetPlaces(c *gin.Context) {
 func (s *ShouyeController) Saoma(c *gin.Context) {
 	lockid := c.Query("lockid")
 
-	var place model.PlaceTbl
-	res := conf.Db.Raw(
-		"SELECT p.* FROM place_tbl p JOIN lock_tbl l ON l.placeid = p.placeid WHERE l.lockid = ?",
-		lockid,
-	).Scan(&place)
-	if res.Error != nil || res.RowsAffected == 0 {
+	place := repository.PlaceByLockid(lockid)
+	if place == nil {
 		c.JSON(http.StatusOK, nil)
 		return
 	}
-	c.JSON(http.StatusOK, placeToDTO(place))
+	c.JSON(http.StatusOK, placeToDTO(*place))
 }
 
 // SaomaForCharge 根据充电桩 nid 与 direction 获取车位详情（对应 Java wxShouyeSerImpl.saomaForCharge）。
