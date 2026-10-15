@@ -191,14 +191,14 @@ func (a *AdminChargeStationFourController) GetStationListByPage(c *gin.Context) 
 	current, size := parsePage(c)
 	var total int64
 	conf.Db.Table("tab_parking_spaces").Count(&total)
-	var rows []parkingSpaceDTO
+	var rows []repository.ParkingSpace
 	conf.Db.Table("tab_parking_spaces").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
 	c.JSON(http.StatusOK, ResultSuccessPage(total, rows))
 }
 
 // GetBySpacesCode GET /system/chargeStationFour/getBySpacesCode?spacesCode=
 func (a *AdminChargeStationFourController) GetBySpacesCode(c *gin.Context) {
-	var row parkingSpaceDTO
+	var row repository.ParkingSpace
 	if err := conf.Db.Table("tab_parking_spaces").Where("spaces_code = ?", c.Query("spacesCode")).Scan(&row).Error; err != nil || row.ID == 0 {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
@@ -208,7 +208,7 @@ func (a *AdminChargeStationFourController) GetBySpacesCode(c *gin.Context) {
 
 // GetStationById GET /system/chargeStationFour/getStationById?id=
 func (a *AdminChargeStationFourController) GetStationById(c *gin.Context) {
-	var row parkingSpaceDTO
+	var row repository.ParkingSpace
 	if err := conf.Db.Table("tab_parking_spaces").Where("id = ?", c.Query("id")).Scan(&row).Error; err != nil || row.ID == 0 {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return

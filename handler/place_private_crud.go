@@ -10,6 +10,7 @@ import (
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ DTO（驼峰，对齐 Java 序列化） ============
@@ -220,7 +221,7 @@ func (c *PrivatePlaceController) Save(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultError(400, "城市代码不能为空"))
 		return
 	}
-	spacesCode := nextSpacesCode("private_place_tbl", req.Code)
+	spacesCode := repository.NextSpacesCode("private_place_tbl", req.Code)
 
 	// 同一充电枪只能绑定一个私桩车位
 	var existing model.PrivatePlaceTbl
