@@ -5,12 +5,10 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
 	"caicai-go/repository"
 )
@@ -35,11 +33,11 @@ func saveImageFromCtx(ctx *gin.Context) (int32, bool) {
 	if err != nil {
 		return 0, false
 	}
-	img := model.TabImage{Image: data}
-	if conf.Db.Create(&img).Error != nil {
+	imageID, err := repository.InsertImage(data)
+	if err != nil {
 		return 0, false
 	}
-	return img.ID, true
+	return imageID, true
 }
 
 // ============ PrivateChargingController（/privateCharging） ============
@@ -168,8 +166,7 @@ func (c *PrivateChargingController) Save(ctx *gin.Context) {
 		return
 	}
 
-	var pp model.PrivatePlaceTbl
-	if err := conf.Db.Where("spaces_code = ?", spacesNum).First(&pp).Error; err != nil {
+	if _, err := repository.PrivatePlaceBySpacesCode(spacesNum); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess("无此车位编号, 请重新输入"))
 		return
 	}
@@ -196,9 +193,7 @@ func (c *PrivateChargingController) Save(ctx *gin.Context) {
 		OfficialUse:        vo.OfficialUse,
 	}
 
-	var beanExisting model.PrivateChargingTbl
-	err := conf.Db.Where("openid = ? AND spaces_num = ?", openid, spacesNum).First(&beanExisting).Error
-	if err == nil {
+	if beanExisting, err := repository.PrivateChargingByOpenidSpacesNum(openid, spacesNum); err == nil {
 		if vo.IsUpdateImg == "true" {
 			imageID, ok := saveImageFromCtx(ctx)
 			if !ok {
@@ -207,12 +202,12 @@ func (c *PrivateChargingController) Save(ctx *gin.Context) {
 			}
 			bean.ImageID = imageID
 			if beanExisting.ImageID != 0 {
-				conf.Db.Where("id = ?", beanExisting.ImageID).Delete(&model.TabImage{})
+				repository.DeleteImageByID(beanExisting.ImageID)
 			}
 		} else {
 			bean.ImageID = beanExisting.ImageID
 		}
-		conf.Db.Model(&model.PrivateChargingTbl{}).Where("openid = ? AND spaces_num = ?", openid, spacesNum).Updates(bean)
+		repository.UpdatePrivateChargingByOpenidSpacesNum(openid, spacesNum, bean)
 	} else {
 		if vo.IsUpdateImg == "true" {
 			imageID, ok := saveImageFromCtx(ctx)
@@ -222,7 +217,7 @@ func (c *PrivateChargingController) Save(ctx *gin.Context) {
 			}
 			bean.ImageID = imageID
 		}
-		if conf.Db.Create(&bean).Error != nil {
+		if err := repository.InsertPrivateCharging(&bean); err != nil {
 			ctx.JSON(http.StatusOK, ResultSuccess("添加失败"))
 			return
 		}
@@ -249,23 +244,23 @@ func (c *PrivateChargingController) Register(ctx *gin.Context) {
 		} else {
 			p.Nid = req.Imei
 		}
-		var gw model.TabGateway
-		conf.Db.Where("mac = ?", req.Imei).First(&gw)
-		if gw.ID == 0 {
-			gw = model.TabGateway{Mac: req.Imei, InstallPlace: "私桩"}
-			conf.Db.Create(&gw)
-			conf.Db.Where("mac = ?", req.Imei).First(&gw)
+		gw := repository.GatewayByMac(req.Imei)
+		if gw == nil {
+			gw = &model.TabGateway{Mac: req.Imei, InstallPlace: "私桩"}
+			repository.CreateGateway(gw)
+			if g := repository.GatewayByMac(req.Imei); g != nil {
+				gw = g
+			}
 		}
 		p.GatewayID = gw.ID
-		conf.Db.Create(&p)
+		repository.CreateProduct(&p)
 
 		// 创建充电枪
-		var gun model.TabChargingGun
-		conf.Db.Where("product_id = ?", req.Pid).First(&gun)
-		if gun.ID == 0 {
-			gun = model.TabChargingGun{Direction: "D", MeterValue: 0, ProductID: req.Pid}
-			conf.Db.Create(&gun)
-			conf.Db.Where("product_id = ?", req.Pid).First(&gun)
+		gun, _ := repository.ChargingGunByProductID(req.Pid)
+		if gun == nil {
+			gun = &model.TabChargingGun{Direction: "D", MeterValue: 0, ProductID: req.Pid}
+			repository.CreateChargingGun(gun)
+			gun, _ = repository.ChargingGunByProductID(req.Pid)
 		}
 		spacesNum = insertPrivatePlace(req, gun.ID)
 	}
@@ -281,20 +276,21 @@ func (c *PrivateChargingController) Register(ctx *gin.Context) {
 	}
 
 	if spacesNum == "" {
-		var gun model.TabChargingGun
-		conf.Db.Where("product_id = ?", req.Pid).First(&gun)
-		var pp model.PrivatePlaceTbl
-		conf.Db.Where("charging_gun_id = ?", gun.ID).First(&pp)
-		spacesNum = pp.SpacesCode
+		var gunID int32
+		if gun, _ := repository.ChargingGunByProductID(req.Pid); gun != nil {
+			gunID = gun.ID
+		}
+		if pp, _ := repository.PrivatePlaceByChargingGunID(gunID); pp != nil {
+			spacesNum = pp.SpacesCode
+		}
 	}
 	rec.SpacesNum = spacesNum
 
-	var existing model.PrivateChargingTbl
-	if err := conf.Db.Where("spaces_num = ?", spacesNum).First(&existing).Error; err == nil {
+	if repository.PrivateChargingBySpacesNum(spacesNum) != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "此车位编号已被人注册"))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&rec).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.InsertPrivateCharging(&rec) == nil))
 }
 
 // insertPrivatePlace 对齐 Java PrivatePlaceServiceImpl.insert，返回生成的车位编号。
@@ -302,94 +298,61 @@ func insertPrivatePlace(req privateRegisterReq, gunID int32) string {
 	if req.Code == "" {
 		return ""
 	}
-	spacesCode := nextPrivateSpacesCode(req.Code)
+	spacesCode := repository.NextPrivateSpacesCode(req.Code)
 	if spacesCode == "" {
 		return ""
 	}
-	var existing model.PrivatePlaceTbl
-	if err := conf.Db.Where("charging_gun_id = ?", gunID).First(&existing).Error; err == nil {
+	if repository.PrivatePlaceExistsByChargingGunID(gunID) {
 		return ""
 	}
 	pointWKT := fmt.Sprintf("POINT(%f %f)", req.Longitude, req.Latitude)
-	if err := conf.Db.Exec(
-		"INSERT INTO private_place_tbl (point, place, openid, charging_gun_id, spaces_code) VALUES (ST_GeomFromText(?), ?, ?, ?, ?)",
-		pointWKT, req.Address, "", gunID, spacesCode,
-	).Error; err != nil {
+	if err := repository.InsertPrivatePlace(pointWKT, req.Address, "", gunID, spacesCode); err != nil {
 		return ""
 	}
 	return spacesCode
 }
 
-// nextPrivateSpacesCode 对齐 Java getNextSpacesCode：code + 5 位递增编号。
-func nextPrivateSpacesCode(code string) string {
-	if code == "" {
-		return ""
-	}
-	var maxCode string
-	conf.Db.Raw("SELECT MAX(spaces_code) FROM private_place_tbl WHERE spaces_code LIKE ?", code+"%").Scan(&maxCode)
-	if maxCode == "" {
-		maxCode = "0"
-	}
-	remainder := maxCode
-	if len(maxCode) >= len(code) && maxCode[:len(code)] == code {
-		remainder = maxCode[len(code):]
-	}
-	n, err := strconv.Atoi(remainder)
-	if err != nil {
-		return ""
-	}
-	return code + fmt.Sprintf("%05d", n+1)
-}
-
 func (c *PrivateChargingController) DeleteById(ctx *gin.Context) {
-	res := conf.Db.Where("id = ?", ctx.Param("id")).Delete(&model.PrivateChargingTbl{})
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	res := repository.DeletePrivateChargingByID(ctx.Param("id"))
+	ctx.JSON(http.StatusOK, ResultSuccess(res > 0))
 }
 
 // GetById 对齐 Java getUserAndPlaceInfoById：私桩信息 + 车位地址/充电枪。
 func (c *PrivateChargingController) GetById(ctx *gin.Context) {
-	var p model.PrivateChargingTbl
-	if err := conf.Db.Where("id = ?", ctx.Param("id")).First(&p).Error; err != nil {
+	p, err := repository.PrivateChargingByID(ctx.Param("id"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	dto := privateChargingDetailDTO{privateChargingDTO: privateChargingToDTO(p)}
-	var pp struct {
-		Point         string `gorm:"column:point"`
-		Place         string `gorm:"column:place"`
-		ChargingGunID int32  `gorm:"column:charging_gun_id"`
-	}
-	if err := conf.Db.Raw(
-		"SELECT ST_AsText(point) AS point, place, charging_gun_id FROM private_place_tbl WHERE spaces_code = ?", p.SpacesNum,
-	).Scan(&pp).Error; err == nil {
-		dto.Point = pp.Point
-		dto.Place = pp.Place
-		dto.ChargingGunID = pp.ChargingGunID
+	dto := privateChargingDetailDTO{privateChargingDTO: privateChargingToDTO(*p)}
+	if point, place, gunID, err := repository.PrivatePlacePointBySpacesCode(p.SpacesNum); err == nil {
+		dto.Point = point
+		dto.Place = place
+		dto.ChargingGunID = gunID
 	}
 	ctx.JSON(http.StatusOK, ResultSuccess(dto))
 }
 
 func (c *PrivateChargingController) GetByOpenId(ctx *gin.Context) {
-	var p model.PrivateChargingTbl
-	if err := conf.Db.Where("openid = ?", ctx.GetString("openid")).First(&p).Error; err != nil {
+	p, err := repository.PrivateChargingByOpenid(ctx.GetString("openid"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(*p)))
 }
 
 func (c *PrivateChargingController) GetByOpenIdAndChargeId(ctx *gin.Context) {
-	var p model.PrivateChargingTbl
-	if err := conf.Db.Where("openid = ? AND id = ?", ctx.GetString("openid"), ctx.Query("id")).First(&p).Error; err != nil {
+	p, err := repository.PrivateChargingByOpenidID(ctx.GetString("openid"), ctx.Query("id"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(*p)))
 }
 
 func (c *PrivateChargingController) GetListByOpenId(ctx *gin.Context) {
-	var rows []model.PrivateChargingTbl
-	conf.Db.Where("openid = ?", ctx.GetString("openid")).Find(&rows)
+	rows := repository.PrivateChargingsByOpenid(ctx.GetString("openid"))
 	list := make([]privateChargingDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, privateChargingToDTO(r))
@@ -399,49 +362,27 @@ func (c *PrivateChargingController) GetListByOpenId(ctx *gin.Context) {
 
 // GetByPidAndOpenId 对齐 Java getByPidAndOpenId：经 private_place + charging_gun 关联。
 func (c *PrivateChargingController) GetByPidAndOpenId(ctx *gin.Context) {
-	var p model.PrivateChargingTbl
-	err := conf.Db.Raw(
-		`SELECT private_charging_tbl.* FROM private_charging_tbl
-		 LEFT JOIN private_place_tbl pp ON private_charging_tbl.spaces_num = pp.spaces_code
-		 LEFT JOIN tab_charging_gun tcg ON pp.charging_gun_id = tcg.id
-		 WHERE tcg.product_id = ? AND private_charging_tbl.openid = ?`,
-		ctx.Query("pid"), ctx.GetString("openid"),
-	).Scan(&p).Error
-	if err != nil || p.ID == 0 {
+	p, err := repository.PrivateChargingByGunProductIDOpenid(ctx.Query("pid"), ctx.GetString("openid"))
+	if err != nil || p == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(*p)))
 }
 
 // GetUserInfoByPid 对齐 Java getUserInfoByPid。
 func (c *PrivateChargingController) GetUserInfoByPid(ctx *gin.Context) {
-	var p model.PrivateChargingTbl
-	err := conf.Db.Raw(
-		`SELECT private_charging_tbl.* FROM private_charging_tbl
-		 LEFT JOIN private_place_tbl pp ON private_charging_tbl.spaces_num = pp.spaces_code
-		 LEFT JOIN tab_charging_gun tcg ON pp.charging_gun_id = tcg.id
-		 WHERE tcg.product_id = ?`,
-		ctx.Query("pid"),
-	).Scan(&p).Error
-	if err != nil || p.ID == 0 {
+	p, err := repository.PrivateChargingByGunProductID(ctx.Query("pid"))
+	if err != nil || p == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(*p)))
 }
 
 // GetAll 对齐 Java getAllWithPwm：私桩信息 + pwm。
 func (c *PrivateChargingController) GetAll(ctx *gin.Context) {
-	var rows []struct {
-		model.PrivateChargingTbl
-		Pwm int32 `gorm:"column:pwm"`
-	}
-	conf.Db.Raw(
-		`SELECT private_charging_tbl.*, tab_charging_gun.pwm
-		 FROM private_charging_tbl
-		 LEFT JOIN tab_charging_gun ON private_charging_tbl.product_id = tab_charging_gun.product_id`,
-	).Scan(&rows)
+	rows := repository.PrivateChargingsWithPwm()
 	list := make([]privateChargingPwmDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, privateChargingPwmDTO{privateChargingDTO: privateChargingToDTO(r.PrivateChargingTbl), Pwm: r.Pwm})
@@ -450,17 +391,17 @@ func (c *PrivateChargingController) GetAll(ctx *gin.Context) {
 }
 
 func (c *PrivateChargingController) GetBySpacesNum(ctx *gin.Context) {
-	var p model.PrivateChargingTbl
-	if err := conf.Db.Where("spaces_num = ?", ctx.Query("spacesNum")).First(&p).Error; err != nil {
+	p := repository.PrivateChargingBySpacesNum(ctx.Query("spacesNum"))
+	if p == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(privateChargingToDTO(*p)))
 }
 
 func (c *PrivateChargingController) Open(ctx *gin.Context) {
-	res := conf.Db.Model(&model.PrivateChargingTbl{}).Where("id = ?", ctx.Query("id")).Update("one_click_opening", 1)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	res := repository.UpdatePrivateChargingOneClickOpening(ctx.Query("id"), 1)
+	ctx.JSON(http.StatusOK, ResultSuccess(res > 0))
 }
 
 func (c *PrivateChargingController) UpdateShareTime(ctx *gin.Context) {
@@ -468,22 +409,21 @@ func (c *PrivateChargingController) UpdateShareTime(ctx *gin.Context) {
 	if ctx.Query("overtimeFee") != "" {
 		overtimeFee, _ = strconv.Atoi(ctx.Query("overtimeFee"))
 	}
-	res := conf.Db.Model(&model.PrivateChargingTbl{}).Where("id = ?", ctx.Query("id")).Updates(map[string]interface{}{
+	res := repository.UpdatePrivateChargingFields(ctx.Query("id"), map[string]interface{}{
 		"share_time":     ctx.Query("shareTime"),
 		"exchange_place": ctx.Query("exchangePlace"),
 		"overtime_fee":   overtimeFee,
 	})
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	ctx.JSON(http.StatusOK, ResultSuccess(res > 0))
 }
 
 func (c *PrivateChargingController) Close(ctx *gin.Context) {
-	res := conf.Db.Model(&model.PrivateChargingTbl{}).Where("id = ?", ctx.Query("id")).Update("one_click_opening", 0)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	res := repository.UpdatePrivateChargingOneClickOpening(ctx.Query("id"), 0)
+	ctx.JSON(http.StatusOK, ResultSuccess(res > 0))
 }
 
 func (c *PrivateChargingController) GetAllSharePlace(ctx *gin.Context) {
-	var rows []model.PrivateChargingTbl
-	conf.Db.Where("one_click_opening = 1").Find(&rows)
+	rows := repository.PrivateChargingsByOneClickOpening()
 	list := make([]privateChargingDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, privateChargingToDTO(r))
@@ -495,27 +435,7 @@ func (c *PrivateChargingController) GetAllSharePlace(ctx *gin.Context) {
 func (c *PrivateChargingController) GetSharePlaceByLocation(ctx *gin.Context) {
 	latitude := queryFloat(ctx, "latitude")
 	longitude := queryFloat(ctx, "longitude")
-	var rows []struct {
-		model.PrivateChargingTbl
-		DistanceKm float64 `gorm:"column:distance_km"`
-	}
-	conf.Db.Raw(
-		`SELECT private_charging_tbl.id, private_charging_tbl.community_spaces_num, private_charging_tbl.share_time,
-		        private_charging_tbl.fee, private_charging_tbl.product_type, private_charging_tbl.image_id,
-		        private_charging_tbl.electricity_type, private_charging_tbl.product_id, private_charging_tbl.community_name,
-		        private_charging_tbl.exchange_place,
-		        ROUND(6371 * ACOS(COS(RADIANS(?)) * COS(RADIANS(ST_Y(private_place_tbl.point)))
-		              * COS(RADIANS(ST_X(private_place_tbl.point)) - RADIANS(?)) + SIN(RADIANS(?))
-		              * SIN(RADIANS(ST_Y(private_place_tbl.point)))),2) AS distance_km
-		 FROM private_charging_tbl
-		 LEFT JOIN private_place_tbl ON private_place_tbl.spaces_code = private_charging_tbl.spaces_num
-		 WHERE private_place_tbl.point IS NOT NULL
-		   AND private_charging_tbl.one_click_opening = 1
-		   AND private_charging_tbl.status = 1
-		 HAVING distance_km < 3
-		 ORDER BY distance_km ASC`,
-		latitude, longitude, latitude,
-	).Scan(&rows)
+	rows := repository.PrivateShareChargingsByLocation(latitude, longitude)
 	list := make([]privateShareChargingDTO, 0, len(rows))
 	for _, r := range rows {
 		dto := privateShareChargingToDTO(r.PrivateChargingTbl)
@@ -527,8 +447,7 @@ func (c *PrivateChargingController) GetSharePlaceByLocation(ctx *gin.Context) {
 
 // GetSharePlaceByName 对齐 Java getSharePlaceByName：小区名等值匹配。
 func (c *PrivateChargingController) GetSharePlaceByName(ctx *gin.Context) {
-	var rows []model.PrivateChargingTbl
-	conf.Db.Where("community_name = ? AND one_click_opening = 1 AND status = 1", ctx.Query("name")).Find(&rows)
+	rows := repository.PrivateShareChargingsByName(ctx.Query("name"))
 	list := make([]privateShareChargingDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, privateShareChargingToDTO(r))
@@ -537,8 +456,7 @@ func (c *PrivateChargingController) GetSharePlaceByName(ctx *gin.Context) {
 }
 
 func (c *PrivateChargingController) GetSharePlaceCountByName(ctx *gin.Context) {
-	var n int64
-	conf.Db.Model(&model.PrivateChargingTbl{}).Where("community_name = ? AND one_click_opening = 1 AND status = 1", ctx.Query("name")).Count(&n)
+	n := repository.CountPrivateShareChargingsByName(ctx.Query("name"))
 	ctx.JSON(http.StatusOK, ResultSuccess(int(n)))
 }
 
@@ -558,12 +476,11 @@ func (c *PrivateChargingController) SendNewRelocateCarMessage(ctx *gin.Context) 
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	var order model.OrderTbl
-	if err := conf.Db.Where("orderid = ?", req.OrderID).First(&order).Error; err != nil {
+	if _, err := repository.FindOrderByOrderid(req.OrderID); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", req.OrderID).Update("neighbor_relocate_time", time.Now())
+	repository.UpdateOrderNeighborRelocateTime(req.OrderID)
 	ctx.JSON(http.StatusOK, ResultSuccess(true))
 }
 
@@ -591,12 +508,11 @@ func (c *PrivateChargingController) UpdateByProductId(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultError(400, "充电桩编号不能为空"))
 		return
 	}
-	var existing model.PrivateChargingTbl
-	if err := conf.Db.Where("product_id = ?", req.ProductID).First(&existing).Error; err != nil {
+	if _, err := repository.PrivateChargingByProductID(req.ProductID); err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "未找到对应的私桩信息"))
 		return
 	}
-	res := conf.Db.Model(&model.PrivateChargingTbl{}).Where("product_id = ?", req.ProductID).Updates(map[string]interface{}{
+	res := repository.UpdatePrivateChargingByProductID(req.ProductID, map[string]interface{}{
 		"name":                 req.Name,
 		"id_card":              req.IDCard,
 		"phone":                req.Phone,
@@ -613,5 +529,5 @@ func (c *PrivateChargingController) UpdateByProductId(ctx *gin.Context) {
 		"official_use":         req.OfficialUse,
 		"one_click_opening":    req.OneClickOpening,
 	})
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	ctx.JSON(http.StatusOK, ResultSuccess(res > 0))
 }
