@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"caicai-go/model"
-	"caicai-go/objects"
+	"caicai-go/repository"
 )
 
 // OrderController 对应 Java OrderController（/order）。
@@ -15,11 +15,7 @@ type OrderController struct{}
 // GetNotFinish 根据当前用户 openid 获取未完成订单（对应 Java OrderController.getNotFinish）。
 func (o *OrderController) GetNotFinish(c *gin.Context) {
 	openid := c.GetString("openid")
-	order, err := objects.OrderTbl.WithContext(c.Request.Context()).Where(
-		objects.OrderTbl.Openid.Eq(openid),
-		objects.OrderTbl.State.Neq("已完成"),
-		objects.OrderTbl.State.Neq("已取消"),
-	).First()
+	order, err := repository.FirstNotFinishedOrderByOpenid(c.Request.Context(), openid)
 	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
@@ -32,7 +28,7 @@ func (o *OrderController) GetNotFinish(c *gin.Context) {
 // 避免运维登录时 JWT 的 openid 实际是 omid、按 openid 查不到用户的问题。
 func (o *OrderController) GetUserInfo(c *gin.Context) {
 	phone := c.GetString("phone")
-	user, err := objects.UserTbl.WithContext(c.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).First()
+	user, err := repository.UserByPhone(c.Request.Context(), phone)
 	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return

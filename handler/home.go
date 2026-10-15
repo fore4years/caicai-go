@@ -13,7 +13,7 @@ import (
 	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
-	"caicai-go/objects"
+	"caicai-go/repository"
 )
 
 // ShouyeController 对应 Java WxShouyeCon 中的首页相关端点（wxShouyeSerImpl）。
@@ -24,7 +24,7 @@ type ShouyeController struct{}
 // 因此这里忠实还原为固定返回 {"message":"null"}。
 func (s *ShouyeController) GetMessage(c *gin.Context) {
 	openid := c.Query("openid")
-	_, err := objects.UserTbl.WithContext(c.Request.Context()).Where(objects.UserTbl.Openid.Eq(openid)).First()
+	_, err := repository.UserByOpenid(c.Request.Context(), openid)
 	if err != nil {
 		// Java 中 user 为 null 时会 NPE（500），这里降级返回空 message，避免崩溃。
 		c.String(http.StatusOK, `{"message":"null"}`)
@@ -60,7 +60,7 @@ func (s *ShouyeController) GetPlaces(c *gin.Context) {
 	filtered := make([]placeWithDist, 0, len(places))
 	for _, p := range places {
 		// filter: tab_parking_spaces.enable == true
-		spaces, err := objects.TabParkingSpace.WithContext(c.Request.Context()).Where(objects.TabParkingSpace.SpacesCode.Eq(p.Placeid)).First()
+		spaces, err := repository.ParkingSpaceBySpacesCode(c.Request.Context(), p.Placeid)
 		if err != nil || !spaces.Enable {
 			continue
 		}
@@ -106,11 +106,7 @@ func (s *ShouyeController) SaomaForCharge(c *gin.Context) {
 	direction := c.Query("direction")
 
 	// selectCharge
-	cm, err := objects.ChargeMessageTbl.WithContext(c.Request.Context()).Where(
-		objects.ChargeMessageTbl.Nid.Eq(nid),
-		objects.ChargeMessageTbl.Direction.Eq(direction),
-		objects.ChargeMessageTbl.Chargeid.IsNotNull(),
-	).First()
+	cm, err := repository.ChargeMessageByNidDirection(c.Request.Context(), nid, direction)
 	if err != nil || cm.Placeid == "" {
 		c.JSON(http.StatusOK, nil)
 		return
@@ -118,12 +114,12 @@ func (s *ShouyeController) SaomaForCharge(c *gin.Context) {
 
 	// getLockidBypid
 	var lockid string
-	if lock, err := objects.LockTbl.WithContext(c.Request.Context()).Where(objects.LockTbl.Placeid.Eq(cm.Placeid)).First(); err == nil {
+	if lock, err := repository.LockByPlaceid(c.Request.Context(), cm.Placeid); err == nil {
 		lockid = lock.Lockid
 	}
 
 	// selectByPlaceid
-	place, err := objects.PlaceTbl.WithContext(c.Request.Context()).Where(objects.PlaceTbl.Placeid.Eq(cm.Placeid)).First()
+	place, err := repository.PlaceByPlaceid(c.Request.Context(), cm.Placeid)
 	if err != nil {
 		c.JSON(http.StatusOK, nil)
 		return
@@ -142,11 +138,7 @@ func (s *ShouyeController) SaomaForCharge(c *gin.Context) {
 func (s *ShouyeController) HasOrder(c *gin.Context) {
 	openid := c.Query("openid")
 
-	orders, err := objects.OrderTbl.WithContext(c.Request.Context()).Where(
-		objects.OrderTbl.Openid.Eq(openid),
-		objects.OrderTbl.State.Neq("已完成"),
-		objects.OrderTbl.State.Neq("已取消"),
-	).Find()
+	orders, err := repository.NotFinishedOrdersByOpenid(c.Request.Context(), openid)
 	if err != nil || len(orders) == 0 {
 		c.JSON(http.StatusOK, nil)
 		return
@@ -158,10 +150,7 @@ func (s *ShouyeController) HasOrder(c *gin.Context) {
 func (s *ShouyeController) HasChargeOrder(c *gin.Context) {
 	openid := c.Query("openid")
 
-	orders, err := objects.ChargeOrderTbl.WithContext(c.Request.Context()).Where(
-		objects.ChargeOrderTbl.Openid.Eq(openid),
-		objects.ChargeOrderTbl.State.Neq("已完成"),
-	).Find()
+	orders, err := repository.NotFinishedChargeOrdersByOpenid(c.Request.Context(), openid)
 	if err != nil || len(orders) == 0 {
 		c.JSON(http.StatusOK, nil)
 		return

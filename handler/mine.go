@@ -12,7 +12,6 @@ import (
 	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
-	"caicai-go/objects"
 	"caicai-go/repository"
 )
 
@@ -45,7 +44,7 @@ func (w *WodeController) GetOrderXq(c *gin.Context) {
 
 	result := gin.H{"order": nil, "place": nil}
 
-	if order, err := objects.OrderTbl.WithContext(c.Request.Context()).Where(objects.OrderTbl.Orderid.Eq(orderid)).First(); err == nil {
+	if order, err := repository.OrderByOrderid(c.Request.Context(), orderid); err == nil {
 		result["order"] = orderToDTO(*order)
 	}
 
@@ -81,7 +80,7 @@ func (w *WodeController) Searchmsg(c *gin.Context) {
 func (w *WodeController) TimeDifference(c *gin.Context) {
 	placeid := c.Query("placeId")
 
-	place, err := objects.PlaceTbl.WithContext(c.Request.Context()).Where(objects.PlaceTbl.Placeid.Eq(placeid)).First()
+	place, err := repository.PlaceByPlaceid(c.Request.Context(), placeid)
 	if err != nil {
 		c.JSON(http.StatusOK, Result{Success: false, Code: 500, Msg: "车位不存在"})
 		return

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/objects"
+	"caicai-go/repository"
 )
 
 // WxFujinController 对应 Java wxFujinCon。
@@ -14,7 +14,7 @@ type WxFujinController struct{}
 // GetLockid 根据车位 id 获取车位锁 id（对应 Java wxFujinSer.getLockid）。
 func (w *WxFujinController) GetLockid(c *gin.Context) {
 	placeid := c.Query("placeid")
-	lock, err := objects.LockTbl.WithContext(c.Request.Context()).Where(objects.LockTbl.Placeid.Eq(placeid)).First()
+	lock, err := repository.LockByPlaceid(c.Request.Context(), placeid)
 	if err != nil {
 		c.String(http.StatusOK, "")
 		return

@@ -14,7 +14,7 @@ import (
 
 	"caicai-go/logger"
 	"caicai-go/model"
-	"caicai-go/objects"
+	"caicai-go/repository"
 )
 
 const (
@@ -142,16 +142,16 @@ func getToken(phone, openid, name string) TokenBean {
 
 // checkAndSaveDriverUse 预约次数表不存在则写入（对应 DriverUseServiceImpl.save）。
 func checkAndSaveDriverUse(ctx *gin.Context, openid string) {
-	if _, err := objects.DriveruseTbl.WithContext(ctx.Request.Context()).Where(objects.DriveruseTbl.Openid.Eq(openid)).First(); err != nil {
+	if repository.DriverUseByOpenid(openid) == nil {
 		saveDriverUse(ctx.Request.Context(), openid)
 	}
 }
 
 // addUser 对应 Java UserServiceImpl.add。
 func addUser(ctx *gin.Context, openid, phone, idEntity string) (TokenBean, error) {
-	user, err := objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).First()
+	user, err := repository.UserByPhone(ctx.Request.Context(), phone)
 	if err == nil {
-		_, _ = objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).Updates(map[string]interface{}{
+		_ = repository.UpdateUserByPhone(ctx.Request.Context(), phone, map[string]interface{}{
 			"openid":    openid,
 			"id_entity": idEntity,
 		})
@@ -166,7 +166,7 @@ func addUser(ctx *gin.Context, openid, phone, idEntity string) (TokenBean, error
 		Balans:       decimal.Zero,
 		FreezeBalans: decimal.Zero,
 	}
-	if err := objects.UserTbl.WithContext(ctx.Request.Context()).Create(newUser); err != nil {
+	if err := repository.CreateUser(ctx.Request.Context(), newUser); err != nil {
 		return TokenBean{}, fmt.Errorf("用户注册失败")
 	}
 	return getToken(phone, openid, "微信用户"), nil
@@ -174,11 +174,11 @@ func addUser(ctx *gin.Context, openid, phone, idEntity string) (TokenBean, error
 
 // addOMUser 对应 Java UserServiceImpl.addOMUser。
 func addOMUser(ctx *gin.Context, openid, phone string) (TokenBean, error) {
-	user, err := objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).First()
+	user, err := repository.UserByPhone(ctx.Request.Context(), phone)
 	if err == nil {
 		switch user.OmEnable {
 		case "1":
-			_, _ = objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).Update(objects.UserTbl.Omid, openid)
+			_ = repository.UpdateUserOmidByPhone(ctx.Request.Context(), phone, openid)
 			user.Omid = openid
 			//return getToken(user.Phone, user.Omid, user.Name), nil
 			return TokenBean{
@@ -190,7 +190,7 @@ func addOMUser(ctx *gin.Context, openid, phone string) (TokenBean, error) {
 		case "-1":
 			return TokenBean{}, fmt.Errorf("审核未通过,请咨询客服")
 		default:
-			_, _ = objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).Updates(map[string]interface{}{
+			_ = repository.UpdateUserByPhone(ctx.Request.Context(), phone, map[string]interface{}{
 				"om_enable": "0",
 				"omid":      openid,
 			})
@@ -203,7 +203,7 @@ func addOMUser(ctx *gin.Context, openid, phone string) (TokenBean, error) {
 		Omid:     openid,
 		OmEnable: "0",
 	}
-	if err := objects.UserTbl.WithContext(ctx.Request.Context()).Create(newUser); err != nil {
+	if err := repository.CreateUser(ctx.Request.Context(), newUser); err != nil {
 		return TokenBean{}, fmt.Errorf("用户注册失败")
 	}
 	return TokenBean{}, fmt.Errorf("注册成功，请耐心等待审核")
@@ -211,9 +211,9 @@ func addOMUser(ctx *gin.Context, openid, phone string) (TokenBean, error) {
 
 // addYiparlUser 对应 Java UserServiceImpl.addYiparlUser。
 func addYiparlUser(ctx *gin.Context, openid, phone string) (TokenBean, error) {
-	user, err := objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).First()
+	user, err := repository.UserByPhone(ctx.Request.Context(), phone)
 	if err == nil {
-		_, _ = objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Phone.Eq(phone)).Update(objects.UserTbl.YiparlOpenid, openid)
+		_ = repository.UpdateUserYiparlByPhone(ctx.Request.Context(), phone, openid)
 		user.YiparlOpenid = openid
 		return getToken(user.Phone, user.YiparlOpenid, user.Name), nil
 	}
@@ -222,7 +222,7 @@ func addYiparlUser(ctx *gin.Context, openid, phone string) (TokenBean, error) {
 		Phone:        phone,
 		YiparlOpenid: openid,
 	}
-	if err := objects.UserTbl.WithContext(ctx.Request.Context()).Create(newUser); err != nil {
+	if err := repository.CreateUser(ctx.Request.Context(), newUser); err != nil {
 		return TokenBean{}, fmt.Errorf("用户注册失败")
 	}
 	return getToken(phone, openid, ""), nil
@@ -275,7 +275,7 @@ func (c *WeChatController) Login(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, Result{Success: false, Code: 1, Msg: "获取openid失败"})
 		return
 	}
-	user, err := objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Openid.Eq(openid)).First()
+	user, err := repository.UserByOpenid(ctx.Request.Context(), openid)
 	if err != nil {
 		ctx.JSON(http.StatusOK, Result{Success: false, Code: 1, Msg: "用户不存在"})
 		return
@@ -318,7 +318,7 @@ func (c *WeChatController) OmLogin(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, Result{Success: false, Code: 1, Msg: "获取openid失败"})
 		return
 	}
-	user, err := objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.Omid.Eq(openid)).First()
+	user, err := repository.UserByOmid(ctx.Request.Context(), openid)
 	if err != nil {
 		ctx.JSON(http.StatusOK, Result{Success: false, Code: 1, Msg: "用户不存在"})
 		return
@@ -362,7 +362,7 @@ func (c *WeChatController) YiParLLogin(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, Result{Success: false, Code: 1, Msg: "获取openid失败"})
 		return
 	}
-	user, err := objects.UserTbl.WithContext(ctx.Request.Context()).Where(objects.UserTbl.YiparlOpenid.Eq(openid)).First()
+	user, err := repository.UserByYiparlOpenid(ctx.Request.Context(), openid)
 	if err != nil {
 		ctx.JSON(http.StatusOK, Result{Success: false, Code: 1, Msg: "用户不存在"})
 		return

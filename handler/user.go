@@ -16,7 +16,7 @@ import (
 
 	"caicai-go/logger"
 	"caicai-go/model"
-	"caicai-go/objects"
+	"caicai-go/repository"
 )
 
 const (
@@ -160,7 +160,7 @@ func (u *UserController) WxLogin(c *gin.Context) {
 	// 对齐 Java：注册分支返回空的 user 对象（Java 中 new user() 未回填），已注册分支返回数据库记录。
 	zhuce := 0
 	var userDTO wxUserDTO
-	_, findErr := objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).First()
+	_, findErr := repository.UserByOpenid(ctx, openid)
 	if errors.Is(findErr, gorm.ErrRecordNotFound) {
 		// 未注册：写入 user_tbl + driveruse_tbl
 		user := &model.UserTbl{
@@ -178,7 +178,7 @@ func (u *UserController) WxLogin(c *gin.Context) {
 		if req.AvatarURL != "" {
 			user.Avatar = []byte(req.AvatarURL)
 		}
-		if err := objects.UserTbl.WithContext(ctx).Create(user); err != nil {
+		if err := repository.CreateUser(ctx, user); err != nil {
 			logger.Mylog.Err(err).Caller().Send()
 			c.JSON(http.StatusOK, gin.H{"jieguo": false})
 			return
@@ -191,12 +191,12 @@ func (u *UserController) WxLogin(c *gin.Context) {
 	} else {
 		// 已注册：仅更新微信资料 nick_name/province/city（对齐 updataWxlogin），再重新查询
 		zhuce = 1
-		_, _ = objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).Updates(map[string]interface{}{
+		_ = repository.UpdateUserByOpenid(ctx, openid, map[string]interface{}{
 			"nick_name": req.NickName,
 			"province":  req.Province,
 			"city":      req.City,
 		})
-		user, _ := objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).First()
+		user, _ := repository.UserByOpenid(ctx, openid)
 		userDTO = toWxUserDTO(*user)
 	}
 
@@ -230,7 +230,7 @@ func (u *UserController) LoginOwner(c *gin.Context) {
 
 	zhuce := 0
 	var ownerDTO wxOwnerDTO
-	_, findErr := objects.OwnerTbl.WithContext(ctx).Where(objects.OwnerTbl.Ownerid.Eq(ownerid)).First()
+	_, findErr := repository.OwnerByOwnerid(ctx, ownerid)
 	if errors.Is(findErr, gorm.ErrRecordNotFound) {
 		// 未注册：写入 owner_tbl（Java 注册分支返回空的 owner 对象）
 		owner := &model.OwnerTbl{
@@ -245,7 +245,7 @@ func (u *UserController) LoginOwner(c *gin.Context) {
 			Email:     req.Email,
 			Account:   req.Account,
 		}
-		if err := objects.OwnerTbl.WithContext(ctx).Create(owner); err != nil {
+		if err := repository.CreateOwner(ctx, owner); err != nil {
 			logger.Mylog.Err(err).Caller().Send()
 			c.JSON(http.StatusOK, gin.H{"jieguo": false})
 			return
@@ -257,14 +257,14 @@ func (u *UserController) LoginOwner(c *gin.Context) {
 	} else {
 		// 已注册：仅更新 nickName/gender/avatarUrl/province/city（对齐 updataWxlogin），再重新查询
 		zhuce = 1
-		_, _ = objects.OwnerTbl.WithContext(ctx).Where(objects.OwnerTbl.Ownerid.Eq(ownerid)).Updates(map[string]interface{}{
+		_ = repository.UpdateOwnerByOwnerid(ctx, ownerid, map[string]interface{}{
 			"nickName":  req.NickName,
 			"gender":    req.Gender,
 			"avatarUrl": req.AvatarURL,
 			"province":  req.Province,
 			"city":      req.City,
 		})
-		owner, _ := objects.OwnerTbl.WithContext(ctx).Where(objects.OwnerTbl.Ownerid.Eq(ownerid)).First()
+		owner, _ := repository.OwnerByOwnerid(ctx, ownerid)
 		ownerDTO = toWxOwnerDTO(*owner)
 	}
 
@@ -293,7 +293,7 @@ func (u *UserController) GetPhoneNumber(c *gin.Context) {
 	if errcode, ok := msg["errcode"].(float64); ok && errcode == 0 {
 		if phoneInfo, ok := msg["phone_info"].(map[string]interface{}); ok {
 			if phone, ok := phoneInfo["phoneNumber"].(string); ok {
-				_, _ = objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).Update(objects.UserTbl.Phone, phone)
+				_ = repository.UpdateUserPhoneByOpenid(ctx, openid, phone)
 				logger.Mylog.Info().Msgf("获取到手机号：%s", phone)
 			}
 		}
@@ -322,7 +322,7 @@ func (u *UserController) GetOwnerPhoneNumber(c *gin.Context) {
 	if errcode, ok := msg["errcode"].(float64); ok && errcode == 0 {
 		if phoneInfo, ok := msg["phone_info"].(map[string]interface{}); ok {
 			if phone, ok := phoneInfo["phoneNumber"].(string); ok {
-				_, _ = objects.OwnerTbl.WithContext(ctx).Where(objects.OwnerTbl.Ownerid.Eq(ownerid)).Update(objects.OwnerTbl.Phone, phone)
+				_ = repository.UpdateOwnerPhone(ctx, ownerid, phone)
 				logger.Mylog.Info().Msgf("获取到手机号：%s", phone)
 			}
 		}
@@ -341,7 +341,7 @@ func (u *UserController) Submit(c *gin.Context) {
 	plateNum := c.Query("plate_num")
 
 	// 写入 driveruse_tbl（预约次数 3）
-	if err := objects.DriveruseTbl.WithContext(ctx).Create(&model.DriveruseTbl{
+	if err := repository.CreateDriverUse(ctx, &model.DriveruseTbl{
 		Openid:        openid,
 		ReserveNumber: 3,
 		EveryDay:      timePtr(time.Now()),
@@ -350,24 +350,24 @@ func (u *UserController) Submit(c *gin.Context) {
 	}
 
 	// 更新 user_tbl 车牌号
-	info, err := objects.UserTbl.WithContext(ctx).Where(objects.UserTbl.Openid.Eq(openid)).Update(objects.UserTbl.PlateNum, plateNum)
+	rowsAffected, err := repository.UpdateUserPlateNum(ctx, openid, plateNum)
 	if err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 		c.JSON(http.StatusOK, 0)
 		return
 	}
-	if info.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		logger.Mylog.Info().Msgf("车牌号提交失败: %s %s", openid, plateNum)
 	} else {
 		logger.Mylog.Info().Msg("车牌号提交成功")
 	}
 
-	c.JSON(http.StatusOK, info.RowsAffected)
+	c.JSON(http.StatusOK, rowsAffected)
 }
 
 // saveDriverUse 注册时写入预约次数表（对应 Java DriverUseServiceImpl.save）
 func saveDriverUse(ctx context.Context, openid string) {
-	if err := objects.DriveruseTbl.WithContext(ctx).Create(&model.DriveruseTbl{
+	if err := repository.CreateDriverUse(ctx, &model.DriveruseTbl{
 		Openid:        openid,
 		ReserveNumber: 3,
 		EveryDay:      timePtr(time.Now()),

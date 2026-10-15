@@ -13,7 +13,7 @@ import (
 	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
-	"caicai-go/objects"
+	"caicai-go/repository"
 )
 
 // YezhuController 对应 Java YezhuCon（/chezhu）。
@@ -81,7 +81,7 @@ func (y *YezhuController) Zhuce(c *gin.Context) {
 		FixType:         req.FixType,
 		LedID:           req.LedID,
 	}
-	if err := objects.PlaceTbl.WithContext(ctx).Create(&place); err != nil {
+	if err := repository.CreatePlace(ctx, &place); err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 		c.String(http.StatusOK, "注册失败，ser返回可能为null")
 		return

@@ -4,40 +4,25 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gen"
 
-	"caicai-go/objects"
+	"caicai-go/repository"
 )
 
 // AdminUserController 对齐 Java System.controller.OmUserCon（运维用户审核管理）。
 type AdminUserController struct{}
-
-// omUserConds 构建运维用户查询条件：omid 与 om_enable 均非空，phone 可选模糊匹配。
-func omUserConds(phone string) []gen.Condition {
-	conds := []gen.Condition{
-		objects.UserTbl.Omid.IsNotNull(),
-		objects.UserTbl.OmEnable.IsNotNull(),
-	}
-	if phone != "" {
-		conds = append(conds, objects.UserTbl.Phone.Like("%"+phone+"%"))
-	}
-	return conds
-}
 
 // GetOmUserByPhone GET /system/user/getOmUserByPhone?phone=&current=&size=
 func (a *AdminUserController) GetOmUserByPhone(c *gin.Context) {
 	current, size := parsePage(c)
 	phone := c.Query("phone")
 	ctx := c.Request.Context()
-	conds := omUserConds(phone)
 
-	total, err := objects.UserTbl.WithContext(ctx).Where(conds...).Count()
+	total, err := repository.CountOmUsers(ctx, phone)
 	if err != nil {
 		c.JSON(http.StatusOK, ResultError(500, err.Error()))
 		return
 	}
-	users, err := objects.UserTbl.WithContext(ctx).Where(conds...).
-		Offset(pageOffset(current, size)).Limit(size).Find()
+	users, err := repository.ListOmUsers(ctx, phone, pageOffset(current, size), size)
 	if err != nil {
 		c.JSON(http.StatusOK, ResultError(500, err.Error()))
 		return
@@ -54,15 +39,13 @@ func (a *AdminUserController) GetOmUserByPhone(c *gin.Context) {
 func (a *AdminUserController) GetOmUserInfoAll(c *gin.Context) {
 	current, size := parsePage(c)
 	ctx := c.Request.Context()
-	conds := omUserConds("")
 
-	total, err := objects.UserTbl.WithContext(ctx).Where(conds...).Count()
+	total, err := repository.CountOmUsers(ctx, "")
 	if err != nil {
 		c.JSON(http.StatusOK, ResultError(500, err.Error()))
 		return
 	}
-	users, err := objects.UserTbl.WithContext(ctx).Where(conds...).
-		Offset(pageOffset(current, size)).Limit(size).Find()
+	users, err := repository.ListOmUsers(ctx, "", pageOffset(current, size), size)
 	if err != nil {
 		c.JSON(http.StatusOK, ResultError(500, err.Error()))
 		return
@@ -85,12 +68,10 @@ func (a *AdminUserController) UpdateOmEnable(c *gin.Context) {
 		return
 	}
 
-	info, err := objects.UserTbl.WithContext(c.Request.Context()).
-		Where(objects.UserTbl.Omid.Eq(openID)).
-		Update(objects.UserTbl.OmEnable, enable)
+	rowsAffected, err := repository.UpdateUserOmEnable(c.Request.Context(), openID, enable)
 	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(info.RowsAffected > 0))
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }

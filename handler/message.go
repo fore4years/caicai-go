@@ -9,7 +9,7 @@ import (
 	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
-	"caicai-go/objects"
+	"caicai-go/repository"
 )
 
 // MessageController 对应 Java MessageCon。
@@ -28,13 +28,13 @@ func (m *MessageController) GetMsgStatus(c *gin.Context) {
 // UpdateMsgStatus 将消息标记为已读（对应 Java MessageSer.updateMsgStatus）。
 func (m *MessageController) UpdateMsgStatus(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Query("id"))
-	info, err := objects.UsermessageTbl.WithContext(c.Request.Context()).Where(objects.UsermessageTbl.ID.Eq(int32(id))).Update(objects.UsermessageTbl.Status, "已读")
+	rowsAffected, err := repository.MarkMessageRead(c.Request.Context(), int32(id))
 	if err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 		c.JSON(http.StatusOK, 0)
 		return
 	}
-	c.JSON(http.StatusOK, info.RowsAffected)
+	c.JSON(http.StatusOK, rowsAffected)
 }
 
 // GetMsgs 获取消息列表（对应 Java MessageSer.getmsgs）。

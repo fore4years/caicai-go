@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/objects"
+	"caicai-go/repository"
 )
 
 // YunController 对应 Java yunCon（设备数据回调）。
@@ -37,7 +37,7 @@ func (y *YunController) Yun(c *gin.Context) {
 			}
 			if err := json.Unmarshal([]byte(message), &o); err == nil && o.Orderid != "" {
 				// faSongGuanSuoTiXing：查询订单（Java 中实际发送订阅消息的代码被注释）
-				_, _ = objects.OrderTbl.WithContext(c.Request.Context()).Where(objects.OrderTbl.Orderid.Eq(o.Orderid)).First()
+				_, _ = repository.OrderByOrderid(c.Request.Context(), o.Orderid)
 			}
 		}
 	}
