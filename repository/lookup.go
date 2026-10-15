@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"caicai-go/conf"
 	"caicai-go/model"
 )
@@ -206,4 +208,60 @@ func FindChargeOrderByOrderid(orderid string) (*model.ChargeOrderTbl, error) {
 func UpdateChargeOrderState(orderid, state string) int64 {
 	res := conf.Db.Model(&model.ChargeOrderTbl{}).Where("orderid = ?", orderid).Update("state", state)
 	return res.RowsAffected
+}
+
+// InvoicesStatePaged 分页查询 state IN (1,2) 的发票（按发票日期降序）。
+func InvoicesStatePaged(openid string, offset, limit int) (int64, []model.Invoice) {
+	base := conf.Db.Model(&model.Invoice{}).Where("state IN ?", []int32{1, 2})
+	if openid != "" {
+		base = base.Where("openid = ?", openid)
+	}
+	var total int64
+	base.Count(&total)
+	var invoices []model.Invoice
+	base.Order("invoice_date desc").Offset(offset).Limit(limit).Find(&invoices)
+	return total, invoices
+}
+
+// UsersByPhoneAll 查询某手机号的所有用户。
+func UsersByPhoneAll(phone string) []model.UserTbl {
+	var users []model.UserTbl
+	conf.Db.Where("phone = ?", phone).Find(&users)
+	return users
+}
+
+// UsersByOpenids 批量查询用户。
+func UsersByOpenids(openids []string) []model.UserTbl {
+	var users []model.UserTbl
+	conf.Db.Where("openid IN ?", openids).Find(&users)
+	return users
+}
+
+// InvoiceTitlesByOpenids 批量查询发票抬头。
+func InvoiceTitlesByOpenids(openids []string) []model.InvoiceTitle {
+	var titles []model.InvoiceTitle
+	conf.Db.Where("openid IN ?", openids).Find(&titles)
+	return titles
+}
+
+// UpdateInvoiceStateByID 按 id 更新发票状态，返回受影响行数。
+func UpdateInvoiceStateByID(id string, state int) int64 {
+	res := conf.Db.Model(&model.Invoice{}).Where("id = ?", id).Update("state", state)
+	return res.RowsAffected
+}
+
+// DeleteInvoicesByIDs 批量删除发票，返回受影响行数。
+func DeleteInvoicesByIDs(ids []int32) int64 {
+	res := conf.Db.Where("id IN ?", ids).Delete(&model.Invoice{})
+	return res.RowsAffected
+}
+
+// HasRecentInvoiceApply 判断最近两天是否有待处理发票申请。
+func HasRecentInvoiceApply() bool {
+	twoDaysAgo := time.Now().AddDate(0, 0, -2)
+	var n int64
+	conf.Db.Model(&model.Invoice{}).
+		Where("state = 1 AND apply_time >= ? AND apply_time <= ?", twoDaysAgo, time.Now()).
+		Count(&n)
+	return n > 0
 }

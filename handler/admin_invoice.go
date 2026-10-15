@@ -2,13 +2,12 @@ package handler
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // invoiceDTO 对应 Java domain.Invoice（invoice，驼峰）。
@@ -78,16 +77,7 @@ func (a *AdminInvoiceController) List(c *gin.Context) {
 	}
 
 	// 1. 查询 state IN (1,2) 的发票，按发票日期降序分页
-	base := conf.Db.Model(&model.Invoice{}).Where("state IN ?", []int32{1, 2})
-	if openid != "" {
-		base = base.Where("openid = ?", openid)
-	}
-
-	var total int64
-	base.Count(&total)
-
-	var invoices []model.Invoice
-	base.Order("invoice_date desc").Offset(pageOffset(current, size)).Limit(size).Find(&invoices)
+	total, invoices := repository.InvoicesStatePaged(openid, pageOffset(current, size), size)
 
 	if len(invoices) == 0 {
 		c.JSON(http.StatusOK, ResultSuccess(emptyResult()))
@@ -106,8 +96,7 @@ func (a *AdminInvoiceController) List(c *gin.Context) {
 
 	// 3. 手机号筛选（分页之后按 openid 过滤）
 	if phone != "" {
-		var users []model.UserTbl
-		conf.Db.Where("phone = ?", phone).Find(&users)
+		users := repository.UsersByPhoneAll(phone)
 		if len(users) == 0 {
 			c.JSON(http.StatusOK, ResultSuccess(emptyResult()))
 			return
@@ -128,8 +117,7 @@ func (a *AdminInvoiceController) List(c *gin.Context) {
 	// 4. 批量查询用户信息（openid → phone）
 	userMap := make(map[string]model.UserTbl)
 	if len(openids) > 0 {
-		var users []model.UserTbl
-		conf.Db.Where("openid IN ?", openids).Find(&users)
+		users := repository.UsersByOpenids(openids)
 		for _, u := range users {
 			if u.Openid != "" {
 				userMap[u.Openid] = u
@@ -140,8 +128,7 @@ func (a *AdminInvoiceController) List(c *gin.Context) {
 	// 5. 批量查询发票抬头（openid → titleName/email）
 	titleMap := make(map[string]model.InvoiceTitle)
 	if len(openids) > 0 {
-		var titles []model.InvoiceTitle
-		conf.Db.Where("openid IN ?", openids).Find(&titles)
+		titles := repository.InvoiceTitlesByOpenids(openids)
 		for _, t := range titles {
 			if t.Openid != "" {
 				titleMap[t.Openid] = t
@@ -190,7 +177,7 @@ func (a *AdminInvoiceController) List(c *gin.Context) {
 func (a *AdminInvoiceController) Process(c *gin.Context) {
 	id := c.Query("id")
 	var inv model.Invoice
-	if err := conf.Db.Where("id = ?", id).First(&inv).Error; err != nil {
+	if err := repository.FindByID(&inv, id).Error; err != nil {
 		c.JSON(http.StatusOK, ResultError(500, "发票处理失败"))
 		return
 	}
@@ -198,8 +185,7 @@ func (a *AdminInvoiceController) Process(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(500, "发票处理失败"))
 		return
 	}
-	res := conf.Db.Model(&model.Invoice{}).Where("id = ?", id).Update("state", 2)
-	if res.RowsAffected > 0 {
+	if repository.UpdateInvoiceStateByID(id, 2) > 0 {
 		c.JSON(http.StatusOK, ResultSuccess("发票处理成功"))
 		return
 	}
@@ -217,8 +203,7 @@ func (a *AdminInvoiceController) BatchDelete(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(500, "批量删除失败"))
 		return
 	}
-	res := conf.Db.Where("id IN ?", ids).Delete(&model.Invoice{})
-	if res.RowsAffected > 0 {
+	if repository.DeleteInvoicesByIDs(ids) > 0 {
 		c.JSON(http.StatusOK, ResultSuccess("批量删除成功"))
 		return
 	}
@@ -227,10 +212,5 @@ func (a *AdminInvoiceController) BatchDelete(c *gin.Context) {
 
 // CheckRecentApply GET /system/invoice/checkRecentApply
 func (a *AdminInvoiceController) CheckRecentApply(c *gin.Context) {
-	twoDaysAgo := time.Now().AddDate(0, 0, -2)
-	var n int64
-	conf.Db.Model(&model.Invoice{}).
-		Where("state = 1 AND apply_time >= ? AND apply_time <= ?", twoDaysAgo, time.Now()).
-		Count(&n)
-	c.JSON(http.StatusOK, ResultSuccess(n > 0))
+	c.JSON(http.StatusOK, ResultSuccess(repository.HasRecentInvoiceApply()))
 }
