@@ -8,24 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
+	"caicai-go/repository"
 )
-
-// employeeDTO 对应 Java domain.OmEmployee 的序列化字段（驼峰）。
-// audit_status 用 int（DB 值 0/1/-1），不能用 model 里的 bool。
-type employeeDTO struct {
-	EmployeeID  string `gorm:"column:employee_id" json:"employeeId"`
-	Name        string `gorm:"column:name" json:"name"`
-	Password    string `gorm:"column:password" json:"password"`
-	Phone       string `gorm:"column:phone" json:"phone"`
-	IDCard      string `gorm:"column:id_card" json:"idCard"`
-	EntryDate   string `gorm:"column:entry_date" json:"entryDate"`
-	Department  string `gorm:"column:department" json:"department"`
-	Position    string `gorm:"column:position" json:"position"`
-	AuditStatus int    `gorm:"column:audit_status" json:"auditStatus"`
-}
-
-const employeeSelect = "SELECT employee_id, name, password, phone, id_card, DATE_FORMAT(entry_date, '%Y-%m-%d') AS entry_date, department, position, audit_status FROM om_employee"
 
 // AdminEmployeeController 对齐 Java controller.OmEmployeeController（运维职工管理）。
 type AdminEmployeeController struct{}
@@ -34,9 +18,7 @@ type AdminEmployeeController struct{}
 func generateEmployeeID() string {
 	for {
 		id := "QCYC" + fmt.Sprintf("%04d", rand.Intn(10000))
-		var count int64
-		conf.Db.Table("om_employee").Where("employee_id = ?", id).Count(&count)
-		if count == 0 {
+		if !repository.EmployeeIDExists(id) {
 			return id
 		}
 	}
@@ -59,10 +41,7 @@ func (a *AdminEmployeeController) Add(c *gin.Context) {
 	}
 
 	employeeID := generateEmployeeID()
-	err := conf.Db.Exec(
-		"INSERT INTO om_employee (employee_id, name, password, phone, id_card, entry_date, department, position, audit_status) VALUES (?,?,?,?,?,?,?,?,?)",
-		employeeID, req.Name, req.Password, req.Phone, req.IDCard, req.EntryDate, req.Department, req.Position, 0,
-	).Error
+	err := repository.InsertEmployee(employeeID, req.Name, req.Password, req.Phone, req.IDCard, req.EntryDate, req.Department, req.Position)
 	if err != nil {
 		// 对齐 Java OmEmployeeController：唯一键冲突按异常信息区分是手机号重复还是其他字段重复。
 		msg := err.Error()
@@ -80,8 +59,7 @@ func (a *AdminEmployeeController) Add(c *gin.Context) {
 
 // GetByName GET /om/employee/getByName?name=
 func (a *AdminEmployeeController) GetByName(c *gin.Context) {
-	var e employeeDTO
-	err := conf.Db.Raw(employeeSelect+" WHERE name = ?", c.Query("name")).Scan(&e).Error
+	e, err := repository.EmployeeByName(c.Query("name"))
 	if err != nil {
 		c.JSON(http.StatusOK, ResultError(500, "查询异常："+err.Error()))
 		return
@@ -95,8 +73,8 @@ func (a *AdminEmployeeController) GetByName(c *gin.Context) {
 
 // GetAll GET /om/employee/getAll（对齐 Java OmEmployeeMapper.selectAll：按入职日期倒序）。
 func (a *AdminEmployeeController) GetAll(c *gin.Context) {
-	var employees []employeeDTO
-	if err := conf.Db.Raw(employeeSelect + " ORDER BY entry_date DESC").Scan(&employees).Error; err != nil {
+	employees, err := repository.AllEmployees()
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(500, "查询异常："+err.Error()))
 		return
 	}
@@ -106,13 +84,11 @@ func (a *AdminEmployeeController) GetAll(c *gin.Context) {
 // DeleteById DELETE /om/employee/deleteById?employeeId=
 func (a *AdminEmployeeController) DeleteById(c *gin.Context) {
 	employeeID := c.Query("employeeId")
-	var count int64
-	conf.Db.Table("om_employee").Where("employee_id = ?", employeeID).Count(&count)
-	if count == 0 {
+	if !repository.EmployeeExists(employeeID) {
 		c.JSON(http.StatusOK, ResultError(500, "运维职工信息删除失败，可能是员工不存在"))
 		return
 	}
-	conf.Db.Table("om_employee").Where("employee_id = ?", employeeID).Delete(nil)
+	repository.DeleteEmployee(employeeID)
 	c.JSON(http.StatusOK, Result{Success: true, Code: 200, Msg: "运维职工信息删除成功", Data: true})
 }
 
@@ -124,8 +100,8 @@ func (a *AdminEmployeeController) UpdateStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(500, "审核状态更新失败，可能是员工不存在或状态值不合法"))
 		return
 	}
-	res := conf.Db.Table("om_employee").Where("employee_id = ?", employeeID).Update("audit_status", status)
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdateEmployeeStatus(employeeID, status)
+	if rowsAffected == 0 {
 		c.JSON(http.StatusOK, ResultError(500, "审核状态更新失败，可能是员工不存在或状态值不合法"))
 		return
 	}
