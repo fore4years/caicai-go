@@ -13,17 +13,17 @@ import (
 
 // hotelDTO 对应 Java domain.Hotel（hotel_tbl，驼峰）。
 type hotelDTO struct {
-	ID            int32          `json:"id"`
+	CreatTime     *LocalDateTime `json:"creatTime,omitempty"`
 	Openid        string         `json:"openid,omitempty"`
 	HotelName     string         `json:"hotelName,omitempty"`
 	HotelAddress  string         `json:"hotelAddress,omitempty"`
-	ParkingNumber int32          `json:"parkingNumber,omitempty"`
 	Phone         string         `json:"phone,omitempty"`
 	Email         string         `json:"email,omitempty"`
 	HotelTime     string         `json:"hotelTime,omitempty"`
+	ID            int32          `json:"id"`
+	ParkingNumber int32          `json:"parkingNumber,omitempty"`
 	HotelImgID    int32          `json:"hotelImgId,omitempty"`
 	Review        int32          `json:"review,omitempty"`
-	CreatTime     *LocalDateTime `json:"creatTime,omitempty"`
 }
 
 func hotelToDTO(h model.HotelTbl) hotelDTO {

@@ -65,26 +65,26 @@ type chargeDTO struct {
 // parkingSpaceDTO 对应 Java model.ParkingSpacesBean（驼峰）。
 // price_mode / overtime_fee 用 int（DB 值可为 0/1/2），不能用 model 里的 bool。
 type parkingSpaceDTO struct {
-	ID            int32           `gorm:"column:id" json:"id"`
 	Point         string          `gorm:"column:point" json:"point,omitempty"`
 	Place         string          `gorm:"column:place" json:"place,omitempty"`
 	Name          string          `gorm:"column:name" json:"name,omitempty"`
 	Openid        string          `gorm:"column:openid" json:"openid,omitempty"`
-	LotID         int32           `gorm:"column:lot_id" json:"lotId,omitempty"`
 	LockID        string          `gorm:"column:lock_id" json:"lockId,omitempty"`
 	SpacesCode    string          `gorm:"column:spaces_code" json:"spacesCode,omitempty"`
-	ChargingGunID int32           `gorm:"column:charging_gun_id" json:"chargingGunId,omitempty"`
 	OpenTime      string          `gorm:"column:open_time" json:"openTime,omitempty"`
 	CloseTime     string          `gorm:"column:close_time" json:"closeTime,omitempty"`
-	ImageID       int32           `gorm:"column:image_id" json:"imageId,omitempty"`
-	Enable        bool            `gorm:"column:enable" json:"enable"`
-	Certificate   int32           `gorm:"column:certificate" json:"certificate,omitempty"`
-	OvertimeFee   int             `gorm:"column:overtime_fee" json:"overtimeFee,omitempty"`
 	Service       decimal.Decimal `gorm:"column:service" json:"service,omitempty"`
 	ServiceFee    decimal.Decimal `gorm:"column:service_fee" json:"serviceFee,omitempty"`
+	State         string          `gorm:"column:state" json:"state,omitempty"`
+	OvertimeFee   int             `gorm:"column:overtime_fee" json:"overtimeFee,omitempty"`
 	PriceMode     int             `gorm:"column:price_mode" json:"priceMode,omitempty"`
 	Distance      float64         `gorm:"column:distance" json:"distance,omitempty"`
-	State         string          `gorm:"column:state" json:"state,omitempty"`
+	ID            int32           `gorm:"column:id" json:"id"`
+	LotID         int32           `gorm:"column:lot_id" json:"lotId,omitempty"`
+	ChargingGunID int32           `gorm:"column:charging_gun_id" json:"chargingGunId,omitempty"`
+	ImageID       int32           `gorm:"column:image_id" json:"imageId,omitempty"`
+	Certificate   int32           `gorm:"column:certificate" json:"certificate,omitempty"`
+	Enable        bool            `gorm:"column:enable" json:"enable"`
 }
 
 // AdminPlaceController 对齐 Java System.controller.PlaceListCon。

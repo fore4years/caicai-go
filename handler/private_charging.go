@@ -46,16 +46,16 @@ func saveImageFromCtx(ctx *gin.Context) (int32, bool) {
 
 // privateShareChargingDTO 对应 Java domain.vo.PrivateShareChargingVo。
 type privateShareChargingDTO struct {
-	ID                 int32           `json:"id,omitempty"`
 	CommunityName      string          `json:"communityName,omitempty"`
 	CommunitySpacesNum string          `json:"communitySpacesNum,omitempty"`
 	ProductType        string          `json:"productType,omitempty"`
 	ElectricityType    string          `json:"electricityType,omitempty"`
 	ShareTime          string          `json:"shareTime,omitempty"`
-	ExchangePlace      bool            `json:"exchangePlace,omitempty"`
 	Fee                decimal.Decimal `json:"fee,omitempty"`
-	ImageID            int32           `json:"imageId,omitempty"`
 	DistanceKm         float64         `json:"distanceKm,omitempty"`
+	ID                 int32           `json:"id,omitempty"`
+	ImageID            int32           `json:"imageId,omitempty"`
+	ExchangePlace      bool            `json:"exchangePlace,omitempty"`
 }
 
 func privateShareChargingToDTO(p model.PrivateChargingTbl) privateShareChargingDTO {

@@ -129,3 +129,30 @@ func FindOrderByOrderid(orderid string) (*model.OrderTbl, error) {
 	}
 	return &order, nil
 }
+
+// CountPrivateChargingByPhone 统计某手机号私桩数量。
+func CountPrivateChargingByPhone(phone string) int64 {
+	var total int64
+	conf.Db.Model(&model.PrivateChargingTbl{}).Where("phone LIKE ?", "%"+phone+"%").Count(&total)
+	return total
+}
+
+// PagePrivateChargingByPhone 分页查询某手机号私桩。
+func PagePrivateChargingByPhone(phone string, offset, limit int) []model.PrivateChargingTbl {
+	var rows []model.PrivateChargingTbl
+	conf.Db.Model(&model.PrivateChargingTbl{}).Where("phone LIKE ?", "%"+phone+"%").
+		Offset(offset).Limit(limit).Find(&rows)
+	return rows
+}
+
+// UpdatePrivateChargingStatus 更新私桩审核状态，返回受影响行数。
+func UpdatePrivateChargingStatus(id, status int32) int64 {
+	res := conf.Db.Model(&model.PrivateChargingTbl{}).Where("id = ?", id).Update("status", status)
+	return res.RowsAffected
+}
+
+// UpdatePrivateChargingStatusByIDs 批量更新私桩审核状态，返回受影响行数。
+func UpdatePrivateChargingStatusByIDs(ids []int32, status int32) int64 {
+	res := conf.Db.Model(&model.PrivateChargingTbl{}).Where("id IN ?", ids).Update("status", status)
+	return res.RowsAffected
+}

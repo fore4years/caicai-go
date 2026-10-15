@@ -16,14 +16,14 @@ import (
 
 // privatePlaceDTO 对应 Java domain.PrivatePlace（驼峰）。
 type privatePlaceDTO struct {
-	ID            int32          `json:"id,omitempty"`
-	Point         model.Point    `json:"point,omitempty"`
-	Place         string         `json:"place,omitempty"`
-	Openid        string         `json:"openid,omitempty"`
-	ChargingGunID int32          `json:"chargingGunId,omitempty"`
-	SpacesCode    string         `json:"spacesCode,omitempty"`
 	CreateTime    *LocalDateTime `json:"createTime,omitempty"`
 	UpdateTime    *LocalDateTime `json:"updateTime,omitempty"`
+	Place         string         `json:"place,omitempty"`
+	Openid        string         `json:"openid,omitempty"`
+	SpacesCode    string         `json:"spacesCode,omitempty"`
+	Point         model.Point    `json:"point,omitempty"`
+	ID            int32          `json:"id,omitempty"`
+	ChargingGunID int32          `json:"chargingGunId,omitempty"`
 }
 
 func privatePlaceToDTO(p model.PrivatePlaceTbl) privatePlaceDTO {
@@ -41,18 +41,18 @@ func privatePlaceToDTO(p model.PrivatePlaceTbl) privatePlaceDTO {
 
 // freeChargingUserDTO 对应 Java domain.FreeChargingUser（驼峰）。
 type freeChargingUserDTO struct {
-	ID                int32          `json:"id,omitempty"`
+	StartDate         *LocalDateTime `json:"startDate,omitempty"`
+	EndDate           *LocalDateTime `json:"endDate,omitempty"`
+	CreateTime        *LocalDateTime `json:"createTime,omitempty"`
+	UpdateTime        *LocalDateTime `json:"updateTime,omitempty"`
 	Openid            string         `json:"openid,omitempty"`
 	Name              string         `json:"name,omitempty"`
 	Phone             string         `json:"phone,omitempty"`
 	Email             string         `json:"email,omitempty"`
-	ChargingStationID int32          `json:"chargingStationId,omitempty"`
-	StartDate         *LocalDateTime `json:"startDate,omitempty"`
-	EndDate           *LocalDateTime `json:"endDate,omitempty"`
-	Status            int            `json:"status,omitempty"`
-	CreateTime        *LocalDateTime `json:"createTime,omitempty"`
-	UpdateTime        *LocalDateTime `json:"updateTime,omitempty"`
 	Reviser           string         `json:"reviser,omitempty"`
+	Status            int            `json:"status,omitempty"`
+	ID                int32          `json:"id,omitempty"`
+	ChargingStationID int32          `json:"chargingStationId,omitempty"`
 }
 
 func freeChargingUserToDTO(u model.FreeChargingUsersTbl) freeChargingUserDTO {

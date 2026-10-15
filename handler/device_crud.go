@@ -19,17 +19,17 @@ import (
 
 // chargingGunDTO 对应 Java model.ChargingGunBean（tab_charging_gun）。
 type chargingGunDTO struct {
-	ID         int32           `json:"id"`
+	UpdateTime *LocalDateTime  `json:"updateTime,omitempty"`
+	Product    *productDTO     `json:"product,omitempty"`
 	Name       string          `json:"name,omitempty"`
 	UnitPrice  decimal.Decimal `json:"unitPrice,omitempty"`
-	MeterValue int32           `json:"meterValue,omitempty"`
 	State      string          `json:"state,omitempty"`
 	ProductID  string          `json:"productId,omitempty"`
 	Direction  string          `json:"direction,omitempty"`
+	ID         int32           `json:"id"`
+	MeterValue int32           `json:"meterValue,omitempty"`
 	Model      int32           `json:"model,omitempty"`
 	Pwm        int32           `json:"pwm,omitempty"`
-	UpdateTime *LocalDateTime  `json:"updateTime,omitempty"`
-	Product    *productDTO     `json:"product,omitempty"`
 }
 
 func chargingGunToDTO(g model.TabChargingGun) chargingGunDTO {
@@ -55,17 +55,17 @@ func chargingGunToDTO(g model.TabChargingGun) chargingGunDTO {
 
 // stationManagementDTO 对应 Java domain.ChargingStationManagement。
 type stationManagementDTO struct {
-	ID         int32          `json:"id"`
+	CreateTime *LocalDateTime `json:"createTime,omitempty"`
+	UpdateTime *LocalDateTime `json:"updateTime,omitempty"`
 	Openid     string         `json:"openid,omitempty"`
 	Name       string         `json:"name,omitempty"`
 	Place      string         `json:"place,omitempty"`
-	ParkingNum int32          `json:"parkingNum,omitempty"`
 	ProductID  string         `json:"productId,omitempty"`
 	Phone      string         `json:"phone,omitempty"`
 	Email      string         `json:"email,omitempty"`
 	Reviser    string         `json:"reviser,omitempty"`
-	CreateTime *LocalDateTime `json:"createTime,omitempty"`
-	UpdateTime *LocalDateTime `json:"updateTime,omitempty"`
+	ID         int32          `json:"id"`
+	ParkingNum int32          `json:"parkingNum,omitempty"`
 }
 
 func stationManagementToDTO(m model.ChargingStationManagementTbl) stationManagementDTO {
@@ -128,12 +128,12 @@ func receptacleToDTO(r model.ReceptacleTbl) receptacleDTO {
 
 // imeiDTO 对应 Java domain.ImeiEntity（imei_tab）。
 type imeiDTO struct {
-	ID              int64          `json:"id"`
-	ChargingStation string         `json:"chargingStation,omitempty"`
-	ChargingSocket  string         `json:"chargingSocket,omitempty"`
-	Status          int32          `json:"status,omitempty"`
 	CreatedTime     *LocalDateTime `json:"createdTime,omitempty"`
 	UpdatedTime     *LocalDateTime `json:"updatedTime,omitempty"`
+	ChargingStation string         `json:"chargingStation,omitempty"`
+	ChargingSocket  string         `json:"chargingSocket,omitempty"`
+	ID              int64          `json:"id"`
+	Status          int32          `json:"status,omitempty"`
 	Deleted         int32          `json:"deleted,omitempty"`
 }
 

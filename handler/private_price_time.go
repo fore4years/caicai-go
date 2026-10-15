@@ -25,18 +25,18 @@ type privatePriceDTO struct {
 
 // privatePriceTimeDTO 对应 Java PrivatePriceTimeBean（tab_price_time / tab_price_time_{season}）。
 type privatePriceTimeDTO struct {
-	ID        int32            `json:"id"`
+	Price     *privatePriceDTO `json:"price,omitempty"`
 	StartTime string           `json:"startTime,omitempty"`
 	OverTime  string           `json:"overTime,omitempty"`
+	ID        int32            `json:"id"`
 	PriceID   int32            `json:"priceId,omitempty"`
-	Price     *privatePriceDTO `json:"price,omitempty"`
 }
 
 // privatePriceTimeRow 时段电价查询行（时间用 TIME_FORMAT 格式化为字符串，避免 time.Time 解析歧义）。
 type privatePriceTimeRow struct {
-	ID        int32  `gorm:"column:id"`
 	StartTime string `gorm:"column:start_time"`
 	OverTime  string `gorm:"column:over_time"`
+	ID        int32  `gorm:"column:id"`
 	PriceID   int32  `gorm:"column:price_id"`
 }
 

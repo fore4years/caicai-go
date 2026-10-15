@@ -44,7 +44,6 @@ func zbbAreaToDTO(a model.ZbbArea) zbbAreaDTO {
 
 // zbbAreaReq 对应 Java ZbbAreaBean 的请求体（驼峰字段名，与 model.ZbbArea 的蛇形 json tag 不同）。
 type zbbAreaReq struct {
-	Pid         int32   `json:"pid"`
 	Code        string  `json:"code"`
 	Name        string  `json:"name"`
 	Fullname    string  `json:"fullname"`
@@ -53,6 +52,7 @@ type zbbAreaReq struct {
 	FullLetter  string  `json:"fullLetter"`
 	Lat         float64 `json:"lat"`
 	Lng         float64 `json:"lng"`
+	Pid         int32   `json:"pid"`
 	Level       int32   `json:"level"`
 }
 

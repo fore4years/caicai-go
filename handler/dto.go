@@ -114,41 +114,41 @@ type PlaceDtoDTO struct {
 // OrderDTO 对应 Java domain.OrderBean，JSON 字段名对齐 Jackson 序列化（驼峰）。
 // 时间字段（LocalDateTime）使用可空指针，nil 时省略，对齐 Java 的 non_null 配置。
 type OrderDTO struct {
-	Orderid              string          `json:"orderid,omitempty"`
-	Openid               string          `json:"openid,omitempty"`
-	Lockid               string          `json:"lockid,omitempty"`
 	ReserveTime          *LocalDateTime  `json:"reserveTime,omitempty"`
 	BeginTime            *LocalDateTime  `json:"beginTime,omitempty"`
 	OverTime             *LocalDateTime  `json:"overTime,omitempty"`
-	State                string          `json:"state,omitempty"`
-	TotalPrice           decimal.Decimal `json:"totalPrice,omitempty"`
 	CloseTime            *LocalDateTime  `json:"closeTime,omitempty"`
-	PlateNum             string          `json:"plateNum,omitempty"`
-	SpacesID             int32           `json:"spacesId,omitempty"`
 	BookingStartTime     *LocalDateTime  `json:"bookingStartTime,omitempty"`
 	BookingEndTime       *LocalDateTime  `json:"bookingEndTime,omitempty"`
+	SettlementTime       *LocalDateTime  `json:"settlementTime,omitempty"`
+	GunDisconnectTime    *LocalDateTime  `json:"gunDisconnectTime,omitempty"`
+	NeighborRelocateTime *LocalDateTime  `json:"neighborRelocateTime,omitempty"`
+	MoveCarTime          *LocalDateTime  `json:"moveCarTime,omitempty"`
+	Orderid              string          `json:"orderid,omitempty"`
+	Openid               string          `json:"openid,omitempty"`
+	Lockid               string          `json:"lockid,omitempty"`
+	State                string          `json:"state,omitempty"`
+	TotalPrice           decimal.Decimal `json:"totalPrice,omitempty"`
+	PlateNum             string          `json:"plateNum,omitempty"`
 	ConsumptionLocation  string          `json:"consumptionLocation,omitempty"`
 	ConsumptionType      string          `json:"consumptionType,omitempty"`
 	ChargingRates        decimal.Decimal `json:"chargingRates,omitempty"`
-	ChargerPower         int32           `json:"chargerPower,omitempty"`
 	StartMode            string          `json:"startMode,omitempty"`
 	StopMode             string          `json:"stopMode,omitempty"`
 	ChargingTime         string          `json:"chargingTime,omitempty"`
-	SettlementTime       *LocalDateTime  `json:"settlementTime,omitempty"`
 	BasicConsumption     decimal.Decimal `json:"basicConsumption,omitempty"`
 	GiftAmount           string          `json:"giftAmount,omitempty"`
 	TwiceChargeTime      string          `json:"twiceChargeTime,omitempty"`
 	Pid                  string          `json:"pid,omitempty"`
-	ChargingDegree       float64         `json:"chargingDegree,omitempty"`
 	FullTime             string          `json:"fullTime,omitempty"`
 	LeaveTime            string          `json:"leaveTime,omitempty"`
-	ChargeGunPull        int32           `json:"chargeGunPull,omitempty"`
-	GunDisconnectTime    *LocalDateTime  `json:"gunDisconnectTime,omitempty"`
 	DecideAmount         decimal.Decimal `json:"decideAmount,omitempty"`
-	NeighborRelocateTime *LocalDateTime  `json:"neighborRelocateTime,omitempty"`
-	MoveCarTime          *LocalDateTime  `json:"moveCarTime,omitempty"`
 	ImageID              string          `json:"imageId,omitempty"`
 	WechatTransactionID  string          `json:"wechatTransactionId,omitempty"`
+	ChargingDegree       float64         `json:"chargingDegree,omitempty"`
+	SpacesID             int32           `json:"spacesId,omitempty"`
+	ChargerPower         int32           `json:"chargerPower,omitempty"`
+	ChargeGunPull        int32           `json:"chargeGunPull,omitempty"`
 }
 
 // ChargeOrderResultDTO 对应 Java dto.ChargeOrderResultDto。注意 plate_num 是下划线字段名。

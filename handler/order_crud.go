@@ -24,13 +24,13 @@ import (
 // ============ DTO ============
 
 type tabOrderElectronicDTO struct {
-	ID          int32          `json:"id"`
+	CreateTime  *LocalDateTime `json:"createTime,omitempty"`
+	UpdateTime  *LocalDateTime `json:"updateTime,omitempty"`
 	OrderID     string         `json:"orderId,omitempty"`
 	StartValue  float64        `json:"startValue,omitempty"`
 	OverValue   float64        `json:"overValue,omitempty"`
+	ID          int32          `json:"id"`
 	PriceTimeID int32          `json:"priceTimeId,omitempty"`
-	CreateTime  *LocalDateTime `json:"createTime,omitempty"`
-	UpdateTime  *LocalDateTime `json:"updateTime,omitempty"`
 }
 
 func tabOrderElectronicToDTO(e model.TabOrderElectronic) tabOrderElectronicDTO {

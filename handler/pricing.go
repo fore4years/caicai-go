@@ -21,11 +21,11 @@ type priceDTO struct {
 // priceTimeDTO 对应 Java ChargingPriceTimeBean / PriceTimeBean。
 // startTime/overTime 对齐 Java LocalTime 的 ISO 序列化（HH:mm:ss）。
 type priceTimeDTO struct {
-	ID        int32     `json:"id,omitempty"`
+	Price     *priceDTO `json:"price,omitempty"`
 	StartTime string    `json:"startTime,omitempty"`
 	OverTime  string    `json:"overTime,omitempty"`
+	ID        int32     `json:"id,omitempty"`
 	PriceID   int32     `json:"priceId,omitempty"`
-	Price     *priceDTO `json:"price,omitempty"`
 }
 
 // chargingPriceToDTO 将 model.ChargingPriceTbl 转为 priceDTO（只保留 Java bean 的四列）。
@@ -60,9 +60,9 @@ func findTabPrice(id int32) *priceDTO {
 
 // priceTimeRow 用于扫描 tab_price_time 的行（时间列转 HH:mm:ss 字符串，避免 TIME 扫描歧义）。
 type priceTimeRow struct {
-	ID        int32
 	StartTime string
 	OverTime  string
+	ID        int32
 	PriceID   int32
 }
 

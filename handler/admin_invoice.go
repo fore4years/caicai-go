@@ -50,15 +50,15 @@ func invoiceToDTO(i model.Invoice) invoiceDTO {
 
 // invoiceDetailDTO 对应 Java System.domain.InvoiceDetailVo（发票明细视图对象，含关联的手机号与抬头信息）。
 type invoiceDetailDTO struct {
-	ID          int32           `json:"id"`
+	InvoiceDate *LocalDateTime  `json:"invoiceDate,omitempty"`
+	ApplyTime   *LocalDateTime  `json:"applyTime,omitempty"`
 	Openid      string          `json:"openid,omitempty"`
 	Phone       string          `json:"phone,omitempty"`
 	InvoiceType string          `json:"invoiceType,omitempty"`
-	InvoiceDate *LocalDateTime  `json:"invoiceDate,omitempty"`
-	ApplyTime   *LocalDateTime  `json:"applyTime,omitempty"`
 	TitleName   string          `json:"titleName,omitempty"`
 	Email       string          `json:"email,omitempty"`
 	Amount      decimal.Decimal `json:"amount,omitempty"`
+	ID          int32           `json:"id"`
 	State       int32           `json:"state,omitempty"`
 }
 

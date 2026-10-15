@@ -198,15 +198,15 @@ type ReOrderPowerController struct{}
 
 // reOrderPowerDTO 对应 Java domain.ReOrderPower（re_order_electronic_tbl，驼峰）。
 type reOrderPowerDTO struct {
-	ID          int32          `json:"id"`
-	OrderID     string         `json:"orderId,omitempty"`
-	StartValue  float64        `json:"startValue,omitempty"`
-	OverValue   float64        `json:"overValue,omitempty"`
-	PriceTimeID int32          `json:"priceTimeId,omitempty"`
-	Power       string         `json:"power,omitempty"`
-	Count       int32          `json:"count,omitempty"`
 	CreateTime  *LocalDateTime `json:"createTime,omitempty"`
 	UpdateTime  *LocalDateTime `json:"updateTime,omitempty"`
+	OrderID     string         `json:"orderId,omitempty"`
+	Power       string         `json:"power,omitempty"`
+	StartValue  float64        `json:"startValue,omitempty"`
+	OverValue   float64        `json:"overValue,omitempty"`
+	ID          int32          `json:"id"`
+	PriceTimeID int32          `json:"priceTimeId,omitempty"`
+	Count       int32          `json:"count,omitempty"`
 }
 
 func reOrderPowerToDTO(r model.ReOrderElectronicTbl) reOrderPowerDTO {

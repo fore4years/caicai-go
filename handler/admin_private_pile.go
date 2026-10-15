@@ -6,13 +6,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // privateChargingDTO 对应 Java domain.PrivateChargingBean（驼峰）。
 type privateChargingDTO struct {
-	ID                 int32           `json:"id"`
+	CreateTime         *LocalDateTime  `json:"createTime,omitempty"`
+	UpdateTime         *LocalDateTime  `json:"updateTime,omitempty"`
 	Openid             string          `json:"openid,omitempty"`
 	Name               string          `json:"name,omitempty"`
 	IDCard             string          `json:"idCard,omitempty"`
@@ -24,18 +25,17 @@ type privateChargingDTO struct {
 	ElectricityType    string          `json:"electricityType,omitempty"`
 	ProductID          string          `json:"productId,omitempty"`
 	SpacesNum          string          `json:"spacesNum,omitempty"`
+	ShareTime          string          `json:"shareTime,omitempty"`
+	Fee                decimal.Decimal `json:"fee,omitempty"`
+	ID                 int32           `json:"id"`
 	ImageID            int32           `json:"imageId,omitempty"`
 	Status             int32           `json:"status,omitempty"`
 	OneClickOpening    int32           `json:"oneClickOpening,omitempty"`
-	ShareTime          string          `json:"shareTime,omitempty"`
-	ExchangePlace      bool            `json:"exchangePlace,omitempty"`
-	Fee                decimal.Decimal `json:"fee,omitempty"`
-	OfficialUse        bool            `json:"officialUse,omitempty"`
-	OvertimeFee        bool            `json:"overtimeFee,omitempty"`
 	LedID              int32           `json:"ledId,omitempty"`
 	HasCpLine          int32           `json:"hasCpLine,omitempty"`
-	CreateTime         *LocalDateTime  `json:"createTime,omitempty"`
-	UpdateTime         *LocalDateTime  `json:"updateTime,omitempty"`
+	ExchangePlace      bool            `json:"exchangePlace,omitempty"`
+	OfficialUse        bool            `json:"officialUse,omitempty"`
+	OvertimeFee        bool            `json:"overtimeFee,omitempty"`
 }
 
 func privateChargingToDTO(p model.PrivateChargingTbl) privateChargingDTO {
@@ -74,9 +74,9 @@ type AdminPrivatePileController struct{}
 func (a *AdminPrivatePileController) GetAuditList(c *gin.Context) {
 	current, size := parsePage(c)
 	var total int64
-	conf.Db.Model(&model.PrivateChargingTbl{}).Count(&total)
+	repository.Count(&model.PrivateChargingTbl{}, &total)
 	var rows []model.PrivateChargingTbl
-	conf.Db.Model(&model.PrivateChargingTbl{}).Order("create_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.PrivateChargingTbl{}, "create_time desc", pageOffset(current, size), size, &rows)
 	list := make([]privateChargingDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, privateChargingToDTO(r))
@@ -88,11 +88,8 @@ func (a *AdminPrivatePileController) GetAuditList(c *gin.Context) {
 func (a *AdminPrivatePileController) SearchByPhone(c *gin.Context) {
 	current, size := parsePage(c)
 	phone := c.Query("phone")
-	var total int64
-	conf.Db.Model(&model.PrivateChargingTbl{}).Where("phone LIKE ?", "%"+phone+"%").Count(&total)
-	var rows []model.PrivateChargingTbl
-	conf.Db.Model(&model.PrivateChargingTbl{}).Where("phone LIKE ?", "%"+phone+"%").
-		Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	total := repository.CountPrivateChargingByPhone(phone)
+	rows := repository.PagePrivateChargingByPhone(phone, pageOffset(current, size), size)
 	list := make([]privateChargingDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, privateChargingToDTO(r))
@@ -110,8 +107,8 @@ func (a *AdminPrivatePileController) UpdateStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Model(&model.PrivateChargingTbl{}).Where("id = ?", req.ID).Update("status", req.Status)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdatePrivateChargingStatus(req.ID, req.Status)
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // BatchUpdateStatus POST /system/privatePile/batchUpdateStatus body {ids:[],status}
@@ -128,6 +125,6 @@ func (a *AdminPrivatePileController) BatchUpdateStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Model(&model.PrivateChargingTbl{}).Where("id IN ?", req.IDs).Update("status", req.Status)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdatePrivateChargingStatusByIDs(req.IDs, req.Status)
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
