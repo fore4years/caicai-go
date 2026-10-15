@@ -156,3 +156,54 @@ func UpdatePrivateChargingStatusByIDs(ids []int32, status int32) int64 {
 	res := conf.Db.Model(&model.PrivateChargingTbl{}).Where("id IN ?", ids).Update("status", status)
 	return res.RowsAffected
 }
+
+// OrdersByOpenid 按开始时间倒序分页查询某用户订单。
+func OrdersByOpenid(openid string, offset, limit int) ([]model.OrderTbl, error) {
+	var orders []model.OrderTbl
+	err := conf.Db.Where("openid = ?", openid).Order("begin_time desc").Limit(limit).Offset(offset).Find(&orders).Error
+	return orders, err
+}
+
+// PlaceByOrderidJoin 按订单关联查询车位（order→lock→place），返回是否找到。
+func PlaceByOrderidJoin(orderid string) (*model.PlaceTbl, bool) {
+	var place model.PlaceTbl
+	res := conf.Db.Raw(
+		"SELECT p.* FROM order_tbl o JOIN lock_tbl l ON o.lockid = l.lockid JOIN place_tbl p ON p.placeid = l.placeid WHERE o.orderid = ?",
+		orderid,
+	).Scan(&place)
+	if res.Error != nil || res.RowsAffected == 0 {
+		return nil, false
+	}
+	return &place, true
+}
+
+// UserPlateAndPhone 查询用户车牌号与手机号。
+func UserPlateAndPhone(openid string) (string, string, error) {
+	var msg struct {
+		PlateNum string
+		Phone    string
+	}
+	err := conf.Db.Raw("SELECT plate_num, phone FROM user_tbl WHERE openid = ?", openid).Scan(&msg).Error
+	return msg.PlateNum, msg.Phone, err
+}
+
+// UpdateOrderFields 按 orderid 更新订单字段，返回受影响行数。
+func UpdateOrderFields(orderid string, updates map[string]interface{}) int64 {
+	res := conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderid).Updates(updates)
+	return res.RowsAffected
+}
+
+// FindChargeOrderByOrderid 按 orderid 查询充电订单。
+func FindChargeOrderByOrderid(orderid string) (*model.ChargeOrderTbl, error) {
+	var o model.ChargeOrderTbl
+	if err := conf.Db.Where("orderid = ?", orderid).First(&o).Error; err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+// UpdateChargeOrderState 更新充电订单状态，返回受影响行数。
+func UpdateChargeOrderState(orderid, state string) int64 {
+	res := conf.Db.Model(&model.ChargeOrderTbl{}).Where("orderid = ?", orderid).Update("state", state)
+	return res.RowsAffected
+}

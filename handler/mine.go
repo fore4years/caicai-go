@@ -9,9 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/logger"
-	"caicai-go/model"
 	"caicai-go/repository"
 )
 
@@ -24,8 +22,8 @@ func (w *WodeController) GetOrders(c *gin.Context) {
 	lueguo, _ := strconv.Atoi(c.DefaultQuery("lueguo", "0"))
 	zhanshi, _ := strconv.Atoi(c.DefaultQuery("zhanshi", "10"))
 
-	var orders []model.OrderTbl
-	if err := conf.Db.Where("openid = ?", openid).Order("begin_time desc").Limit(zhanshi).Offset(lueguo).Find(&orders).Error; err != nil {
+	orders, err := repository.OrdersByOpenid(openid, lueguo, zhanshi)
+	if err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 		c.JSON(http.StatusOK, []OrderDTO{})
 		return
@@ -49,13 +47,8 @@ func (w *WodeController) GetOrderXq(c *gin.Context) {
 	}
 
 	// selectJion: order -> lock -> place
-	var place model.PlaceTbl
-	res := conf.Db.Raw(
-		"SELECT p.* FROM order_tbl o JOIN lock_tbl l ON o.lockid = l.lockid JOIN place_tbl p ON p.placeid = l.placeid WHERE o.orderid = ?",
-		orderid,
-	).Scan(&place)
-	if res.Error == nil && res.RowsAffected > 0 {
-		result["place"] = placeToDTO(place)
+	if place, ok := repository.PlaceByOrderidJoin(orderid); ok {
+		result["place"] = placeToDTO(*place)
 	}
 
 	c.JSON(http.StatusOK, result)
@@ -64,16 +57,13 @@ func (w *WodeController) GetOrderXq(c *gin.Context) {
 // Searchmsg 查询车牌号与手机号（对应 Java wxWodeSer.searchmsg）。
 func (w *WodeController) Searchmsg(c *gin.Context) {
 	openid := c.Query("openid")
-	var msg struct {
-		PlateNum string `json:"plate_num"`
-		Phone    string `json:"phone"`
-	}
-	if err := conf.Db.Raw("SELECT plate_num, phone FROM user_tbl WHERE openid = ?", openid).Scan(&msg).Error; err != nil {
+	plateNum, phone, err := repository.UserPlateAndPhone(openid)
+	if err != nil {
 		logger.Mylog.Err(err).Caller().Send()
 		c.JSON(http.StatusOK, nil)
 		return
 	}
-	c.JSON(http.StatusOK, msg)
+	c.JSON(http.StatusOK, gin.H{"plate_num": plateNum, "phone": phone})
 }
 
 // TimeDifference 比较当前时间与营业时间（对应 Java wxWodeSer.timeDifference）。
@@ -131,8 +121,8 @@ func (w *WodeController) OverOrder(c *gin.Context) {
 		c.JSON(http.StatusOK, "ok")
 		return
 	}
-	var order model.OrderTbl
-	if err := conf.Db.Where("orderid = ?", req.Orderid).First(&order).Error; err != nil {
+	order, err := repository.FindOrderByOrderid(req.Orderid)
+	if err != nil {
 		c.JSON(http.StatusOK, "ok")
 		return
 	}
@@ -188,14 +178,14 @@ func (w *WodeController) OverOrder(c *gin.Context) {
 	}
 
 	// Java orderService.stopLock(orderid) 下发关锁指令，省略。
-	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", place.Placeid).Update("state", "可使用")
+	repository.UpdatePlaceState(place.Placeid, "可使用")
 
 	chargingTime := ""
 	if !isZeroTime(order.BeginTime) {
 		d := now.Sub(timeOrZero(order.BeginTime))
 		chargingTime = time.Time{}.Add(d).Format("15:04:05")
 	}
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", req.Orderid).Updates(map[string]interface{}{
+	repository.UpdateOrderFields(req.Orderid, map[string]interface{}{
 		"over_time":         now,
 		"close_time":        now,
 		"total_price":       totalPrice,
@@ -218,12 +208,12 @@ func (w *WodeController) ChargeOrderPay(c *gin.Context) {
 		c.JSON(http.StatusOK, "fail")
 		return
 	}
-	var o model.ChargeOrderTbl
-	if err := conf.Db.Where("orderid = ?", req.Orderid).First(&o).Error; err != nil {
+	o, err := repository.FindChargeOrderByOrderid(req.Orderid)
+	if err != nil {
 		c.JSON(http.StatusOK, "fail")
 		return
 	}
 	// CaiCaiPayUtil.isPaySuccess() 恒为 true；Java updataByOrderid 会回写其它同值字段（等价于只改 state）。
-	conf.Db.Model(&model.ChargeOrderTbl{}).Where("orderid = ?", o.Orderid).Update("state", "已完成")
+	repository.UpdateChargeOrderState(o.Orderid, "已完成")
 	c.JSON(http.StatusOK, "ok")
 }
