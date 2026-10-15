@@ -5,10 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
-	"caicai-go/model"
 	"caicai-go/repository"
 )
 
@@ -22,22 +19,7 @@ func (a *AdminBalanceController) List(c *gin.Context) {
 	openid := c.Query("openid")
 	phone := c.Query("phone")
 
-	query := func() *gorm.DB {
-		db := conf.Db.Model(&model.UserTbl{}).
-			Where("openid IS NOT NULL AND openid <> '' AND phone IS NOT NULL AND phone <> ''")
-		if openid != "" {
-			db = db.Where("openid LIKE ?", "%"+openid+"%")
-		}
-		if phone != "" {
-			db = db.Where("phone LIKE ?", "%"+phone+"%")
-		}
-		return db
-	}
-
-	var total int64
-	query().Count(&total)
-	var users []model.UserTbl
-	query().Order("openid asc").Offset(pageOffset(current, size)).Limit(size).Find(&users)
+	total, users := repository.ListUsersByBalance(openid, phone, pageOffset(current, size), size)
 
 	list := make([]UserDTO, 0, len(users))
 	for _, u := range users {
@@ -54,17 +36,15 @@ func (a *AdminBalanceController) BalanceSource(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(400, "用户openid不能为空"))
 		return
 	}
-	var u model.UserTbl
-	if err := conf.Db.Where("openid = ?", openid).First(&u).Error; err != nil {
+	u, err := repository.UserByOpenid(c.Request.Context(), openid)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(500, "获取余额来源失败: 用户不存在"))
 		return
 	}
 	currentBalance := u.Balans
 
 	// 查询"已支付"且 remaining_refund_amount > 0 的充值订单，汇总为充值来源（可退）
-	var orders []model.RechargeOrderTbl
-	conf.Db.Where("openid = ? AND order_status = ? AND remaining_refund_amount > ?", openid, "已支付", decimal.Zero).
-		Find(&orders)
+	orders := repository.PaidRechargeOrdersByOpenid(openid)
 
 	rechargeSource := decimal.Zero
 	for _, o := range orders {
@@ -94,18 +74,12 @@ func (a *AdminBalanceController) Recharge(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(400, "充值金额必须大于0"))
 		return
 	}
-	var u model.UserTbl
-	if err := conf.Db.Where("openid = ?", openid).First(&u).Error; err != nil {
+	if _, err := repository.UserByOpenid(c.Request.Context(), openid); err != nil {
 		c.JSON(http.StatusOK, ResultError(500, "充值余额失败: 用户不存在"))
 		return
 	}
 	amt := amount.StringFixed(2)
-	if err := conf.Db.Transaction(func(tx *gorm.DB) error {
-		return tx.Exec(
-			"UPDATE user_tbl SET balans = balans + CAST(? AS DECIMAL(10,2)) WHERE openid = ?",
-			amt, openid,
-		).Error
-	}); err != nil {
+	if err := repository.RechargeBalance(openid, amt); err != nil {
 		c.JSON(http.StatusOK, ResultError(500, "充值余额失败: "+err.Error()))
 		return
 	}
