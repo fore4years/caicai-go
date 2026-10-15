@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
 
 	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // chargingStateDTO 对应 Java domain.ChargingState（charging_state_tbl，驼峰）。
@@ -99,19 +99,7 @@ func (a *AdminChargeStateController) List(c *gin.Context) {
 	current, size := parsePage(c)
 	productID := c.Query("productId")
 
-	query := func() *gorm.DB {
-		db := conf.Db.Model(&model.ChargingStateTbl{})
-		if productID != "" {
-			db = db.Where("product_id = ?", productID)
-		}
-		return db.Order("create_time desc")
-	}
-
-	var total int64
-	query().Count(&total)
-
-	var rows []model.ChargingStateTbl
-	query().Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	total, rows := repository.ListChargingStates(productID, pageOffset(current, size), size)
 
 	list := make([]chargingStateDTO, 0, len(rows))
 	for _, r := range rows {
@@ -127,9 +115,9 @@ type AdminChargeStationController struct{}
 func (a *AdminChargeStationController) GetStationListByPage(c *gin.Context) {
 	current, size := parsePage(c)
 	var total int64
-	conf.Db.Model(&model.ChargingStationTbl{}).Count(&total)
+	repository.Count(&model.ChargingStationTbl{}, &total)
 	var rows []model.ChargingStationTbl
-	conf.Db.Model(&model.ChargingStationTbl{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.ChargingStationTbl{}, "", pageOffset(current, size), size, &rows)
 	list := make([]chargeStationDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, chargeStationToDTO(r))
@@ -139,8 +127,7 @@ func (a *AdminChargeStationController) GetStationListByPage(c *gin.Context) {
 
 // GetStationByPid GET /system/chargeStation/getStationByPid?pid=
 func (a *AdminChargeStationController) GetStationByPid(c *gin.Context) {
-	var rows []model.ChargingStationTbl
-	conf.Db.Model(&model.ChargingStationTbl{}).Where("pid = ?", c.Query("pid")).Find(&rows)
+	rows := repository.ChargingStationsByPidGorm(c.Query("pid"))
 	list := make([]chargeStationDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, chargeStationToDTO(r))
@@ -159,17 +146,12 @@ func (a *AdminChargeStationController) Add(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(400, "产品id不能为空!"))
 		return
 	}
-	var n int64
-	conf.Db.Model(&model.TabProduct{}).Where("pid = ?", req.Pid).Count(&n)
-	if n > 0 {
+	if repository.ProductExistsByPid(req.Pid) {
 		c.JSON(http.StatusOK, ResultError(400, "此产品id已存在，请勿重复添加!"))
 		return
 	}
 	powerMax, _ := strconv.Atoi(req.PowerMax)
-	err := conf.Db.Exec(
-		"INSERT INTO charging_station_tbl (place, name, openid, pid, power_max, longitude, latitude) VALUES (?,?,?,?,?,?,?)",
-		req.Place, req.Name, req.Openid, req.Pid, powerMax, req.Longitude, req.Latitude,
-	).Error
+	err := repository.InsertChargingStation(req.Place, req.Name, req.Openid, req.Pid, powerMax, req.Longitude, req.Latitude)
 	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
@@ -185,20 +167,20 @@ func (a *AdminChargeStationController) UpdateByPid(c *gin.Context) {
 		return
 	}
 	powerMax, _ := strconv.Atoi(req.PowerMax)
-	res := conf.Db.Model(&model.ChargingStationTbl{}).Where("pid = ?", req.Pid).Updates(map[string]interface{}{
+	rowsAffected := repository.UpdateChargingStationByPid(req.Pid, map[string]interface{}{
 		"name":      req.Name,
 		"place":     req.Place,
 		"power_max": powerMax,
 		"longitude": req.Longitude,
 		"latitude":  req.Latitude,
 	})
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // DeleteById DELETE /system/chargeStation/deleteById/:id
 func (a *AdminChargeStationController) DeleteById(c *gin.Context) {
-	res := conf.Db.Where("id = ?", c.Param("id")).Delete(&model.ChargingStationTbl{})
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.DeleteChargingStationByID(c.Param("id"))
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // AdminChargeStationFourController 对齐 Java System.controller.ChargeStationFourCon（四轮车，tab_parking_spaces）。

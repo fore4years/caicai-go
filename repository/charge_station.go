@@ -2,6 +2,7 @@ package repository
 
 import (
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 
 	"caicai-go/conf"
 	"caicai-go/model"
@@ -128,4 +129,54 @@ func ReOrderPowerMaxByOrderid(orderID string) decimal.Decimal {
 	var maxPower decimal.Decimal
 	conf.Db.Raw("SELECT COALESCE(max_power,0) FROM re_order_electronic_tbl WHERE order_id = ? LIMIT 1", orderID).Row().Scan(&maxPower)
 	return maxPower
+}
+
+// ListChargingStates 分页查询充电状态（create_time 倒序）。
+func ListChargingStates(productID string, offset, limit int) (int64, []model.ChargingStateTbl) {
+	query := func() *gorm.DB {
+		db := conf.Db.Model(&model.ChargingStateTbl{})
+		if productID != "" {
+			db = db.Where("product_id = ?", productID)
+		}
+		return db.Order("create_time desc")
+	}
+	var total int64
+	query().Count(&total)
+	var rows []model.ChargingStateTbl
+	query().Offset(offset).Limit(limit).Find(&rows)
+	return total, rows
+}
+
+// ChargingStationsByPidGorm 按 pid 查询充电站列表（gorm）。
+func ChargingStationsByPidGorm(pid string) []model.ChargingStationTbl {
+	var rows []model.ChargingStationTbl
+	conf.Db.Model(&model.ChargingStationTbl{}).Where("pid = ?", pid).Find(&rows)
+	return rows
+}
+
+// ProductExistsByPid 判断产品 pid 是否存在。
+func ProductExistsByPid(pid string) bool {
+	var n int64
+	conf.Db.Model(&model.TabProduct{}).Where("pid = ?", pid).Count(&n)
+	return n > 0
+}
+
+// InsertChargingStation 新增充电站。
+func InsertChargingStation(place, name, openid, pid string, powerMax int, longitude, latitude float64) error {
+	return conf.Db.Exec(
+		"INSERT INTO charging_station_tbl (place, name, openid, pid, power_max, longitude, latitude) VALUES (?,?,?,?,?,?,?)",
+		place, name, openid, pid, powerMax, longitude, latitude,
+	).Error
+}
+
+// UpdateChargingStationByPid 按 pid 更新充电站，返回受影响行数。
+func UpdateChargingStationByPid(pid string, updates map[string]interface{}) int64 {
+	res := conf.Db.Model(&model.ChargingStationTbl{}).Where("pid = ?", pid).Updates(updates)
+	return res.RowsAffected
+}
+
+// DeleteChargingStationByID 删除充电站，返回受影响行数。
+func DeleteChargingStationByID(id string) int64 {
+	res := conf.Db.Where("id = ?", id).Delete(&model.ChargingStationTbl{})
+	return res.RowsAffected
 }
