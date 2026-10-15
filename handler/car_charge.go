@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
 	"caicai-go/repository"
 )
@@ -93,6 +92,15 @@ func userCarToDTO(u model.UsercarTbl) userCarDTO {
 	return userCarDTO{Openid: u.Openid, PlateNum: u.PlateNum, State: u.State}
 }
 
+// userCarList 将车辆列表映射为 DTO 列表。
+func userCarList(rows []model.UsercarTbl) []userCarDTO {
+	list := make([]userCarDTO, 0, len(rows))
+	for _, u := range rows {
+		list = append(list, userCarToDTO(u))
+	}
+	return list
+}
+
 // lockPlaceidDTO 对应 Java placeDao.getByLockid 只 select l.placeid 的 LockBean 序列化结果。
 type lockPlaceidDTO struct {
 	Placeid string `json:"placeid,omitempty"`
@@ -133,13 +141,10 @@ func (c *CarDetailsController) Yuyue(ctx *gin.Context) {
 	orderid := genReserveOrderID()
 
 	// 1. 查询用户未完成订单（order_tbl，state 既非已完成也非已取消）
-	var list []model.OrderTbl
-	conf.Db.Where("openid = ? AND state <> ? AND state <> ?", openid, "已完成", "已取消").Find(&list)
+	list := repository.UnfinishedOrdersByOpenid(openid)
 
 	// 2. 查询当前 lockid 是否有进行中订单（使用中/已预约/预约中）
-	var orders []model.OrderTbl
-	conf.Db.Where("lockid = ? AND state IN (?)", lockid, []string{"使用中", "已预约", "预约中"}).Find(&orders)
-	if len(orders) > 0 {
+	if len(repository.ActiveOrdersByLockid(lockid)) > 0 {
 		ctx.String(http.StatusOK, "-8")
 		return
 	}
@@ -159,12 +164,7 @@ func (c *CarDetailsController) Yuyue(ctx *gin.Context) {
 
 	if len(list) == 0 && reserveNumber > 0 {
 		// 生成消息（预约成功）
-		conf.Db.Create(&model.UsermessageTbl{
-			Openid:  openid,
-			Message: "预约成功",
-			MsgTime: time.Now().Format("2006-01-02 15:04:05"),
-			Status:  "未读",
-		})
+		repository.InsertUsermessage(openid, "预约成功")
 
 		now := time.Now()
 		var spacesID int32
@@ -183,16 +183,13 @@ func (c *CarDetailsController) Yuyue(ctx *gin.Context) {
 			PlateNum:        plateNum,
 			ConsumptionType: "踩踩停车",
 		}
-		conf.Db.Select(
+		repository.CreateFields(&order, []string{
 			"orderid", "openid", "lockid", "reserve_time", "begin_time",
 			"state", "spaces_id", "plate_num", "consumption_type",
-		).Create(&order)
+		})
 
 		// 修改车位状态为预约中（Java pdao.updateByLockid）
-		conf.Db.Exec(
-			"UPDATE place_tbl LEFT JOIN lock_tbl ON place_tbl.placeid = lock_tbl.placeid SET place_tbl.state = ? WHERE lockid = ?",
-			"预约中", lockid,
-		)
+		repository.UpdatePlaceStateByLockidJoin(lockid, "预约中")
 
 		ctx.String(http.StatusOK, orderid)
 		return
@@ -210,41 +207,22 @@ func (c *CarDetailsController) Cancelyuyue(ctx *gin.Context) {
 	id := ctx.Query("id")
 
 	if msg == "超时取消" {
-		conf.Db.Create(&model.UsermessageTbl{
-			Openid:  openid,
-			Message: "你预约的车位超时未开锁，已自动为你取消预约订单",
-			Status:  "未读",
-			MsgTime: time.Now().Format("2006-01-02 15:04:05"),
-		})
+		repository.InsertUsermessage(openid, "你预约的车位超时未开锁，已自动为你取消预约订单")
 	}
 
 	// saveyytime_tbl 清空（Java sdao.updateTime(openid,null,null,null,id)）
-	conf.Db.Exec("UPDATE saveyytime_tbl SET haveTime = NULL, exitTime = NULL, lockid = NULL WHERE id = ?", id)
+	repository.ClearSaveyyTime(id)
 
-	// 车位状态置为可使用（Java pdao.updateStateByOpenidONUsedOrder）
-	conf.Db.Exec(
-		`UPDATE place_tbl
-		 LEFT JOIN lock_tbl lt ON place_tbl.placeid = lt.placeid
-		 LEFT JOIN tab_parking_spaces ts ON lt.lockid = ts.lock_id
-		 LEFT JOIN order_tbl ot ON ts.id = ot.spaces_id
-		 SET place_tbl.state = '可使用'
-		 WHERE ot.openid = ? AND (ot.state = '预约中' OR ot.state = '已预约')`,
-		openid,
-	)
-
-	// 预约次数 -1（Java dudao.updateReserve）
-	conf.Db.Exec("UPDATE driveruse_tbl SET reserveNumber = reserveNumber - 1 WHERE openid = ?", openid)
-
-	// 订单状态改为已取消，返回受影响行数（Java odao.cancelyuyue）
-	res := conf.Db.Exec("UPDATE order_tbl SET state = '已取消' WHERE openid = ? AND state = '预约中'", openid)
-	ctx.String(http.StatusOK, strconv.FormatInt(res.RowsAffected, 10))
+	// 车位状态置可使用、预约次数 -1、订单状态改已取消（Java pdao/dudao/odao）
+	res := repository.CancelYuyue(openid)
+	ctx.String(http.StatusOK, strconv.FormatInt(res, 10))
 }
 
 // Searchplate 查询用户首选车牌。Java CarDetailsCon.searchplate / userDao.searchplate。
 func (c *CarDetailsController) Searchplate(ctx *gin.Context) {
 	openid := ctx.Query("openid")
-	var plateNum string
-	if err := conf.Db.Raw("SELECT plate_num FROM user_tbl WHERE openid = ?", openid).Row().Scan(&plateNum); err != nil {
+	plateNum, _, err := repository.UserPlateAndPhone(openid)
+	if err != nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
@@ -257,11 +235,8 @@ func (c *CarDetailsController) SaveyyTime(ctx *gin.Context) {
 	lockid := ctx.Query("lockid")
 	id := ctx.Query("id")
 
-	res := conf.Db.Exec(
-		"UPDATE saveyytime_tbl SET haveTime = ?, exitTime = ?, lockid = ? WHERE id = ?",
-		havetime, time.Now().Format("2006-01-02 15:04:05"), lockid, id,
-	)
-	ctx.String(http.StatusOK, strconv.FormatInt(res.RowsAffected, 10))
+	res := repository.UpdateSaveyyTime(havetime, lockid, id)
+	ctx.String(http.StatusOK, strconv.FormatInt(res, 10))
 }
 
 // GetyyTime 查询是否预约，并返回剩余时间。Java CarDetailsCon.getyyTime / CarDetailsImpl.getyyTime。
@@ -270,8 +245,8 @@ func (c *CarDetailsController) GetyyTime(ctx *gin.Context) {
 	lockid := ctx.Query("lockid")
 	id := ctx.Query("id")
 
-	var st model.SaveyytimeTbl
-	if err := conf.Db.Where("openid = ? AND lockid = ? AND id = ?", openid, lockid, id).First(&st).Error; err != nil {
+	st, err := repository.SaveyyTimeByOpenidLockidID(openid, lockid, id)
+	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"key": "用户未预约"})
 		return
 	}
@@ -300,7 +275,7 @@ func (c *CarDetailsController) AddSaveyyTime(ctx *gin.Context) {
 	openid := ctx.Query("openid")
 	lockid := ctx.Query("lockid")
 	uuid := genUUIDNoDash()
-	conf.Db.Exec("INSERT INTO saveyytime_tbl (id, openid, lockid) VALUES (?, ?, ?)", uuid, openid, lockid)
+	repository.InsertSaveyyTime(uuid, openid, lockid)
 	ctx.String(http.StatusOK, uuid)
 }
 
@@ -309,48 +284,33 @@ func (c *CarDetailsController) AddCarPlateNum(ctx *gin.Context) {
 	openid := ctx.Query("openid")
 	plateNum := ctx.Query("plate_num")
 
-	var existing []model.UsercarTbl
-	conf.Db.Where("openid = ?", openid).Find(&existing)
-	if len(existing) >= 5 {
+	if len(repository.UsercarsByOpenid(openid)) >= 5 {
 		ctx.JSON(http.StatusOK, []userCarDTO{{State: "认证数量以达到上限"}})
 		return
 	}
 
 	// 重复车牌校验：Java 依赖 DB 唯一约束，插入抛异常时返回“该车辆已被注册”。
-	var dup model.UsercarTbl
-	if err := conf.Db.Where("plate_num = ? AND isDelete = 0", plateNum).First(&dup).Error; err == nil {
+	if _, err := repository.UsercarByPlateNum(plateNum); err == nil {
 		ctx.JSON(http.StatusOK, []userCarDTO{{State: "该车辆已被注册"}})
 		return
 	}
 
-	conf.Db.Create(&model.UsercarTbl{Openid: openid, PlateNum: plateNum, State: "未认证"})
+	repository.InsertUsercar(openid, plateNum)
 
-	var rows []model.UsercarTbl
-	conf.Db.Where("openid = ?", openid).Find(&rows)
-	list := make([]userCarDTO, 0, len(rows))
-	for _, u := range rows {
-		list = append(list, userCarToDTO(u))
-	}
-	ctx.JSON(http.StatusOK, list)
+	ctx.JSON(http.StatusOK, userCarList(repository.UsercarsByOpenid(openid)))
 }
 
 // GetUserCar 获取用户车牌列表。Java CarDetailsCon.getUserCar / CarDetailsImpl.getUserCar。
 func (c *CarDetailsController) GetUserCar(ctx *gin.Context) {
 	openid := ctx.Query("openid")
-	var rows []model.UsercarTbl
-	conf.Db.Where("openid = ?", openid).Find(&rows)
-	list := make([]userCarDTO, 0, len(rows))
-	for _, u := range rows {
-		list = append(list, userCarToDTO(u))
-	}
-	ctx.JSON(http.StatusOK, list)
+	ctx.JSON(http.StatusOK, userCarList(repository.UsercarsByOpenid(openid)))
 }
 
 // DelCarMsg 删除车牌。Java CarDetailsCon.delCarMsg / CarDetailsImpl.delCarMsg。
 func (c *CarDetailsController) DelCarMsg(ctx *gin.Context) {
 	plateNum := ctx.Query("plate_num")
-	res := conf.Db.Where("plate_num = ?", plateNum).Delete(&model.UsercarTbl{})
-	ctx.String(http.StatusOK, strconv.FormatInt(res.RowsAffected, 10))
+	res := repository.DeleteUsercarByPlateNum(plateNum)
+	ctx.String(http.StatusOK, strconv.FormatInt(res, 10))
 }
 
 // ============================================================================
@@ -365,15 +325,7 @@ func (c *ChargeListController) GetChargePlaces(ctx *gin.Context) {
 	latitude := ctx.Query("latitude")
 	fanwei, _ := strconv.ParseFloat(ctx.Query("fanwei"), 64)
 
-	var places []model.PlaceTbl
-	conf.Db.Raw(
-		`SELECT p.* FROM place_tbl p
-		 INNER JOIN (SELECT placeid FROM place_tbl WHERE state = '可使用' AND ischarge = 1) t ON p.placeid = t.placeid
-		 WHERE p.longitude IS NOT NULL AND p.latitude IS NOT NULL
-		 ORDER BY (POWER(MOD(ABS(longitude - ?), 360), 2) + POWER(ABS(latitude - ?), 2))
-		 LIMIT 100`,
-		longitude, latitude,
-	).Scan(&places)
+	places := repository.NearbyChargePlaces(longitude, latitude)
 
 	lon, _ := strconv.ParseFloat(longitude, 64)
 	lat, _ := strconv.ParseFloat(latitude, 64)
@@ -390,8 +342,7 @@ func (c *ChargeListController) GetChargePlaces(ctx *gin.Context) {
 		if !isOpen(p.OpenTime) {
 			continue
 		}
-		var lockid string
-		conf.Db.Raw("SELECT lockid FROM lock_tbl WHERE placeid = ?", p.Placeid).Row().Scan(&lockid)
+		lockid := repository.LockidByPlaceid(p.Placeid)
 		result = append(result, placeResDTO{
 			Placeid:         p.Placeid,
 			Province:        p.Province,
@@ -415,8 +366,7 @@ func (c *ChargeListController) GetChargePlaces(ctx *gin.Context) {
 
 // GetDevCarlock 车位锁设备信息。Java ChargeListCon.getDev_carlock / LockMapper.getDev_carlock。
 func (c *ChargeListController) GetDevCarlock(ctx *gin.Context) {
-	var rows []model.LockTbl
-	conf.Db.Find(&rows)
+	rows := repository.AllLocksDetail()
 	list := make([]lockDTO, 0, len(rows))
 	for _, l := range rows {
 		list = append(list, lockToDTO(l))
@@ -426,8 +376,7 @@ func (c *ChargeListController) GetDevCarlock(ctx *gin.Context) {
 
 // GetDevcharge 充电桩设备信息。Java ChargeListCon.getDevcharge / DevchargeImpl.selectAll。
 func (c *ChargeListController) GetDevcharge(ctx *gin.Context) {
-	var rows []model.ChargeMessageTbl
-	conf.Db.Find(&rows)
+	rows := repository.AllChargeMessages()
 	list := make([]chargeMessageDTO, 0, len(rows))
 	for _, m := range rows {
 		list = append(list, chargeMessageToDTO(m))
@@ -438,8 +387,7 @@ func (c *ChargeListController) GetDevcharge(ctx *gin.Context) {
 // GetSearchcharge 搜索充电桩。Java ChargeListCon.getSearchcharge / ChargeMessageDao.selectCharge2。
 func (c *ChargeListController) GetSearchcharge(ctx *gin.Context) {
 	chargeid := ctx.Query("chargeid")
-	var rows []model.ChargeMessageTbl
-	conf.Db.Where("chargeid = ?", chargeid).Find(&rows)
+	rows := repository.ChargeMessagesByChargeid(chargeid)
 	list := make([]chargeMessageDTO, 0, len(rows))
 	for _, m := range rows {
 		list = append(list, chargeMessageToDTO(m))
@@ -450,8 +398,7 @@ func (c *ChargeListController) GetSearchcharge(ctx *gin.Context) {
 // GetSearchcarlock 搜索车位锁。Java ChargeListCon.getSearchcarlock / LockMapper.getSearchcarlock。
 func (c *ChargeListController) GetSearchcarlock(ctx *gin.Context) {
 	lockid := ctx.Query("lockid")
-	var rows []model.LockTbl
-	conf.Db.Where("lockid = ?", lockid).Find(&rows)
+	rows := repository.LocksByLockid(lockid)
 	list := make([]lockDTO, 0, len(rows))
 	for _, l := range rows {
 		list = append(list, lockToDTO(l))
@@ -461,10 +408,7 @@ func (c *ChargeListController) GetSearchcarlock(ctx *gin.Context) {
 
 // Getiscarlock 查询已安装车位锁的车位。Java ChargeListCon.getiscarlock / placeDao.getiscarlock。
 func (c *ChargeListController) Getiscarlock(ctx *gin.Context) {
-	var places []model.PlaceTbl
-	conf.Db.Raw(
-		"SELECT place_tbl.* FROM place_tbl INNER JOIN lock_tbl ON place_tbl.placeid = lock_tbl.placeid",
-	).Scan(&places)
+	places := repository.PlacesWithLocks()
 	list := make([]PlaceDTO, 0, len(places))
 	for _, p := range places {
 		list = append(list, placeToDTO(p))
@@ -474,8 +418,7 @@ func (c *ChargeListController) Getiscarlock(ctx *gin.Context) {
 
 // SelectAllcharge 查询全部充电桩（车位）。Java ChargeListCon.selectAll / placeDao.getAll。
 func (c *ChargeListController) SelectAllcharge(ctx *gin.Context) {
-	var places []model.PlaceTbl
-	conf.Db.Find(&places)
+	places := repository.AllPlaces()
 	list := make([]PlaceDTO, 0, len(places))
 	for _, p := range places {
 		list = append(list, placeToDTO(p))
@@ -488,8 +431,8 @@ func (c *ChargeListController) GetinstallTime(ctx *gin.Context) {
 	installTime := ctx.Query("installTime")
 	lockid := ctx.Query("lockid")
 	name := ctx.Query("name")
-	res := conf.Db.Exec("UPDATE lock_tbl SET install_time = ?, name = ? WHERE lockid = ?", installTime, name, lockid)
-	if res.RowsAffected > 0 {
+	res := repository.UpdateLockInstallTime(installTime, lockid, name)
+	if res > 0 {
 		ctx.String(http.StatusOK, "ok")
 		return
 	}
@@ -500,8 +443,8 @@ func (c *ChargeListController) GetinstallTime(ctx *gin.Context) {
 func (c *ChargeListController) Updateiscaolock(ctx *gin.Context) {
 	iscarlock, _ := strconv.Atoi(ctx.Query("iscarlock"))
 	placeid := ctx.Query("placeid")
-	res := conf.Db.Exec("UPDATE place_tbl SET iscarlock = ? WHERE placeid = ?", iscarlock, placeid)
-	if res.RowsAffected > 0 {
+	res := repository.UpdatePlaceIscarlock(iscarlock, placeid)
+	if res > 0 {
 		ctx.String(http.StatusOK, "ok")
 		return
 	}
@@ -510,13 +453,10 @@ func (c *ChargeListController) Updateiscaolock(ctx *gin.Context) {
 
 // GetByLockid 查询故障锁的 placeid 列表。Java ChargeListCon.getByLockid / placeDao.getByLockid。
 func (c *ChargeListController) GetByLockid(ctx *gin.Context) {
-	var rows []struct {
-		Placeid string
-	}
-	conf.Db.Raw("SELECT l.placeid FROM lock_tbl l JOIN fault_tbl f ON l.lockid = f.lockmac").Scan(&rows)
-	list := make([]lockPlaceidDTO, 0, len(rows))
-	for _, r := range rows {
-		list = append(list, lockPlaceidDTO{Placeid: r.Placeid})
+	placeids := repository.FaultLockPlaceids()
+	list := make([]lockPlaceidDTO, 0, len(placeids))
+	for _, p := range placeids {
+		list = append(list, lockPlaceidDTO{Placeid: p})
 	}
 	ctx.JSON(http.StatusOK, list)
 }
@@ -534,8 +474,7 @@ func (c *ChargeListController) GetpByLockid(ctx *gin.Context) {
 // GetProductIDBylockid 按产品 id 查询锁。Java ChargeListCon.getProductIDBylockid / LockMapper.getProductIDBylockid。
 func (c *ChargeListController) GetProductIDBylockid(ctx *gin.Context) {
 	productID := ctx.Query("ProductID")
-	var rows []model.LockTbl
-	conf.Db.Where("product_id = ?", productID).Find(&rows)
+	rows := repository.LocksByProductID(productID)
 	list := make([]lockDTO, 0, len(rows))
 	for _, l := range rows {
 		list = append(list, lockToDTO(l))
@@ -547,8 +486,7 @@ func (c *ChargeListController) GetProductIDBylockid(ctx *gin.Context) {
 func (c *ChargeListController) GetAllByProductID(ctx *gin.Context) {
 	productID := ctx.Query("ProductID")
 	direction := ctx.Query("direction")
-	var rows []model.ChargeMessageTbl
-	conf.Db.Where("ProductID = ? AND direction = ?", productID, direction).Find(&rows)
+	rows := repository.ChargeMessagesByProductIDDirection(productID, direction)
 	list := make([]chargeMessageDTO, 0, len(rows))
 	for _, m := range rows {
 		list = append(list, chargeMessageToDTO(m))
@@ -566,8 +504,8 @@ func (c *ChargeListController) CoverOrder(ctx *gin.Context) {
 	}
 	orderid := m["orderid"]
 
-	var chargeOrder model.ChargeOrderTbl
-	if err := conf.Db.Where("orderid = ?", orderid).First(&chargeOrder).Error; err != nil {
+	chargeOrder, err := repository.FindChargeOrderByOrderid(orderid)
+	if err != nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
@@ -596,7 +534,7 @@ func (c *ChargeListController) CoverOrder(ctx *gin.Context) {
 
 	// LockUtil.close(...) 硬件关锁指令，此处省略（无对等 MQTT/云指令基础设施）。
 
-	conf.Db.Exec("UPDATE place_tbl SET state = '可使用' WHERE placeid = ?", p.Placeid)
+	repository.UpdatePlaceState(p.Placeid, "可使用")
 
 	updates := map[string]interface{}{
 		"openid":      chargeOrder.Openid,
@@ -608,7 +546,7 @@ func (c *ChargeListController) CoverOrder(ctx *gin.Context) {
 		"totalPrice":  decimal.NewFromFloat(totaPrice),
 		"park_price":  chargeOrder.ParkPrice,
 	}
-	conf.Db.Model(&model.ChargeOrderTbl{}).Where("orderid = ?", orderid).Updates(updates)
+	repository.UpdateChargeOrderFields(orderid, updates)
 
 	ctx.String(http.StatusOK, "ok")
 }
@@ -617,8 +555,8 @@ func (c *ChargeListController) CoverOrder(ctx *gin.Context) {
 func (c *ChargeListController) GetChargePayMsg(ctx *gin.Context) {
 	orderid := ctx.Query("orderid")
 
-	var o model.ChargeOrderTbl
-	if err := conf.Db.Where("orderid = ?", orderid).First(&o).Error; err != nil {
+	o, err := repository.FindChargeOrderByOrderid(orderid)
+	if err != nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}

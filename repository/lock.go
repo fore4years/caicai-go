@@ -41,8 +41,8 @@ func UpdatePlaceByLockid(lockid, state string) {
 	}
 }
 
-// CancelYuyue 取消预约的 DB 副作用。
-func CancelYuyue(openid string) {
+// CancelYuyue 取消预约的 DB 副作用，返回取消订单的受影响行数。
+func CancelYuyue(openid string) int64 {
 	// pdao.updateStateByOpenidONUsedOrder(openid, "可使用")
 	conf.Db.Exec(`UPDATE place_tbl
 		LEFT JOIN lock_tbl lt ON place_tbl.placeid = lt.placeid
@@ -53,7 +53,7 @@ func CancelYuyue(openid string) {
 	// dudao.updateReserve(openid)：reserveNumber = reserveNumber - 1
 	conf.Db.Exec("UPDATE driveruse_tbl SET reserveNumber = reserveNumber - 1 WHERE openid = ?", openid)
 	// odao.cancelyuyue(openid)：订单状态 → 已取消
-	conf.Db.Exec("UPDATE order_tbl SET state = '已取消' WHERE openid = ? AND state = '预约中'", openid)
+	return conf.Db.Exec("UPDATE order_tbl SET state = '已取消' WHERE openid = ? AND state = '预约中'", openid).RowsAffected
 }
 
 // BookingOrderByLockid 查询该锁的"预约中"订单。
