@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
 	"caicai-go/repository"
 )
@@ -145,8 +144,7 @@ func parseTimeLoose(s string) time.Time {
 type PlaceController struct{}
 
 func (c *PlaceController) GetByOpenid(ctx *gin.Context) {
-	var places []model.PlaceTbl
-	conf.Db.Where("ownerid = ?", ctx.Param("openid")).Find(&places)
+	places := repository.PlacesByOwnerid(ctx.Param("openid"))
 	list := make([]PlaceDTO, 0, len(places))
 	for _, p := range places {
 		list = append(list, placeToDTO(p))
@@ -161,13 +159,12 @@ func (c *PlaceController) UpdateById(ctx *gin.Context) {
 		return
 	}
 	// 对齐 Java updatePlaceById：先确认车位存在
-	var original model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", p.Placeid).First(&original).Error; err != nil {
+	if _, err := repository.PlaceByPlaceidDB(p.Placeid); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", p.Placeid).Updates(p)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdatePlaceFields(p.Placeid, p)
+	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // ============ PrivatePlaceController（/privatePlace） ============
@@ -176,7 +173,7 @@ type PrivatePlaceController struct{}
 
 func (c *PrivatePlaceController) GetAll(ctx *gin.Context) {
 	var rows []model.PrivatePlaceTbl
-	conf.Db.Find(&rows)
+	repository.FindAll(&rows)
 	list := make([]privatePlaceDTO, 0, len(rows))
 	for _, p := range rows {
 		list = append(list, privatePlaceToDTO(p))
@@ -186,7 +183,7 @@ func (c *PrivatePlaceController) GetAll(ctx *gin.Context) {
 
 func (c *PrivatePlaceController) GetById(ctx *gin.Context) {
 	var p model.PrivatePlaceTbl
-	if err := conf.Db.Where("id = ?", ctx.Param("id")).First(&p).Error; err != nil {
+	if err := repository.FindByID(&p, ctx.Param("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -212,8 +209,8 @@ func (c *PrivatePlaceController) Save(ctx *gin.Context) {
 	}
 
 	// 对齐 Java findByPid：按产品id查充电枪
-	var gun model.TabChargingGun
-	if err := conf.Db.Where("product_id = ?", req.Pid).First(&gun).Error; err != nil {
+	gun, err := repository.ChargingGunByProductID(req.Pid)
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(400, "请扫描正确的充电桩二维码"))
 		return
 	}
@@ -224,8 +221,7 @@ func (c *PrivatePlaceController) Save(ctx *gin.Context) {
 	spacesCode := repository.NextSpacesCode("private_place_tbl", req.Code)
 
 	// 同一充电枪只能绑定一个私桩车位
-	var existing model.PrivatePlaceTbl
-	if err := conf.Db.Where("charging_gun_id = ?", gun.ID).First(&existing).Error; err == nil {
+	if repository.PrivatePlaceExistsByChargingGunID(gun.ID) {
 		ctx.JSON(http.StatusOK, ResultError(400, "此充电枪已被绑定,请勿重复添加!"))
 		return
 	}
@@ -234,10 +230,7 @@ func (c *PrivatePlaceController) Save(ctx *gin.Context) {
 	lonPoint, _ := strconv.ParseFloat(req.Longitude, 64)
 	lanPoint, _ := strconv.ParseFloat(req.Latitude, 64)
 	wkt := wktPoint(lonPoint, lanPoint)
-	if err := conf.Db.Exec(
-		"INSERT INTO private_place_tbl (point, place, openid, charging_gun_id, spaces_code) VALUES (ST_GeomFromText(?),?,?,?,?)",
-		wkt, req.Place, req.Openid, gun.ID, spacesCode,
-	).Error; err != nil {
+	if err := repository.InsertPrivatePlace(wkt, req.Place, req.Openid, gun.ID, spacesCode); err != nil {
 		ctx.JSON(http.StatusOK, ResultError(400, "添加失败"))
 		return
 	}
@@ -269,40 +262,43 @@ func (c *PrivatePlaceController) UpdateById(ctx *gin.Context) {
 	if p.SpacesCode != "" {
 		updates["spaces_code"] = p.SpacesCode
 	}
-	res := conf.Db.Model(&model.PrivatePlaceTbl{}).Where("id = ?", id).Updates(updates)
+	res := repository.UpdateByID(&model.PrivatePlaceTbl{}, id, updates)
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
 func (c *PrivatePlaceController) DeleteById(ctx *gin.Context) {
-	res := conf.Db.Where("id = ?", ctx.Param("id")).Delete(&model.PrivatePlaceTbl{})
+	res := repository.DeleteByID(&model.PrivatePlaceTbl{}, ctx.Param("id"))
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
 func (c *PrivatePlaceController) GetBySpacesCode(ctx *gin.Context) {
-	var p model.PrivatePlaceTbl
-	if err := conf.Db.Where("spaces_code = ?", ctx.Param("spacesCode")).First(&p).Error; err != nil {
+	p, err := repository.PrivatePlaceBySpacesCode(ctx.Param("spacesCode"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(privatePlaceToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(privatePlaceToDTO(*p)))
 }
 
 func (c *PrivatePlaceController) GetByPlaceId(ctx *gin.Context) {
-	var p model.PrivatePlaceTbl
-	if err := conf.Db.Where("id = ?", ctx.Param("placeId")).First(&p).Error; err != nil {
+	var place model.PrivatePlaceTbl
+	if err := repository.FindByID(&place, ctx.Param("placeId")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(""))
 		return
 	}
-	var gun model.TabChargingGun
-	conf.Db.Where("id = ?", p.ChargingGunID).First(&gun)
+	gun := repository.ChargingGunByID(place.ChargingGunID)
+	if gun == nil {
+		ctx.JSON(http.StatusOK, ResultSuccess(""))
+		return
+	}
 	ctx.JSON(http.StatusOK, ResultSuccess(gun.ProductID))
 }
 
 func (c *PrivatePlaceController) GetByOrder(ctx *gin.Context) {
 	orderID := ctx.Param("orderId")
 
-	var order model.OrderTbl
-	if err := conf.Db.Where("orderid = ?", orderID).First(&order).Error; err != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(400, "查无此订单!"))
 		return
 	}
@@ -312,13 +308,7 @@ func (c *PrivatePlaceController) GetByOrder(ctx *gin.Context) {
 	}
 
 	// 对齐 Java PrivatePlaceMapper.getByOrder：order → private_place → private_charging，取桩主 openid
-	var openids []string
-	conf.Db.Raw(
-		"SELECT private_charging_tbl.openid FROM order_tbl "+
-			"LEFT JOIN private_place_tbl ON private_place_tbl.id = order_tbl.spaces_id "+
-			"LEFT JOIN private_charging_tbl ON private_charging_tbl.spaces_num = private_place_tbl.spaces_code "+
-			"WHERE order_tbl.orderid = ?", orderID,
-	).Scan(&openids)
+	openids := repository.PrivateChargingOpenidsByOrderID(orderID)
 	if len(openids) == 0 {
 		ctx.JSON(http.StatusOK, ResultError(400, "此订单无私桩!"))
 		return
@@ -338,7 +328,7 @@ type FreeChargingUserController struct{}
 
 func (c *FreeChargingUserController) GetAll(ctx *gin.Context) {
 	var rows []model.FreeChargingUsersTbl
-	conf.Db.Find(&rows)
+	repository.FindAll(&rows)
 	list := make([]freeChargingUserDTO, 0, len(rows))
 	for _, u := range rows {
 		list = append(list, freeChargingUserToDTO(u))
@@ -348,7 +338,7 @@ func (c *FreeChargingUserController) GetAll(ctx *gin.Context) {
 
 func (c *FreeChargingUserController) GetById(ctx *gin.Context) {
 	var u model.FreeChargingUsersTbl
-	if err := conf.Db.Where("id = ?", ctx.Param("id")).First(&u).Error; err != nil {
+	if err := repository.FindByID(&u, ctx.Param("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -356,8 +346,7 @@ func (c *FreeChargingUserController) GetById(ctx *gin.Context) {
 }
 
 func (c *FreeChargingUserController) GetByStationId(ctx *gin.Context) {
-	var rows []model.FreeChargingUsersTbl
-	conf.Db.Where("charging_station_id = ?", ctx.Param("stationId")).Find(&rows)
+	rows := repository.FreeChargingUsersByStationID(ctx.Param("stationId"))
 	list := make([]freeChargingUserDTO, 0, len(rows))
 	for _, u := range rows {
 		list = append(list, freeChargingUserToDTO(u))
@@ -366,12 +355,12 @@ func (c *FreeChargingUserController) GetByStationId(ctx *gin.Context) {
 }
 
 func (c *FreeChargingUserController) GetByOpenId(ctx *gin.Context) {
-	var u model.FreeChargingUsersTbl
-	if err := conf.Db.Where("openid = ?", ctx.Param("openid")).First(&u).Error; err != nil {
+	u, err := repository.FreeChargingUserByOpenid(ctx.Param("openid"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(freeChargingUserToDTO(u)))
+	ctx.JSON(http.StatusOK, ResultSuccess(freeChargingUserToDTO(*u)))
 }
 
 func (c *FreeChargingUserController) Save(ctx *gin.Context) {
@@ -392,8 +381,7 @@ func (c *FreeChargingUserController) Save(ctx *gin.Context) {
 	}
 
 	// 对齐 Java FreeChargingUserServiceImpl.add：重复申请校验
-	var existing model.FreeChargingUsersTbl
-	if err := conf.Db.Where("openid = ? AND charging_station_id = ?", req.Openid, req.ChargingStationID).First(&existing).Error; err == nil {
+	if existing, err := repository.FreeChargingUserByOpenidStationID(req.Openid, req.ChargingStationID); err == nil {
 		if !existing.Status {
 			ctx.JSON(http.StatusOK, ResultError(500, "您已有申请记录，请等待审核"))
 			return
@@ -418,7 +406,7 @@ func (c *FreeChargingUserController) Save(ctx *gin.Context) {
 		rec.EndDate = timePtr(parseTimeLoose(*req.EndDate))
 	}
 
-	if err := conf.Db.Create(&rec).Error; err != nil {
+	if err := repository.Create(&rec).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "添加失败"))
 		return
 	}
@@ -470,20 +458,18 @@ func (c *FreeChargingUserController) Update(ctx *gin.Context) {
 	if req.Reviser != "" {
 		updates["reviser"] = req.Reviser
 	}
-	res := conf.Db.Model(&model.FreeChargingUsersTbl{}).Where("id = ?", id).Updates(updates)
+	res := repository.UpdateByID(&model.FreeChargingUsersTbl{}, id, updates)
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
 func (c *FreeChargingUserController) UpdateByOpenId(ctx *gin.Context) {
-	res := conf.Db.Model(&model.FreeChargingUsersTbl{}).
-		Where("openid = ? AND charging_station_id = ?", ctx.Param("openid"), ctx.Param("stationId")).
-		Update("status", 1)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdateFreeChargingUserStatus(ctx.Param("openid"), ctx.Param("stationId"), 1)
+	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 func (c *FreeChargingUserController) Delete(ctx *gin.Context) {
-	res := conf.Db.Where("openid = ?", ctx.Param("openid")).Delete(&model.FreeChargingUsersTbl{})
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.DeleteFreeChargingUserByOpenid(ctx.Param("openid"))
+	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // ============ NeighborShareUserController（/neighborShareUser） ============
@@ -510,14 +496,16 @@ func (c *NeighborShareUserController) Save(ctx *gin.Context) {
 	// 定位桩主：优先用 ownerUserId（私桩桩主id），为空时用 pid（充电桩编号）反查
 	var charging model.PrivateChargingTbl
 	if strings.TrimSpace(req.OwnerUserID) != "" {
-		if err := conf.Db.Where("id = ?", req.OwnerUserID).First(&charging).Error; err != nil {
+		if err := repository.FindByID(&charging, req.OwnerUserID).Error; err != nil {
 			ctx.JSON(http.StatusOK, ResultError(400, "查询无此桩主信息,请检查"))
 			return
 		}
 	} else if strings.TrimSpace(req.Pid) != "" {
-		if err := conf.Db.Where("product_id = ?", req.Pid).First(&charging).Error; err != nil {
+		if pc, err := repository.PrivateChargingByProductID(req.Pid); err != nil {
 			ctx.JSON(http.StatusOK, ResultError(400, "查询无此桩主信息,请检查"))
 			return
+		} else {
+			charging = *pc
 		}
 	} else {
 		ctx.JSON(http.StatusOK, ResultError(400, "参数缺失,请检查"))
@@ -525,8 +513,7 @@ func (c *NeighborShareUserController) Save(ctx *gin.Context) {
 	}
 
 	// 已是同一桩主的共享用户则拒绝重复申请
-	var existing []model.NeighborShareUserTbl
-	conf.Db.Where("openid = ?", req.Openid).Find(&existing)
+	existing := repository.NeighborShareUsersByOpenid(req.Openid)
 	for _, n := range existing {
 		if n.OwnerUserID == charging.ID {
 			ctx.JSON(http.StatusOK, ResultError(400, "已是此桩主的共享用户,请勿重复申请"))
@@ -540,7 +527,7 @@ func (c *NeighborShareUserController) Save(ctx *gin.Context) {
 		Status:      strconv.Itoa(int(req.Status)),
 		Phone:       req.Phone,
 	}
-	if err := conf.Db.Create(&rec).Error; err != nil {
+	if err := repository.Create(&rec).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
@@ -548,28 +535,28 @@ func (c *NeighborShareUserController) Save(ctx *gin.Context) {
 }
 
 func (c *NeighborShareUserController) Delete(ctx *gin.Context) {
-	res := conf.Db.Where("id = ?", ctx.Param("id")).Delete(&model.NeighborShareUserTbl{})
+	res := repository.DeleteByID(&model.NeighborShareUserTbl{}, ctx.Param("id"))
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
 func (c *NeighborShareUserController) Update(ctx *gin.Context) {
-	res := conf.Db.Model(&model.NeighborShareUserTbl{}).Where("id = ?", ctx.Param("id")).Update("status", 1)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdateNeighborShareUserStatus(ctx.Param("id"), 1)
+	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 func (c *NeighborShareUserController) RefuseShareById(ctx *gin.Context) {
-	res := conf.Db.Model(&model.NeighborShareUserTbl{}).Where("id = ?", ctx.Param("id")).Update("status", -1)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdateNeighborShareUserStatus(ctx.Param("id"), -1)
+	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 func (c *NeighborShareUserController) CancelShareById(ctx *gin.Context) {
-	res := conf.Db.Model(&model.NeighborShareUserTbl{}).Where("id = ?", ctx.Param("id")).Update("status", 0)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdateNeighborShareUserStatus(ctx.Param("id"), 0)
+	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 func (c *NeighborShareUserController) GetById(ctx *gin.Context) {
 	var u model.NeighborShareUserTbl
-	if err := conf.Db.Where("id = ?", ctx.Param("id")).First(&u).Error; err != nil {
+	if err := repository.FindByID(&u, ctx.Param("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -578,15 +565,7 @@ func (c *NeighborShareUserController) GetById(ctx *gin.Context) {
 
 // neighborShareList 对齐 Java NeighborShareUserMapper（LEFT JOIN user_tbl 取 name/nick_name）。
 func neighborShareList(ownerID, status string) []neighborShareDtoDTO {
-	var rows []neighborShareRow
-	db := conf.Db.Table("neighbor_share_user_tbl AS neighbor").
-		Select("neighbor.id, neighbor.owner_user_id, neighbor.openid, neighbor.charging_pile_id, neighbor.status, neighbor.phone, neighbor.create_time, neighbor.update_time, user_tbl.name, user_tbl.nick_name").
-		Joins("LEFT JOIN user_tbl ON neighbor.openid = user_tbl.openid").
-		Where("neighbor.owner_user_id = ?", ownerID)
-	if status != "" {
-		db = db.Where("neighbor.status = ?", status)
-	}
-	db.Scan(&rows)
+	rows := repository.NeighborShareRows(ownerID, status)
 
 	list := make([]neighborShareDtoDTO, 0, len(rows))
 	for _, r := range rows {
@@ -620,17 +599,10 @@ func (c *NeighborShareUserController) GetSharelistByOwner(ctx *gin.Context) {
 
 func (c *NeighborShareUserController) GetByPidAndOpenId(ctx *gin.Context) {
 	openid := ctx.GetString("openid")
-	var u model.NeighborShareUserTbl
-	if err := conf.Db.Raw(
-		"SELECT nsut.* FROM private_charging_tbl "+
-			"LEFT JOIN private_place_tbl pp ON private_charging_tbl.spaces_num = pp.spaces_code "+
-			"LEFT JOIN tab_charging_gun tcg ON pp.charging_gun_id = tcg.id "+
-			"LEFT JOIN neighbor_share_user_tbl nsut ON private_charging_tbl.id = nsut.owner_user_id "+
-			"WHERE tcg.product_id = ? AND nsut.openid = ?",
-		ctx.Query("pid"), openid,
-	).Scan(&u).Error; err != nil || u.ID == 0 {
+	u, err := repository.NeighborShareByPidOpenid(ctx.Query("pid"), openid)
+	if err != nil || u.ID == 0 {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(neighborShareUserToDTO(u)))
+	ctx.JSON(http.StatusOK, ResultSuccess(neighborShareUserToDTO(*u)))
 }

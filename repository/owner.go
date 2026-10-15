@@ -74,7 +74,7 @@ func PlaceapplyExists(name, code, streer, relatedBuilding, carnumber string) boo
 }
 
 // UpdatePlaceFields 更新车位字段，返回受影响行数。
-func UpdatePlaceFields(placeid string, updates map[string]interface{}) int64 {
+func UpdatePlaceFields(placeid string, updates interface{}) int64 {
 	res := conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", placeid).Updates(updates)
 	return res.RowsAffected
 }
