@@ -7,21 +7,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/middleware"
-	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ UserController 其余端点（挂在 OrderController 上，base /user） ============
 
 // GetUserInfoByOpenId 对应 Java UserController.getUserInfoByOpenId：根据 openid 查用户。
 func (o *OrderController) GetUserInfoByOpenId(c *gin.Context) {
-	var u model.UserTbl
-	if err := conf.Db.Where("openid = ?", c.Param("openid")).First(&u).Error; err != nil {
+	u, err := repository.UserByOpenid(c.Request.Context(), c.Param("openid"))
+	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(userToDTO(u)))
+	c.JSON(http.StatusOK, ResultSuccess(userToDTO(*u)))
 }
 
 // UpdateUserInfo 对应 Java UserServiceImpl.updateUserInfo：
@@ -99,8 +98,8 @@ func (o *OrderController) UpdateUserInfo(c *gin.Context) {
 		updates["freeze_balans"] = *req.FreezeBalans
 	}
 
-	res := conf.Db.Model(&model.UserTbl{}).Where("phone = ?", tokenPhone).Updates(updates)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdateUserFieldsByPhone(tokenPhone, updates)
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // UpdatePhone 对应 Java UserServiceImpl.updatePhone：返回字符串消息。
@@ -117,8 +116,8 @@ func (o *OrderController) UpdatePhone(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess("修改失败不能使用同一个手机号"))
 		return
 	}
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", req.Openid).Update("phone", req.Phone)
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdateUserPhoneField(req.Openid, req.Phone)
+	if rowsAffected == 0 {
 		c.JSON(http.StatusOK, ResultSuccess("修改失败"))
 		return
 	}
@@ -137,10 +136,8 @@ func (o *OrderController) RefToken(c *gin.Context) {
 
 // UpdateUserIdEntity 对应 Java UserServiceImpl.updateUserIdEntity：返回 "ok"/"false"。
 func (o *OrderController) UpdateUserIdEntity(c *gin.Context) {
-	res := conf.Db.Model(&model.UserTbl{}).
-		Where("openid = ?", c.Query("openid")).
-		Update("id_entity", c.Query("idEntity"))
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdateUserIdEntityField(c.Query("openid"), c.Query("idEntity"))
+	if rowsAffected == 0 {
 		c.JSON(http.StatusOK, ResultSuccess("false"))
 		return
 	}
@@ -164,8 +161,8 @@ func (o *OrderController) UpdateUserStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess("false"))
 		return
 	}
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).Updates(updates)
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdateUserFieldsByOpenid(openid, updates)
+	if rowsAffected == 0 {
 		c.JSON(http.StatusOK, ResultSuccess("false"))
 		return
 	}
@@ -191,8 +188,8 @@ func (o *OrderController) UpdateAvatar(c *gin.Context) {
 		return
 	}
 	openid := c.GetString("openid")
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).Update("avatar", data)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdateUserAvatar(openid, data)
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // UpdateEmblem POST /user/updateEmblem 对齐 Java updateEmblem：国徽面图片写入 tab_image，回写 id_card_emblem。
@@ -203,8 +200,8 @@ func (o *OrderController) UpdateEmblem(c *gin.Context) {
 		return
 	}
 	openid := c.GetString("openid")
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).Update("id_card_emblem", imageID)
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdateUserIdCardEmblem(openid, imageID)
+	if rowsAffected == 0 {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
@@ -219,8 +216,8 @@ func (o *OrderController) UpdateIdCardAvatar(c *gin.Context) {
 		return
 	}
 	openid := c.GetString("openid")
-	res := conf.Db.Model(&model.UserTbl{}).Where("openid = ?", openid).Update("id_card_avatar", imageID)
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdateUserIdCardAvatar(openid, imageID)
+	if rowsAffected == 0 {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
