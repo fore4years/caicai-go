@@ -9,8 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ PackageRecordController（/packageRecord） ============
@@ -57,9 +57,7 @@ func (c *PackageRecordController) createPackageRecord(req packageRecordRequest) 
 	var endTime time.Time
 
 	// 查询最近一条已支付套餐：若尚未过期且时长非 0，则在其结束时间上累加天数。
-	var lastRecord model.PackageRecordTbl
-	conf.Db.Where("openid = ? AND status = 'paid'", req.Openid).
-		Order("create_time desc").First(&lastRecord)
+	lastRecord := repository.LatestPaidPackageRecord(req.Openid)
 	if lastRecord.OrderNo != "" && !lastRecord.EndTime.IsZero() &&
 		lastRecord.EndTime.After(now) && lastRecord.Duration != 0 {
 		startTime = timeOrZero(lastRecord.EndTime)
@@ -80,27 +78,16 @@ func (c *PackageRecordController) createPackageRecord(req packageRecordRequest) 
 		CreateTime: timePtr(startTime),
 		EndTime:    timePtr(endTime),
 	}
-	if conf.Db.Create(&rec).Error != nil {
+	if repository.Create(&rec).Error != nil {
 		return ""
 	}
 	return orderNo
 }
 
-// deductPackageBalance 对齐 Java UserServiceImpl.deductBalance（仅扣可用余额 balans）。
-// 单条原子 UPDATE，条件写进 WHERE 防止余额扣成负数。
-func deductPackageBalance(openid string, amount decimal.Decimal) bool {
-	amt := amount.StringFixed(2)
-	res := conf.Db.Exec(
-		"UPDATE user_tbl SET balans = balans - CAST(? AS DECIMAL(10,2)) WHERE openid = ? AND balans >= CAST(? AS DECIMAL(10,2))",
-		amt, openid, amt,
-	)
-	return res.RowsAffected > 0
-}
-
 func (c *PackageRecordController) BalancePay(ctx *gin.Context) {
 	orderNo := packageOrderNo(ctx)
-	var pkg model.PackageRecordTbl
-	if err := conf.Db.Where("order_no = ?", orderNo).First(&pkg).Error; err != nil {
+	pkg, err := repository.PackageRecordByOrderNo(orderNo)
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "余额支付失败"))
 		return
 	}
@@ -108,7 +95,7 @@ func (c *PackageRecordController) BalancePay(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultError(500, "余额支付失败"))
 		return
 	}
-	if !deductPackageBalance(pkg.Openid, pkg.Amount) {
+	if !repository.DeductPackageBalance(pkg.Openid, pkg.Amount) {
 		ctx.JSON(http.StatusOK, ResultError(500, "余额支付失败"))
 		return
 	}
@@ -119,8 +106,8 @@ func (c *PackageRecordController) BalancePay(ctx *gin.Context) {
 	if pkg.EndTime.IsZero() && !pkg.CreateTime.IsZero() {
 		updates["end_time"] = pkg.CreateTime.AddDate(0, 0, int(pkg.Days))
 	}
-	res := conf.Db.Model(&model.PackageRecordTbl{}).Where("order_no = ?", orderNo).Updates(updates)
-	if res.RowsAffected <= 0 {
+	rowsAffected := repository.UpdatePackageRecordByOrderNo(orderNo, updates)
+	if rowsAffected <= 0 {
 		ctx.JSON(http.StatusOK, ResultError(500, "余额支付失败"))
 		return
 	}
@@ -138,8 +125,8 @@ func (c *PackageRecordController) Refund(ctx *gin.Context) {
 
 // processRefund 对齐 Java PackageRecordServiceImpl.processRefund。
 func (c *PackageRecordController) processRefund(orderNo string) (string, string) {
-	var pkg model.PackageRecordTbl
-	if err := conf.Db.Where("order_no = ?", orderNo).First(&pkg).Error; err != nil {
+	pkg, err := repository.PackageRecordByOrderNo(orderNo)
+	if err != nil {
 		return "", "订单不存在"
 	}
 	if pkg.Status != "paid" {
@@ -158,10 +145,10 @@ func (c *PackageRecordController) processRefund(orderNo string) (string, string)
 	}
 	switch refundStatus {
 	case "SUCCESS":
-		conf.Db.Model(&model.PackageRecordTbl{}).Where("order_no = ?", orderNo).Update("status", "refunded")
+		repository.UpdatePackageRecordStatus(orderNo, "refunded")
 		return "退款成功", ""
 	case "PROCESSING", "CHANGE":
-		conf.Db.Model(&model.PackageRecordTbl{}).Where("order_no = ?", orderNo).Update("status", "refunding")
+		repository.UpdatePackageRecordStatus(orderNo, "refunding")
 		return "退款处理中", ""
 	default:
 		return "", "微信退款失败，返回状态：" + refundStatus
@@ -169,9 +156,8 @@ func (c *PackageRecordController) processRefund(orderNo string) (string, string)
 }
 
 func (c *PackageRecordController) GetLatestValidPackage(ctx *gin.Context) {
-	var p model.PackageRecordTbl
-	if err := conf.Db.Where("openid = ? AND status = 'paid' AND end_time > ?", ctx.Query("openid"), time.Now()).
-		Order("create_time asc").First(&p).Error; err != nil {
+	p, err := repository.LatestValidPackageByOpenid(ctx.Query("openid"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "没有未过期的套餐记录"))
 		return
 	}
@@ -179,20 +165,12 @@ func (c *PackageRecordController) GetLatestValidPackage(ctx *gin.Context) {
 }
 
 func (c *PackageRecordController) GetAllValidPackages(ctx *gin.Context) {
-	var rows []model.PackageRecordTbl
-	conf.Db.Where("openid = ? AND status = 'paid' AND end_time > ?", ctx.Query("openid"), time.Now()).
-		Order("create_time asc").Find(&rows)
+	rows := repository.ValidPackagesByOpenid(ctx.Query("openid"))
 	ctx.JSON(http.StatusOK, ResultSuccess(rows))
 }
 
 // GetMaxPowerFromRecentOrders 对齐 Java ReOrderPowerMapper.getMaxPowerByOpenidInWeek。
 func (c *PackageRecordController) GetMaxPowerFromRecentOrders(ctx *gin.Context) {
-	var maxPower decimal.Decimal
-	conf.Db.Raw(`SELECT COALESCE(MAX(re_order_electronic_tbl.max_power), 0)
-		FROM order_tbl
-		LEFT JOIN re_order_electronic_tbl ON order_tbl.orderid = re_order_electronic_tbl.order_id
-		WHERE order_tbl.openid = ?
-		  AND order_tbl.consumption_type = '二轮车充电'
-		  AND order_tbl.close_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)`, ctx.Query("openid")).Scan(&maxPower)
+	maxPower := repository.MaxPowerFromRecentOrders(ctx.Query("openid"))
 	ctx.JSON(http.StatusOK, ResultSuccess(maxPower))
 }
