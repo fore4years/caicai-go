@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ OwnerChargeController（base /wx，owner/chargeCon） ============
@@ -32,18 +32,17 @@ func (c *OwnerChargeController) AddCharge(ctx *gin.Context) {
 }
 
 func (c *OwnerChargeController) addCharge(placeid, ownerid string) int {
-	var existing model.ChargeTbl
-	if err := conf.Db.Where("placeid = ?", placeid).First(&existing).Error; err == nil {
+	if _, err := repository.ChargeByPlaceid(placeid); err == nil {
 		return chargeRepeatPlace // -10
 	}
 	str := "您为车位：" + placeid + "提交的安装充电桩申请正在审核，请保持电话畅通，以便于我们的工作人员与您取得联系~~~"
-	conf.Db.Create(&model.MessageTbl{
+	repository.Create(&model.MessageTbl{
 		Ownerid: ownerid,
 		Message: str,
 		Msgtime: time.Now().Format("2006-01-02 15:04:05"),
 		Status:  "未读",
 	})
-	res := conf.Db.Create(&model.ChargeTbl{Placeid: placeid, Charge: "待审核"})
+	res := repository.Create(&model.ChargeTbl{Placeid: placeid, Charge: "待审核"})
 	return int(res.RowsAffected)
 }
 
@@ -56,41 +55,33 @@ func (c *OwnerChargeController) AddChargeTest(ctx *gin.Context) {
 
 func (c *OwnerChargeController) addChargeTest(placeid, ownerid, nid, direction, ammeter string) int {
 	// 业主和车位是否匹配
-	var place model.PlaceTbl
-	if err := conf.Db.Where("placeid = ? AND ownerid = ?", placeid, ownerid).First(&place).Error; err != nil {
+	if _, err := repository.PlaceByPlaceidAndOwnerid(placeid, ownerid); err != nil {
 		return chargeObjectNull // 10000
 	}
 	// 充电桩是否重复添加（nid + direction 且 chargeid 已分配）
-	var cm model.ChargeMessageTbl
-	if err := conf.Db.Where("nid = ? AND direction = ? AND chargeid IS NOT NULL", nid, direction).First(&cm).Error; err == nil {
+	if _, err := repository.ChargeMessageByNidDirectionNotNull(nid, direction); err == nil {
 		return chargeRepeatCharge // -9
 	}
 	// 车位是否重复添加
-	var cm2 model.ChargeMessageTbl
-	if err := conf.Db.Where("placeid = ?", placeid).First(&cm2).Error; err == nil {
+	if _, err := repository.ChargeMessageByPlaceid(placeid); err == nil {
 		return chargeRepeatPlace // -10
 	}
 	// 生成充电桩编号（对齐 incrementAndFormatNumber：去掉前 2 位后 +1，再格式化为 SC%06d）
 	chargeid := ""
-	var maxChargeID string
-	if err := conf.Db.Raw("SELECT MAX(chargeid) FROM charge_message_tbl WHERE LENGTH(chargeid) = 10").Row().Scan(&maxChargeID); err == nil && maxChargeID != "" {
+	maxChargeID := repository.MaxChargeid()
+	if maxChargeID != "" {
 		if len(maxChargeID) >= 2 {
 			if n, e := strconv.Atoi(maxChargeID[2:]); e == nil {
 				chargeid = fmt.Sprintf("SC%06d", n+1)
 			}
 		}
 	}
-	res := conf.Db.Exec(
-		"INSERT INTO charge_message_tbl (chargeid, placeid, nid, direction, ammeter) VALUES (?, ?, ?, ?, ?)",
-		chargeid, placeid, nid, direction, ammeter,
-	)
-	return int(res.RowsAffected)
+	return int(repository.InsertChargeMessage(chargeid, placeid, nid, direction, ammeter))
 }
 
 // IsAddCharge /wx/isAddCharge?placeid= —— 对齐 chargeAddSerImpl.isAddCharge。
 func (c *OwnerChargeController) IsAddCharge(ctx *gin.Context) {
-	var cm model.ChargeMessageTbl
-	if err := conf.Db.Where("placeid = ?", ctx.Query("placeid")).First(&cm).Error; err != nil {
+	if _, err := repository.ChargeMessageByPlaceid(ctx.Query("placeid")); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(chargeUninstalled)) // 10002
 		return
 	}
