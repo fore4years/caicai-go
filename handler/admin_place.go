@@ -1,16 +1,12 @@
 package handler
 
 import (
-	"database/sql"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
 	"caicai-go/model"
 	"caicai-go/repository"
 )
@@ -74,10 +70,9 @@ func placePage(c *gin.Context, list []PlaceDTO, max int64) {
 func (a *AdminPlaceController) AllPlace(c *gin.Context) {
 	current, size := parsePage(c)
 	var max int64
-	conf.Db.Model(&model.PlaceTbl{}).Count(&max)
-
+	repository.Count(&model.PlaceTbl{}, &max)
 	var places []model.PlaceTbl
-	conf.Db.Model(&model.PlaceTbl{}).Offset(pageOffset(current, size)).Limit(size).Find(&places)
+	repository.Page(&model.PlaceTbl{}, "", pageOffset(current, size), size, &places)
 
 	list := make([]PlaceDTO, 0, len(places))
 	for _, p := range places {
@@ -95,12 +90,7 @@ func (a *AdminPlaceController) SearchByCity(c *gin.Context) {
 		return
 	}
 
-	var max int64
-	conf.Db.Model(&model.PlaceTbl{}).Where("city LIKE ?", "%"+city+"%").Count(&max)
-
-	var places []model.PlaceTbl
-	conf.Db.Model(&model.PlaceTbl{}).Where("city LIKE ?", "%"+city+"%").
-		Offset(pageOffset(current, size)).Limit(size).Find(&places)
+	max, places := repository.PagePlacesByCity(city, pageOffset(current, size), size)
 
 	list := make([]PlaceDTO, 0, len(places))
 	for _, p := range places {
@@ -127,11 +117,7 @@ func (a *AdminPlaceController) FilterPlacesByState(c *gin.Context) {
 
 	// 城市为空时退化为仅按状态 / 全量
 	if city != "" && dbState != "" {
-		var max int64
-		conf.Db.Model(&model.PlaceTbl{}).Where("city = ? AND state = ?", city, dbState).Count(&max)
-		var places []model.PlaceTbl
-		conf.Db.Model(&model.PlaceTbl{}).Where("city = ? AND state = ?", city, dbState).
-			Offset(pageOffset(current, size)).Limit(size).Find(&places)
+		max, places := repository.PagePlacesByCityState(city, dbState, pageOffset(current, size), size)
 		list := make([]PlaceDTO, 0, len(places))
 		for _, p := range places {
 			list = append(list, placeToDTO(p))
@@ -144,11 +130,7 @@ func (a *AdminPlaceController) FilterPlacesByState(c *gin.Context) {
 		return
 	}
 	if dbState != "" {
-		var max int64
-		conf.Db.Model(&model.PlaceTbl{}).Where("state = ?", dbState).Count(&max)
-		var places []model.PlaceTbl
-		conf.Db.Model(&model.PlaceTbl{}).Where("state = ?", dbState).
-			Offset(pageOffset(current, size)).Limit(size).Find(&places)
+		max, places := repository.PagePlacesByState(dbState, pageOffset(current, size), size)
 		list := make([]PlaceDTO, 0, len(places))
 		for _, p := range places {
 			list = append(list, placeToDTO(p))
@@ -161,8 +143,8 @@ func (a *AdminPlaceController) FilterPlacesByState(c *gin.Context) {
 
 // GetOwner 任意方法 /system/getOwner?ownerid=
 func (a *AdminPlaceController) GetOwner(c *gin.Context) {
-	var owner model.OwnerTbl
-	if err := conf.Db.Where("ownerid = ?", c.Query("ownerid")).First(&owner).Error; err != nil {
+	owner, err := repository.OwnerByOwnerid(c.Request.Context(), c.Query("ownerid"))
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
@@ -171,8 +153,7 @@ func (a *AdminPlaceController) GetOwner(c *gin.Context) {
 
 // GetUserPhone 任意方法 /system/getUserPhone?ownerid=（对齐 Java：以 ownerid 当 openid 查 user_tbl）
 func (a *AdminPlaceController) GetUserPhone(c *gin.Context) {
-	var phone string
-	conf.Db.Model(&model.UserTbl{}).Where("openid = ?", c.Query("ownerid")).Pluck("phone", &phone)
+	phone := repository.UserPhoneByOpenid(c.Query("ownerid"))
 	c.String(http.StatusOK, phone)
 }
 
@@ -183,7 +164,7 @@ func (a *AdminPlaceController) PlacesDel(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err == nil {
 		for _, id := range req.Xuanzhong {
-			conf.Db.Where("placeid = ?", id).Delete(&model.PlaceTbl{})
+			repository.DeletePlaceByPlaceid(id)
 		}
 	}
 	c.String(http.StatusOK, "批量删除成功！")
@@ -191,12 +172,12 @@ func (a *AdminPlaceController) PlacesDel(c *gin.Context) {
 
 // GetPlace 任意方法 /system/placeGet?placeid=
 func (a *AdminPlaceController) GetPlace(c *gin.Context) {
-	var p model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", c.Query("placeid")).First(&p).Error; err != nil {
+	p, err := repository.PlaceByPlaceidDB(c.Query("placeid"))
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
-	c.JSON(http.StatusOK, placeToDTO(p))
+	c.JSON(http.StatusOK, placeToDTO(*p))
 }
 
 // GetByPlaceId GET /system/getByPlaceId?placeid= → Result<PlaceVo>
@@ -206,15 +187,14 @@ func (a *AdminPlaceController) GetByPlaceId(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(400, "placeid不能为空"))
 		return
 	}
-	var p model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", placeid).First(&p).Error; err != nil {
+	p, err := repository.PlaceByPlaceidDB(placeid)
+	if err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	vo := PlaceVoDTO{PlaceDTO: placeToDTO(p)}
-	var u model.UserTbl
-	if err := conf.Db.Where("openid = ?", p.Ownerid).First(&u).Error; err == nil {
-		dto := userToDTO(u)
+	vo := PlaceVoDTO{PlaceDTO: placeToDTO(*p)}
+	if u := repository.FindUserByOpenid(p.Ownerid); u != nil {
+		dto := userToDTO(*u)
 		vo.User = &dto
 	}
 	c.JSON(http.StatusOK, ResultSuccess(vo))
@@ -222,22 +202,22 @@ func (a *AdminPlaceController) GetByPlaceId(c *gin.Context) {
 
 // LockGet 任意方法 /system/lockGet?placeid=
 func (a *AdminPlaceController) LockGet(c *gin.Context) {
-	var l model.LockTbl
-	if err := conf.Db.Where("placeid = ?", c.Query("placeid")).First(&l).Error; err != nil {
+	l, err := repository.LockByPlaceid(c.Request.Context(), c.Query("placeid"))
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
-	c.JSON(http.StatusOK, lockToDTO(l))
+	c.JSON(http.StatusOK, lockToDTO(*l))
 }
 
 // ChargeGet 任意方法 /system/chargeGet?placeid=
 func (a *AdminPlaceController) ChargeGet(c *gin.Context) {
-	var ch chargeDTO
-	if err := conf.Db.Raw("SELECT placeid, charge FROM charge_tbl WHERE placeid = ?", c.Query("placeid")).Scan(&ch).Error; err != nil {
+	ch, err := repository.ChargeByPlaceid(c.Query("placeid"))
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
-	c.JSON(http.StatusOK, ch)
+	c.JSON(http.StatusOK, chargeDTO{Placeid: ch.Placeid, Charge: ch.Charge})
 }
 
 // Sousuo /system/place_list/sousuo
@@ -247,12 +227,7 @@ func (a *AdminPlaceController) Sousuo(c *gin.Context) {
 	ownerid := c.Query("ownerid")
 
 	search := func(field, val string) ([]model.PlaceTbl, int64) {
-		var max int64
-		conf.Db.Model(&model.PlaceTbl{}).Where(field+" LIKE ?", "%"+val+"%").Count(&max)
-		var places []model.PlaceTbl
-		conf.Db.Model(&model.PlaceTbl{}).Where(field+" LIKE ?", "%"+val+"%").
-			Offset(pageOffset(current, size)).Limit(size).Find(&places)
-		return places, max
+		return repository.SearchPlaces(field, val, pageOffset(current, size), size)
 	}
 
 	if ownerid != "" {
@@ -298,33 +273,12 @@ func (a *AdminPlaceController) UpdatePlaceStatus(c *gin.Context) {
 	if req.Enable {
 		state = "可使用"
 	}
-	res := conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", req.Placeid).Update("state", state)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdatePlaceStateByPlaceid(req.Placeid, state)
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // AdminParkingSpaceController 对齐 Java System.controller.ParkingSpacesCon。
 type AdminParkingSpaceController struct{}
-
-// parkingSpaceQuery 构建 tab_parking_spaces 的过滤查询（返回全新链，避免被 Count/Find 污染）。
-func parkingSpaceQuery(name, spacesCode, id, lockID, chargingGunID string) *gorm.DB {
-	db := conf.Db.Table("tab_parking_spaces")
-	if name != "" {
-		db = db.Where("name LIKE ?", "%"+name+"%")
-	}
-	if spacesCode != "" {
-		db = db.Where("spaces_code LIKE ?", "%"+spacesCode+"%")
-	}
-	if id != "" {
-		db = db.Where("id LIKE ?", "%"+id+"%")
-	}
-	if lockID != "" {
-		db = db.Where("lock_id LIKE ?", "%"+lockID+"%")
-	}
-	if chargingGunID != "" {
-		db = db.Where("charging_gun_id LIKE ?", "%"+chargingGunID+"%")
-	}
-	return db
-}
 
 // GetAll GET /system/parkingSpaces/getAll
 func (a *AdminParkingSpaceController) GetAll(c *gin.Context) {
@@ -335,12 +289,7 @@ func (a *AdminParkingSpaceController) GetAll(c *gin.Context) {
 	lockID := c.Query("lockId")
 	chargingGunID := c.Query("chargingGunId")
 
-	var total int64
-	parkingSpaceQuery(name, spacesCode, id, lockID, chargingGunID).Count(&total)
-
-	var rows []repository.ParkingSpace
-	parkingSpaceQuery(name, spacesCode, id, lockID, chargingGunID).
-		Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	total, rows := repository.ListParkingSpaces(name, spacesCode, id, lockID, chargingGunID, pageOffset(current, size), size)
 
 	c.JSON(http.StatusOK, ResultSuccessPage(total, rows))
 }
@@ -365,71 +314,26 @@ func (a *AdminParkingSpaceController) UpdateServiceAndFeeById(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Table("tab_parking_spaces").Where("id = ?", id).Updates(updates)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
-}
-
-// parkingSpaceStats 统计某车位号下驿享充电的（月/周）电量与电费。
-func parkingSpaceStats(c *gin.Context, spacesCode string, weekly bool) {
-	var space model.TabParkingSpace
-	if err := conf.Db.Where("spaces_code = ?", spacesCode).First(&space).Error; err != nil {
-		c.JSON(http.StatusOK, ResultSuccess(gin.H{"totalChargingDegree": 0, "totalElectricityFee": 0}))
-		return
-	}
-
-	now := time.Now()
-	var start, end time.Time
-	if weekly {
-		weekday := int(now.Weekday())
-		if weekday == 0 {
-			weekday = 7
-		}
-		start = now.AddDate(0, 0, -(weekday - 1))
-	} else {
-		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		end = start.AddDate(0, 1, 0)
-	}
-	start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, now.Location())
-	if weekly {
-		end = start.AddDate(0, 0, 7)
-	} else {
-		end = start.AddDate(0, 1, 0)
-	}
-	startStr := start.Format("2006-01-02 15:04:05")
-	endStr := end.Format("2006-01-02 15:04:05")
-
-	// 总电量
-	var degree sql.NullFloat64
-	conf.Db.Raw(
-		"SELECT COALESCE(SUM(charging_degree),0) FROM order_tbl WHERE spaces_id = ? AND consumption_type = '驿享充电' AND state = '已完成' AND over_time >= ? AND over_time < ?",
-		space.ID, startStr, endStr,
-	).Row().Scan(&degree)
-
-	// 总电费（电子时段电价，季节表）
-	season := repository.CurrentSeason()
-	feeSQL := "SELECT COALESCE(SUM((e.over_value - e.start_value) / 100 * " +
-		"CASE s.price_mode WHEN 1 THEN p.total1 WHEN 2 THEN p.total2 ELSE p.total END),0) " +
-		"FROM tab_order_electronic e " +
-		"LEFT JOIN tab_price_time_" + season + " t ON t.id = e.price_time_id " +
-		"LEFT JOIN tab_price p ON p.id = t.price_id " +
-		"LEFT JOIN order_tbl o ON o.orderid = e.order_id " +
-		"LEFT JOIN tab_parking_spaces s ON s.id = o.spaces_id " +
-		"WHERE o.spaces_id = ? AND o.consumption_type = '驿享充电' AND o.state = '已完成' AND o.over_time >= ? AND o.over_time < ?"
-	var fee decimal.Decimal
-	conf.Db.Raw(feeSQL, space.ID, startStr, endStr).Row().Scan(&fee)
-
-	c.JSON(http.StatusOK, ResultSuccess(gin.H{
-		"totalChargingDegree": degree.Float64,
-		"totalElectricityFee": fee,
-	}))
+	rowsAffected := repository.UpdateParkingSpaceByID(id, updates)
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // GetMonthlyChargingStatistics GET /system/parkingSpaces/getMonthlyChargingStatistics
 func (a *AdminParkingSpaceController) GetMonthlyChargingStatistics(c *gin.Context) {
-	parkingSpaceStats(c, c.Query("spacesCode"), false)
+	degree, fee, ok := repository.ParkingSpaceStats(c.Query("spacesCode"), false)
+	if !ok {
+		c.JSON(http.StatusOK, ResultSuccess(gin.H{"totalChargingDegree": 0, "totalElectricityFee": 0}))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(gin.H{"totalChargingDegree": degree, "totalElectricityFee": fee}))
 }
 
 // GetWeeklyChargingStatistics GET /system/parkingSpaces/getWeeklyChargingStatistics
 func (a *AdminParkingSpaceController) GetWeeklyChargingStatistics(c *gin.Context) {
-	parkingSpaceStats(c, c.Query("spacesCode"), true)
+	degree, fee, ok := repository.ParkingSpaceStats(c.Query("spacesCode"), true)
+	if !ok {
+		c.JSON(http.StatusOK, ResultSuccess(gin.H{"totalChargingDegree": 0, "totalElectricityFee": 0}))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(gin.H{"totalChargingDegree": degree, "totalElectricityFee": fee}))
 }
