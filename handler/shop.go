@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ ShopController（/wx 商户） ============
@@ -51,15 +51,12 @@ func shopToShopInfo(shop model.ShopTbl) shopInfoDTO {
 	}
 	address := ""
 	cheweiNum := "0"
-	var place model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", shop.Address).First(&place).Error; err == nil {
+	if place, err := repository.PlaceByPlaceidDB(shop.Address); err == nil {
 		address = place.Province + place.City + place.District + place.Streer + shop.Name
-		var locks []model.LockTbl
-		conf.Db.Where("placeid = ?", place.Placeid).Find(&locks)
+		locks := repository.LocksByPlaceid(place.Placeid)
 		num := 0
 		for _, l := range locks {
-			var lui model.LockUseTbl
-			if conf.Db.Where("lockid = ?", l.Lockid).First(&lui).Error == nil && lui.UseState == "0" {
+			if lui, err := repository.LockUseByLockid(l.Lockid); err == nil && lui.UseState == "0" {
 				num++
 			}
 		}
@@ -76,13 +73,11 @@ type ShopController struct{}
 // GetShopByOpenId 对齐 Java getShopByOpenId（返回 List<ShopDto>，非 Result 包装）。
 func (c *ShopController) GetShopByOpenId(ctx *gin.Context) {
 	openID := ctx.Query("openId")
-	var userShops []model.UserShopTbl
-	conf.Db.Where("open_id = ?", openID).Find(&userShops)
+	userShops := repository.UserShopsByOpenid(openID)
 	list := make([]shopInfoDTO, 0, len(userShops))
 	for _, us := range userShops {
-		var shop model.ShopTbl
-		if err := conf.Db.Where("shop_id = ?", us.ShopID).First(&shop).Error; err == nil {
-			list = append(list, shopToShopInfo(shop))
+		if shop, err := repository.ShopByShopID(us.ShopID); err == nil {
+			list = append(list, shopToShopInfo(*shop))
 		}
 	}
 	ctx.JSON(http.StatusOK, list)
@@ -90,18 +85,18 @@ func (c *ShopController) GetShopByOpenId(ctx *gin.Context) {
 
 // GetShopInfoByShopId 对齐 Java getShopInfoByShopId（返回 ShopDto）。
 func (c *ShopController) GetShopInfoByShopId(ctx *gin.Context) {
-	var shop model.ShopTbl
-	if err := conf.Db.Where("shop_id = ?", ctx.Query("shopId")).First(&shop).Error; err != nil {
+	shop, err := repository.ShopByShopID(ctx.Query("shopId"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
-	ctx.JSON(http.StatusOK, shopToShopInfo(shop))
+	ctx.JSON(http.StatusOK, shopToShopInfo(*shop))
 }
 
 // GetShopName 对齐 Java getShopName（返回 String）。
 func (c *ShopController) GetShopName(ctx *gin.Context) {
-	var shop model.ShopTbl
-	if err := conf.Db.Where("shop_id = ?", ctx.Query("shopId")).First(&shop).Error; err != nil {
+	shop, err := repository.ShopByShopID(ctx.Query("shopId"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, "")
 		return
 	}
@@ -110,8 +105,7 @@ func (c *ShopController) GetShopName(ctx *gin.Context) {
 
 // SearchShop 对齐 Java searchShop（按名称模糊查询，返回 List<Shop>）。
 func (c *ShopController) SearchShop(ctx *gin.Context) {
-	var rows []model.ShopTbl
-	conf.Db.Where("name LIKE ?", "%"+ctx.Query("str")+"%").Find(&rows)
+	rows := repository.ShopsByNameLike(ctx.Query("str"))
 	list := make([]shopDTO, 0, len(rows))
 	for _, s := range rows {
 		list = append(list, shopToDTO(s))
@@ -131,23 +125,22 @@ type shopLockUseInfoDTO struct {
 // shop → place → 该车位所有锁 → 每个锁的使用信息 DTO。
 func (c *ShopController) GetShopLockInfoByShopId(ctx *gin.Context) {
 	shopID := ctx.Query("shopId")
-	var shop model.ShopTbl
-	if err := conf.Db.Where("shop_id = ?", shopID).First(&shop).Error; err != nil {
+	shop, err := repository.ShopByShopID(shopID)
+	if err != nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
-	var place model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", shop.Address).First(&place).Error; err != nil {
+	place, err := repository.PlaceByPlaceidDB(shop.Address)
+	if err != nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
-	var locks []model.LockTbl
-	conf.Db.Where("placeid = ?", place.Placeid).Find(&locks)
+	locks := repository.LocksByPlaceid(place.Placeid)
 
 	res := make([]shopLockUseInfoDTO, 0, len(locks))
 	for _, l := range locks {
-		var lui model.LockUseTbl
-		if conf.Db.Where("lockid = ?", l.Lockid).First(&lui).Error != nil {
+		lui, err := repository.LockUseByLockid(l.Lockid)
+		if err != nil {
 			continue
 		}
 		if lui.UseState == "1" {
@@ -170,18 +163,17 @@ func (c *ShopController) GetShopLockInfoByShopId(ctx *gin.Context) {
 // 返回商铺关联车位下的所有车位锁（lock_tbl）。
 func (c *ShopController) GetShopLockListByShopId(ctx *gin.Context) {
 	shopID := ctx.Query("shopId")
-	var shop model.ShopTbl
-	if err := conf.Db.Where("shop_id = ?", shopID).First(&shop).Error; err != nil {
+	shop, err := repository.ShopByShopID(shopID)
+	if err != nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
-	var place model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", shop.Address).First(&place).Error; err != nil {
+	place, err := repository.PlaceByPlaceidDB(shop.Address)
+	if err != nil {
 		ctx.JSON(http.StatusOK, nil)
 		return
 	}
-	var locks []model.LockTbl
-	conf.Db.Where("placeid = ?", place.Placeid).Find(&locks)
+	locks := repository.LocksByPlaceid(place.Placeid)
 	ctx.JSON(http.StatusOK, locks)
 }
 
@@ -189,45 +181,37 @@ func (c *ShopController) GetShopLockListByShopId(ctx *gin.Context) {
 // 注：Java 原逻辑无论原状态如何都会置 useState=1 并刷新 startTime（else 分支为死代码）。
 func (c *ShopController) UpdateLockInfo(ctx *gin.Context) {
 	lockID := ctx.Query("lockId")
-	var lui model.LockUseTbl
-	if err := conf.Db.Where("lockid = ?", lockID).First(&lui).Error; err != nil {
+	if _, err := repository.LockUseByLockid(lockID); err != nil {
 		ctx.JSON(http.StatusOK, false)
 		return
 	}
 	now := sysTime()
-	res := conf.Db.Model(&model.LockUseTbl{}).Where("lockid = ?", lockID).
-		Updates(map[string]interface{}{"useState": "1", "startTime": now, "updateTime": now})
-	ctx.JSON(http.StatusOK, res.RowsAffected > 0)
+	rowsAffected := repository.UpdateLockUseByLockid(lockID, map[string]interface{}{"useState": "1", "startTime": now, "updateTime": now})
+	ctx.JSON(http.StatusOK, rowsAffected > 0)
 }
 
 // GetShopStaff GET /wx/getShopStaff 对齐 Java getShopStaff：查询有权限的员工（lockPermissions=1）。
 func (c *ShopController) GetShopStaff(ctx *gin.Context) {
-	var staffs []model.ShopStaffTbl
-	conf.Db.Where("shopId = ? AND lockPermissions = ?", ctx.Query("shopId"), "1").Find(&staffs)
+	staffs := repository.ShopStaffByShopid(ctx.Query("shopId"), "1")
 	ctx.JSON(http.StatusOK, staffs)
 }
 
 // DeleteShopStaff GET /wx/deleteShopStaff 对齐 Java deleteShopStaff：取消员工权限（=0）。
 func (c *ShopController) DeleteShopStaff(ctx *gin.Context) {
-	res := conf.Db.Model(&model.ShopStaffTbl{}).
-		Where("number = ?", ctx.Query("staffId")).
-		Update("lockPermissions", "0")
-	ctx.JSON(http.StatusOK, res.RowsAffected > 0)
+	rowsAffected := repository.UpdateShopStaffLockPermissions(ctx.Query("staffId"), "0")
+	ctx.JSON(http.StatusOK, rowsAffected > 0)
 }
 
 // GetShopApplyStaff GET /wx/getShopApplyStaff 对齐 Java getShopApplyStaff：查询无权限员工（=0）。
 func (c *ShopController) GetShopApplyStaff(ctx *gin.Context) {
-	var staffs []model.ShopStaffTbl
-	conf.Db.Where("shopId = ? AND lockPermissions = ?", ctx.Query("shopId"), "0").Find(&staffs)
+	staffs := repository.ShopStaffByShopid(ctx.Query("shopId"), "0")
 	ctx.JSON(http.StatusOK, staffs)
 }
 
 // AgreeShopApplyStaff GET /wx/agreeShopApplyStaff 对齐 Java agreeShopApplyStaff：给予权限（=1）。
 func (c *ShopController) AgreeShopApplyStaff(ctx *gin.Context) {
-	res := conf.Db.Model(&model.ShopStaffTbl{}).
-		Where("number = ?", ctx.Query("staffId")).
-		Update("lockPermissions", "1")
-	ctx.JSON(http.StatusOK, res.RowsAffected > 0)
+	rowsAffected := repository.UpdateShopStaffLockPermissions(ctx.Query("staffId"), "1")
+	ctx.JSON(http.StatusOK, rowsAffected > 0)
 }
 
 // StaffSendApply GET /wx/staffSendApply 对齐 Java ShopStaffServerImpl.staffSendApply：提交权限申请。
@@ -235,8 +219,7 @@ func (c *ShopController) StaffSendApply(ctx *gin.Context) {
 	openID := ctx.Query("openId")
 	shopID := ctx.Query("shopId")
 
-	var staffs []model.ShopStaffTbl
-	conf.Db.Where("shopId = ?", shopID).Find(&staffs)
+	staffs := repository.AllShopStaffByShopid(shopID)
 	for _, s := range staffs {
 		if s.OpenID == openID {
 			ctx.JSON(http.StatusOK, false)
@@ -245,15 +228,19 @@ func (c *ShopController) StaffSendApply(ctx *gin.Context) {
 	}
 
 	staff := c.creatShopStaff(openID, shopID, staffs)
-	res := conf.Db.Select("openId", "shopId", "dust", "name", "age", "number", "creatTime", "phone", "icon", "lockPermissions").
-		Create(&staff)
-	ctx.JSON(http.StatusOK, res.Error == nil)
+	err := repository.CreateFields(&staff, []string{"openId", "shopId", "dust", "name", "age", "number", "creatTime", "phone", "icon", "lockPermissions"})
+	ctx.JSON(http.StatusOK, err == nil)
 }
 
 // creatShopStaff 对齐 Java ShopStaffServerImpl.creatNewStaff：查询 user 封装员工信息（dust=普通员工）。
 func (c *ShopController) creatShopStaff(openID, shopID string, staffs []model.ShopStaffTbl) model.ShopStaffTbl {
-	var user model.UserTbl
-	conf.Db.Where("openid = ?", openID).First(&user)
+	user := repository.FindUserByOpenid(openID)
+	nickName := ""
+	phone := ""
+	if user != nil {
+		nickName = user.NickName
+		phone = user.Phone
+	}
 
 	lastNumber := "000001"
 	for _, s := range staffs {
@@ -265,11 +252,11 @@ func (c *ShopController) creatShopStaff(openID, shopID string, staffs []model.Sh
 		OpenID:          openID,
 		ShopID:          shopID,
 		Dust:            "普通员工",
-		Name:            user.NickName,
+		Name:            nickName,
 		Age:             "20",
 		Number:          lastNumber,
 		CreatTime:       sysTime(),
-		Phone:           user.Phone,
+		Phone:           phone,
 		Icon:            "", // Java 取 user.avatarUrl，Go 模型无此列（只有 avatar BLOB），置空
 		LockPermissions: "0",
 	}

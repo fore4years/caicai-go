@@ -266,6 +266,15 @@ func HasRecentInvoiceApply() bool {
 	return n > 0
 }
 
+// FindUserByOpenid 按 openid 查询用户（未找到返回 nil）。
+func FindUserByOpenid(openid string) *model.UserTbl {
+	var u model.UserTbl
+	if conf.Db.Where("openid = ?", openid).First(&u).Error != nil {
+		return nil
+	}
+	return &u
+}
+
 // UserBankCardByOpenid 按 openid 查询银行卡。
 func UserBankCardByOpenid(openid string) (*model.UserBankCardTbl, error) {
 	var m model.UserBankCardTbl

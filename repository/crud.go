@@ -28,6 +28,11 @@ func Create(value interface{}) *gorm.DB {
 	return conf.Db.Create(value)
 }
 
+// CreateFields 按指定字段插入记录。
+func CreateFields(value interface{}, fields []string) error {
+	return conf.Db.Select(fields).Create(value).Error
+}
+
 // UpdateByID 按主键 id 更新记录（Updates，非零字段）。
 func UpdateByID(model interface{}, id interface{}, updates interface{}) *gorm.DB {
 	return conf.Db.Model(model).Where("id = ?", id).Updates(updates)
