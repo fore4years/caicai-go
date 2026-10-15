@@ -5,8 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
-	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ ReceptaclePowerController（/receptacle/power） ============
@@ -14,13 +13,11 @@ import (
 type ReceptaclePowerController struct{}
 
 func (c *ReceptaclePowerController) GetPowerByPid(ctx *gin.Context) {
-	var rows []model.ReceptaclePowerTbl
-	conf.Db.Where("pid = ?", ctx.Query("pid")).Find(&rows)
+	rows := repository.ReceptaclePowersByPid(ctx.Query("pid"))
 	ctx.JSON(http.StatusOK, ResultSuccess(rows))
 }
 
 func (c *ReceptaclePowerController) GetPowerByReceptacleId(ctx *gin.Context) {
-	var rows []model.ReceptaclePowerTbl
-	conf.Db.Where("receptacle_id = ?", ctx.Query("ReceptacleId")).Find(&rows)
+	rows := repository.ReceptaclePowersByReceptacleID(ctx.Query("ReceptacleId"))
 	ctx.JSON(http.StatusOK, ResultSuccess(rows))
 }
