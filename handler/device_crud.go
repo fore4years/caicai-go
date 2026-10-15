@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
 	"caicai-go/repository"
 )
@@ -155,7 +154,7 @@ type GatewayController struct{}
 
 func (c *GatewayController) GetById(ctx *gin.Context) {
 	var g model.TabGateway
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&g).Error; err != nil {
+	if err := repository.FindByID(&g, ctx.Query("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -168,15 +167,15 @@ func (c *GatewayController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&g).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&g).Error == nil))
 }
 
 func (c *GatewayController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.TabGateway{}).Count(&total)
+	repository.Count(&model.TabGateway{}, &total)
 	var rows []model.TabGateway
-	conf.Db.Model(&model.TabGateway{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.TabGateway{}, "", pageOffset(current, size), size, &rows)
 	list := make([]gatewayDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, gatewayToDTO(r))
@@ -189,21 +188,21 @@ func (c *GatewayController) GetAll(ctx *gin.Context) {
 type LockController struct{}
 
 func (c *LockController) GetById(ctx *gin.Context) {
-	var l model.LockTbl
-	if err := conf.Db.Where("lockid = ?", ctx.Query("id")).First(&l).Error; err != nil {
+	l, err := repository.LockByLockid(ctx.Query("id"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(lockToDTO(l)))
+	ctx.JSON(http.StatusOK, ResultSuccess(lockToDTO(*l)))
 }
 
 func (c *LockController) GetByLockId(ctx *gin.Context) {
-	var l model.LockTbl
-	if err := conf.Db.Where("lockid = ?", strings.ToUpper(ctx.Query("lockId"))).First(&l).Error; err != nil {
+	l, err := repository.LockByLockid(strings.ToUpper(ctx.Query("lockId")))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(lockToDTO(l)))
+	ctx.JSON(http.StatusOK, ResultSuccess(lockToDTO(*l)))
 }
 
 func (c *LockController) Add(ctx *gin.Context) {
@@ -212,15 +211,15 @@ func (c *LockController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&l).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&l).Error == nil))
 }
 
 func (c *LockController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.LockTbl{}).Count(&total)
+	repository.Count(&model.LockTbl{}, &total)
 	var rows []model.LockTbl
-	conf.Db.Model(&model.LockTbl{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.LockTbl{}, "", pageOffset(current, size), size, &rows)
 	list := make([]lockDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, lockToDTO(r))
@@ -229,20 +228,16 @@ func (c *LockController) GetAll(ctx *gin.Context) {
 }
 
 func (c *LockController) GetByPid(ctx *gin.Context) {
-	var l model.LockTbl
-	if err := conf.Db.Where("product_id = ?", strings.ToUpper(ctx.Query("pid"))).First(&l).Error; err != nil {
+	l, err := repository.LockByProductID(strings.ToUpper(ctx.Query("pid")))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(lockToDTO(l)))
+	ctx.JSON(http.StatusOK, ResultSuccess(lockToDTO(*l)))
 }
 
 func (c *LockController) GetByOrder(ctx *gin.Context) {
-	var l model.LockTbl
-	err := conf.Db.Raw(
-		"SELECT l.* FROM order_tbl o LEFT JOIN tab_parking_spaces ps ON o.spaces_id = ps.id LEFT JOIN lock_tbl l ON ps.lock_id = l.lockid WHERE o.orderid = ?",
-		ctx.Query("orderid"),
-	).Scan(&l).Error
+	l, _, _, err := repository.LockProductGatewayByOrder(ctx.Query("orderid"))
 	if err != nil || l.Lockid == "" {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
@@ -256,7 +251,7 @@ type ChargingGunController struct{}
 
 func (c *ChargingGunController) GetById(ctx *gin.Context) {
 	var g model.TabChargingGun
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&g).Error; err != nil {
+	if err := repository.FindByID(&g, ctx.Query("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -269,7 +264,7 @@ func (c *ChargingGunController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&g).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&g).Error == nil))
 }
 
 func (c *ChargingGunController) AddPrivateGun(ctx *gin.Context) {
@@ -278,15 +273,15 @@ func (c *ChargingGunController) AddPrivateGun(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&g).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&g).Error == nil))
 }
 
 func (c *ChargingGunController) GetAll(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.TabChargingGun{}).Count(&total)
+	repository.Count(&model.TabChargingGun{}, &total)
 	var rows []model.TabChargingGun
-	conf.Db.Model(&model.TabChargingGun{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.TabChargingGun{}, "", pageOffset(current, size), size, &rows)
 	list := make([]chargingGunDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, chargingGunToDTO(r))
@@ -295,20 +290,18 @@ func (c *ChargingGunController) GetAll(ctx *gin.Context) {
 }
 
 func (c *ChargingGunController) GetByPidAndDirection(ctx *gin.Context) {
-	var g model.TabChargingGun
-	if err := conf.Db.Where("product_id = ? AND direction = ?", ctx.Query("pid"), ctx.Query("direction")).First(&g).Error; err != nil {
+	g := repository.ChargingGunByPidAndDirection(ctx.Query("pid"), ctx.Query("direction"))
+	if g == nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(chargingGunToDTO(g)))
+	ctx.JSON(http.StatusOK, ResultSuccess(chargingGunToDTO(g.Gun)))
 }
 
 func (c *ChargingGunController) UpdatePwm(ctx *gin.Context) {
 	pwm, _ := strconv.Atoi(ctx.Query("pwm"))
-	res := conf.Db.Model(&model.TabChargingGun{}).
-		Where("product_id = ? AND direction = ?", ctx.Query("product_id"), ctx.Query("direction")).
-		Update("pwm", pwm)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdateChargingGunPwm(ctx.Query("product_id"), ctx.Query("direction"), pwm)
+	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // ============ ChargingStateController（/chargingState） ============
@@ -317,7 +310,7 @@ type ChargingStateController struct{}
 
 func (c *ChargingStateController) List(ctx *gin.Context) {
 	var rows []model.ChargingStateTbl
-	conf.Db.Model(&model.ChargingStateTbl{}).Find(&rows)
+	repository.FindAll(&rows)
 	list := make([]chargingStateDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, chargingStateToDTO(r))
@@ -328,9 +321,9 @@ func (c *ChargingStateController) List(ctx *gin.Context) {
 func (c *ChargingStateController) Page(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.ChargingStateTbl{}).Count(&total)
+	repository.Count(&model.ChargingStateTbl{}, &total)
 	var rows []model.ChargingStateTbl
-	conf.Db.Model(&model.ChargingStateTbl{}).Order("create_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.ChargingStateTbl{}, "create_time desc", pageOffset(current, size), size, &rows)
 	list := make([]chargingStateDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, chargingStateToDTO(r))
@@ -340,7 +333,7 @@ func (c *ChargingStateController) Page(ctx *gin.Context) {
 
 func (c *ChargingStateController) GetById(ctx *gin.Context) {
 	var s model.ChargingStateTbl
-	if err := conf.Db.Where("id = ?", ctx.Query("id")).First(&s).Error; err != nil {
+	if err := repository.FindByID(&s, ctx.Query("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -353,7 +346,7 @@ func (c *ChargingStateController) Save(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&s).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&s).Error == nil))
 }
 
 func (c *ChargingStateController) Update(ctx *gin.Context) {
@@ -362,12 +355,12 @@ func (c *ChargingStateController) Update(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Model(&model.ChargingStateTbl{}).Where("id = ?", s.ID).Updates(s)
+	res := repository.UpdateByID(&model.ChargingStateTbl{}, s.ID, s)
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
 func (c *ChargingStateController) DeleteById(ctx *gin.Context) {
-	res := conf.Db.Where("id = ?", ctx.Query("id")).Delete(&model.ChargingStateTbl{})
+	res := repository.DeleteByID(&model.ChargingStateTbl{}, ctx.Query("id"))
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
@@ -377,7 +370,7 @@ type StationManagementController struct{}
 
 func (c *StationManagementController) GetAll(ctx *gin.Context) {
 	var rows []model.ChargingStationManagementTbl
-	conf.Db.Model(&model.ChargingStationManagementTbl{}).Find(&rows)
+	repository.FindAll(&rows)
 	list := make([]stationManagementDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, stationManagementToDTO(r))
@@ -387,7 +380,7 @@ func (c *StationManagementController) GetAll(ctx *gin.Context) {
 
 func (c *StationManagementController) GetById(ctx *gin.Context) {
 	var m model.ChargingStationManagementTbl
-	if err := conf.Db.Where("id = ?", ctx.Param("id")).First(&m).Error; err != nil {
+	if err := repository.FindByID(&m, ctx.Param("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -395,8 +388,7 @@ func (c *StationManagementController) GetById(ctx *gin.Context) {
 }
 
 func (c *StationManagementController) GetByOpenId(ctx *gin.Context) {
-	var rows []model.ChargingStationManagementTbl
-	conf.Db.Where("openid = ?", ctx.Param("openid")).Find(&rows)
+	rows := repository.StationManagementsByOpenid(ctx.Param("openid"))
 	list := make([]stationManagementDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, stationManagementToDTO(r))
@@ -414,13 +406,11 @@ func (c *StationManagementController) Save(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultError(400, "产品id不能为空"))
 		return
 	}
-	var cnt int64
-	conf.Db.Model(&model.ChargingStationManagementTbl{}).Where("product_id = ?", m.ProductID).Count(&cnt)
-	if cnt > 0 {
+	if repository.StationManagementExistsByProductID(m.ProductID) {
 		ctx.JSON(http.StatusOK, ResultError(400, "该充电站id已存在,请检查后重试!"))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&m).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&m).Error == nil))
 }
 
 func (c *StationManagementController) Update(ctx *gin.Context) {
@@ -432,12 +422,12 @@ func (c *StationManagementController) Update(ctx *gin.Context) {
 	if id, err := strconv.Atoi(ctx.Param("id")); err == nil {
 		m.ID = int32(id)
 	}
-	res := conf.Db.Model(&model.ChargingStationManagementTbl{}).Where("id = ?", m.ID).Updates(m)
+	res := repository.UpdateByID(&model.ChargingStationManagementTbl{}, m.ID, m)
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
 func (c *StationManagementController) Delete(ctx *gin.Context) {
-	res := conf.Db.Where("id = ?", ctx.Param("id")).Delete(&model.ChargingStationManagementTbl{})
+	res := repository.DeleteByID(&model.ChargingStationManagementTbl{}, ctx.Param("id"))
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
@@ -447,7 +437,7 @@ type LedController struct{}
 
 func (c *LedController) GetById(ctx *gin.Context) {
 	var l model.LedTbl
-	if err := conf.Db.Where("id = ?", ctx.Param("id")).First(&l).Error; err != nil {
+	if err := repository.FindByID(&l, ctx.Param("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -459,8 +449,7 @@ func (c *LedController) GetById(ctx *gin.Context) {
 type ReceptacleController struct{}
 
 func (c *ReceptacleController) GetReceptacleAll(ctx *gin.Context) {
-	var rows []model.ReceptacleTbl
-	conf.Db.Where("pid = ?", ctx.Query("pid")).Find(&rows)
+	rows := repository.ReceptaclesByPid(ctx.Query("pid"))
 	list := make([]receptacleDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, receptacleToDTO(r))
@@ -474,7 +463,7 @@ func (c *ReceptacleController) Add(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&r).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&r).Error == nil))
 }
 
 func (c *ReceptacleController) BatchAdd(ctx *gin.Context) {
@@ -496,7 +485,7 @@ func (c *ReceptacleController) BatchAdd(ctx *gin.Context) {
 	for i := 1; i <= num; i++ {
 		rows = append(rows, model.ReceptacleTbl{Pid: req.Pid, Number: int32(i), Status: 0, Name: strconv.Itoa(i) + "号插座"})
 	}
-	tx := conf.Db.Create(&rows)
+	tx := repository.Create(&rows)
 	if tx.Error != nil {
 		logger.Mylog.Err(tx.Error).Msg("添加插座失败")
 	}
@@ -504,12 +493,12 @@ func (c *ReceptacleController) BatchAdd(ctx *gin.Context) {
 }
 
 func (c *ReceptacleController) DeleteById(ctx *gin.Context) {
-	res := conf.Db.Where("id = ?", ctx.Param("id")).Delete(&model.ReceptacleTbl{})
+	res := repository.DeleteByID(&model.ReceptacleTbl{}, ctx.Param("id"))
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
 func (c *ReceptacleController) BatchDelete(ctx *gin.Context) {
-	conf.Db.Where("pid = ?", ctx.Param("pid")).Delete(&model.ReceptacleTbl{})
+	repository.DeleteReceptaclesByPid(ctx.Param("pid"))
 	ctx.JSON(http.StatusOK, ResultSuccess(true))
 }
 
@@ -522,16 +511,12 @@ func (c *ImeiController) Binding(ctx *gin.Context) {
 	socket := ctx.Query("socket")
 
 	// 已存在绑定关系直接返回成功（对齐 Java ImeiServiceImpl.binding 的 checkBinding）。
-	var cnt int64
-	conf.Db.Model(&model.ImeiTab{}).
-		Where("charging_station = ? AND charging_socket = ? AND deleted = 0", station, socket).
-		Count(&cnt)
-	if cnt > 0 {
+	if repository.ImeiBindingExists(station, socket) {
 		ctx.JSON(http.StatusOK, ResultSuccess(true))
 		return
 	}
 
-	res := conf.Db.Create(&model.ImeiTab{ChargingStation: station, ChargingSocket: socket, Status: 1})
+	res := repository.Create(&model.ImeiTab{ChargingStation: station, ChargingSocket: socket, Status: 1})
 	ctx.JSON(http.StatusOK, ResultSuccess(res.Error == nil))
 }
 
@@ -540,28 +525,19 @@ func (c *ImeiController) CancelBinding(ctx *gin.Context) {
 	socket := ctx.Query("socket")
 
 	// 不存在绑定关系直接返回成功（对齐 Java ImeiServiceImpl.cancelBinding）。
-	var cnt int64
-	conf.Db.Model(&model.ImeiTab{}).
-		Where("charging_station = ? AND charging_socket = ? AND deleted = 0", station, socket).
-		Count(&cnt)
-	if cnt == 0 {
+	if !repository.ImeiBindingExists(station, socket) {
 		ctx.JSON(http.StatusOK, ResultSuccess(true))
 		return
 	}
 
 	// 逻辑删除（@TableLogic -> deleted = 1），对齐 Java remove()。
-	res := conf.Db.Model(&model.ImeiTab{}).
-		Where("charging_station = ? AND charging_socket = ? AND deleted = 0", station, socket).
-		Update("deleted", 1)
-	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.DeleteImeiBinding(station, socket)
+	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 func (c *ImeiController) ListBinding(ctx *gin.Context) {
 	current, size := parsePage(ctx)
-	var total int64
-	conf.Db.Model(&model.ImeiTab{}).Where("deleted = 0").Count(&total)
-	var rows []model.ImeiTab
-	conf.Db.Model(&model.ImeiTab{}).Where("deleted = 0").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	total, rows := repository.ListImeiBindings(pageOffset(current, size), size)
 	list := make([]imeiDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, imeiToDTO(r))
@@ -571,7 +547,7 @@ func (c *ImeiController) ListBinding(ctx *gin.Context) {
 
 func (c *ImeiController) UpdateBinding(ctx *gin.Context) {
 	id := ctx.Query("id")
-	res := conf.Db.Model(&model.ImeiTab{}).Where("id = ?", id).Updates(map[string]interface{}{
+	res := repository.UpdateByID(&model.ImeiTab{}, id, map[string]interface{}{
 		"charging_station": ctx.Query("station"),
 		"charging_socket":  ctx.Query("socket"),
 	})
