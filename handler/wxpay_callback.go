@@ -7,7 +7,6 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
 	"caicai-go/repository"
@@ -48,14 +47,12 @@ func handlePayscorePaid(content *wxQueryOrderRes) {
 
 // saveOrderTransactionID 把微信交易号写回订单，成功后异步触发分账（对齐 Java saveTransactionId）。
 func saveOrderTransactionID(outOrderNo, transactionID string) {
-	res := conf.Db.Model(&model.OrderTbl{}).
-		Where("orderid = ?", outOrderNo).
-		Update("wechat_transaction_id", transactionID)
-	if res.Error != nil {
-		logger.Mylog.Error().Err(res.Error).Msgf("更新订单微信交易号失败 - 订单号: %s", outOrderNo)
+	rowsAffected, err := repository.UpdateOrderWechatTransactionID(outOrderNo, transactionID)
+	if err != nil {
+		logger.Mylog.Error().Err(err).Msgf("更新订单微信交易号失败 - 订单号: %s", outOrderNo)
 		return
 	}
-	if res.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		logger.Mylog.Warn().Msgf("更新订单微信交易号无匹配订单 - 订单号: %s", outOrderNo)
 		return
 	}
@@ -106,8 +103,8 @@ func queryWxOrderDetail(outOrderNo string) *wxQueryOrderRes {
 // triggerProfitSharing 触发分账（对齐 Java OrderServiceImpl.triggerProfitSharing）。
 // 仅对驿享充电订单执行；未配置分账时走解冻；按模式计算分账金额后调用分账接口。
 func triggerProfitSharing(orderID string) {
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		logger.Mylog.Warn().Msgf("触发分账失败：未找到订单 - 订单号: %s", orderID)
 		return
 	}
@@ -116,8 +113,8 @@ func triggerProfitSharing(orderID string) {
 		return
 	}
 
-	var config model.TabProfitSharingConfig
-	if err := conf.Db.Where("spaces_id = ? AND enabled = ?", order.SpacesID, true).First(&config).Error; err != nil {
+	config, err := repository.ProfitSharingConfigBySpacesID(order.SpacesID)
+	if err != nil {
 		logger.Mylog.Info().Msgf("该车位未配置分账或已禁用，调用解冻接口释放资金 - 订单号: %s", orderID)
 		unfreezeOrderInternal(orderID)
 		return
@@ -144,7 +141,7 @@ func triggerProfitSharing(orderID string) {
 		return
 	}
 
-	executeProfitSharing(orderID, amount, config)
+	executeProfitSharing(orderID, amount, *config)
 }
 
 // 微信分账 / 解冻接口 URL（对齐 Java ProfitSharingServiceImpl 的常量）。
@@ -201,9 +198,8 @@ func executeProfitSharing(orderID string, amount decimal.Decimal, config model.T
 		return
 	}
 
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil ||
-		strings.TrimSpace(order.WechatTransactionID) == "" {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil || strings.TrimSpace(order.WechatTransactionID) == "" {
 		logger.Mylog.Warn().Msgf("未找到微信交易号，跳过分账 - 订单号: %s", orderID)
 		return
 	}
@@ -236,9 +232,8 @@ func executeProfitSharing(orderID string, amount decimal.Decimal, config model.T
 
 // unfreezeOrderInternal 解冻订单资金（对齐 Java ProfitSharingService.unfreezeOrder）。
 func unfreezeOrderInternal(orderID string) {
-	var order model.OrderTbl
-	if conf.Db.Where("orderid = ?", orderID).First(&order).Error != nil ||
-		strings.TrimSpace(order.WechatTransactionID) == "" {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil || strings.TrimSpace(order.WechatTransactionID) == "" {
 		logger.Mylog.Warn().Msgf("解冻失败：订单不存在或无微信交易号 - 订单号: %s", orderID)
 		return
 	}

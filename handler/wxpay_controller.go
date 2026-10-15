@@ -9,12 +9,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
 	"caicai-go/constant"
 	"caicai-go/logger"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============================================================================
@@ -210,7 +209,7 @@ func (w *WeChatPaymentController) Recharge(c *gin.Context) {
 		CreateTime:            timePtr(time.Now()),
 		UpdateTime:            timePtr(time.Now()),
 	}
-	if err := conf.Db.Model(&model.RechargeOrderTbl{}).Omit("payment_time", "refund_time").Create(order).Error; err != nil {
+	if err := repository.CreateRechargeOrder(order); err != nil {
 		logger.Mylog.Err(fmt.Errorf("创建订单失败, orderId=%s: %w", orderId, err))
 		c.JSON(http.StatusInternalServerError, ResultError(400, "数据更新失败"))
 		return
@@ -272,41 +271,23 @@ func (w *WeChatPaymentController) PayCallback(c *gin.Context) {
 // settlePayCallback 按商户订单号依次匹配充值订单、购桩订单、套餐订单并结算，对齐 Java 回调的 if-else 链。
 func settlePayCallback(outTradeNo, transactionID string) error {
 	// 1. 充值订单
-	var rechargeOrder model.RechargeOrderTbl
-	if err := conf.Db.Where("order_id = ?", outTradeNo).First(&rechargeOrder).Error; err == nil {
-		return settleRechargeOrder(&rechargeOrder, transactionID)
+	if rechargeOrder, err := repository.RechargeOrderByOrderID(outTradeNo); err == nil {
+		return settleRechargeOrder(rechargeOrder, transactionID)
 	}
 
 	// 2. 购桩订单
-	var purchasePole model.PurchasePoleApplicationTbl
-	if err := conf.Db.Where("order_number = ?", outTradeNo).First(&purchasePole).Error; err == nil {
-		res := conf.Db.Model(&model.PurchasePoleApplicationTbl{}).
-			Where("order_number = ?", outTradeNo).
-			Updates(map[string]interface{}{
-				"transaction_id": transactionID,
-				"pay_time":       time.Now(),
-				"order_status":   "已支付",
-			})
-		if res.Error != nil {
-			return res.Error
+	if found, err := repository.SettlePurchasePole(outTradeNo, transactionID); found {
+		if err != nil {
+			return err
 		}
 		logger.Mylog.Info().Msgf("成功更新购桩订单支付信息和状态, 订单号: %s", outTradeNo)
 		return nil
 	}
 
 	// 3. 套餐订单
-	var pkg model.PackageRecordTbl
-	if err := conf.Db.Where("order_no = ?", outTradeNo).First(&pkg).Error; err == nil {
-		updates := map[string]interface{}{
-			"status":         "paid",
-			"transaction_id": transactionID,
-		}
-		if pkg.EndTime.IsZero() && !pkg.CreateTime.IsZero() {
-			updates["end_time"] = pkg.CreateTime.AddDate(0, 0, int(pkg.Days))
-		}
-		res := conf.Db.Model(&model.PackageRecordTbl{}).Where("order_no = ?", outTradeNo).Updates(updates)
-		if res.Error != nil {
-			return res.Error
+	if found, err := repository.SettlePackageRecord(outTradeNo, transactionID); found {
+		if err != nil {
+			return err
 		}
 		logger.Mylog.Info().Msgf("成功更新套餐充值订单支付信息和状态, 订单号: %s", outTradeNo)
 		return nil
@@ -318,42 +299,7 @@ func settlePayCallback(outTradeNo, transactionID string) error {
 // settleRechargeOrder 充值订单支付成功结算：待支付 -> 已支付，加余额，记余额明细。
 // 用「状态条件更新」保证幂等（重复回调不重复加余额），事务保证订单状态/余额/明细同时生效。
 func settleRechargeOrder(order *model.RechargeOrderTbl, transactionID string) error {
-	if order.OrderStatus == "已支付" {
-		return nil // 已处理过，幂等
-	}
-	return conf.Db.Transaction(func(tx *gorm.DB) error {
-		res := tx.Model(&model.RechargeOrderTbl{}).
-			Where("order_id = ? AND order_status = ?", order.OrderID, constant.OrderRecharging).
-			Updates(map[string]interface{}{
-				"order_status":          "已支付",
-				"wechat_transaction_id": transactionID,
-				"payment_time":          time.Now(),
-				"update_time":           time.Now(),
-			})
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected <= 0 {
-			return nil // 已被其它回调处理
-		}
-
-		// 加余额（原子 UPDATE，DECIMAL 精度）
-		amt := order.RechargeAmount.StringFixed(2)
-		if err := tx.Exec(
-			"UPDATE user_tbl SET balans = balans + CAST(? AS DECIMAL(10,2)) WHERE openid = ?",
-			amt, order.Openid,
-		).Error; err != nil {
-			return err
-		}
-
-		// 记余额明细（类型「充值」）
-		return tx.Create(&model.TabBalanceRecord{
-			Openid:     order.Openid,
-			Type:       "充值",
-			Amount:     order.RechargeAmount,
-			CreateTime: timePtr(time.Now()),
-		}).Error
-	})
+	return repository.SettleRechargeOrder(order, transactionID)
 }
 
 // OnWxCallbackNotify 微信支付分回调，对齐 Java WxPayImp.wechatCallback。
