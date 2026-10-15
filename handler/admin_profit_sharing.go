@@ -2,14 +2,12 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // profitSharingDTO 对应 Java model.ProfitSharingConfigBean（驼峰）。
@@ -49,26 +47,7 @@ type AdminProfitSharingController struct{}
 // receiverMchId 模糊匹配，按 create_time 升序。
 func (a *AdminProfitSharingController) List(c *gin.Context) {
 	current, size := parsePage(c)
-	spacesID := c.Query("spacesId")
-	receiverMchID := c.Query("receiverMchId")
-
-	query := func() *gorm.DB {
-		db := conf.Db.Model(&model.TabProfitSharingConfig{})
-		if spacesID != "" {
-			if id, err := strconv.Atoi(spacesID); err == nil {
-				db = db.Where("spaces_id = ?", id)
-			}
-		}
-		if receiverMchID != "" {
-			db = db.Where("receiver_mch_id LIKE ?", "%"+receiverMchID+"%")
-		}
-		return db
-	}
-
-	var total int64
-	query().Count(&total)
-	var rows []model.TabProfitSharingConfig
-	query().Order("create_time asc").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	total, rows := repository.ListProfitSharingConfigs(c.Query("spacesId"), c.Query("receiverMchId"), pageOffset(current, size), size)
 
 	list := make([]profitSharingDTO, 0, len(rows))
 	for _, r := range rows {
@@ -80,7 +59,7 @@ func (a *AdminProfitSharingController) List(c *gin.Context) {
 // Detail GET /system/profitSharingConfig/detail/:id
 func (a *AdminProfitSharingController) Detail(c *gin.Context) {
 	var r model.TabProfitSharingConfig
-	if err := conf.Db.Where("id = ?", c.Param("id")).First(&r).Error; err != nil {
+	if err := repository.FindByID(&r, c.Param("id")).Error; err != nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -98,7 +77,7 @@ func (a *AdminProfitSharingController) Add(c *gin.Context) {
 	now := time.Now()
 	r.CreateTime = timePtr(now)
 	r.UpdateTime = timePtr(now)
-	if err := conf.Db.Create(&r).Error; err != nil {
+	if err := repository.Create(&r).Error; err != nil {
 		c.JSON(http.StatusOK, ResultError(500, "添加分账配置失败: "+err.Error()))
 		return
 	}
@@ -113,7 +92,7 @@ func (a *AdminProfitSharingController) Update(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(500, "修改分账配置失败"))
 		return
 	}
-	res := conf.Db.Model(&model.TabProfitSharingConfig{}).Where("id = ?", r.ID).Updates(map[string]interface{}{
+	res := repository.UpdateByID(&model.TabProfitSharingConfig{}, r.ID, map[string]interface{}{
 		"spaces_id":       r.SpacesID,
 		"receiver_mch_id": r.ReceiverMchID,
 		"receiver_name":   r.ReceiverName,
@@ -132,7 +111,7 @@ func (a *AdminProfitSharingController) Update(c *gin.Context) {
 
 // Delete DELETE /system/profitSharingConfig/delete/:id
 func (a *AdminProfitSharingController) Delete(c *gin.Context) {
-	conf.Db.Where("id = ?", c.Param("id")).Delete(&model.TabProfitSharingConfig{})
+	repository.DeleteByID(&model.TabProfitSharingConfig{}, c.Param("id"))
 	c.JSON(http.StatusOK, ResultSuccess(true))
 }
 
@@ -144,7 +123,7 @@ func (a *AdminProfitSharingController) BatchDelete(c *gin.Context) {
 		return
 	}
 	if len(ids) > 0 {
-		conf.Db.Where("id IN ?", ids).Delete(&model.TabProfitSharingConfig{})
+		repository.DeleteProfitSharingConfigsByIDs(ids)
 	}
 	c.JSON(http.StatusOK, ResultSuccess(true))
 }

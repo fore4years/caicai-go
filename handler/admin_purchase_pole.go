@@ -5,10 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // purchasePoleDTO 对应 Java domain.PurchasePoleApplication（驼峰）。
@@ -66,33 +65,7 @@ type AdminPurchasePoleController struct{}
 // List GET /system/purchasePoleManage/list
 func (a *AdminPurchasePoleController) List(c *gin.Context) {
 	current, size := parsePage(c)
-	orderNumber := c.Query("orderNumber")
-	openid := c.Query("openid")
-	orderStatus := c.Query("orderStatus")
-
-	query := func() *gorm.DB {
-		db := conf.Db.Model(&model.PurchasePoleApplicationTbl{})
-		if orderNumber != "" {
-			db = db.Where("order_number = ?", orderNumber)
-		}
-		if openid != "" {
-			db = db.Where("openid = ?", openid)
-		}
-		if orderStatus != "" {
-			// 处理"退款中"状态识别为"已退款"
-			if orderStatus == "退款中" {
-				db = db.Where("order_status = ?", "已退款")
-			} else {
-				db = db.Where("order_status = ?", orderStatus)
-			}
-		}
-		return db
-	}
-
-	var total int64
-	query().Count(&total)
-	var rows []model.PurchasePoleApplicationTbl
-	query().Order("apply_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	total, rows := repository.ListPurchasePoles(c.Query("orderNumber"), c.Query("openid"), c.Query("orderStatus"), pageOffset(current, size), size)
 
 	list := make([]purchasePoleDTO, 0, len(rows))
 	for _, r := range rows {
@@ -103,20 +76,18 @@ func (a *AdminPurchasePoleController) List(c *gin.Context) {
 
 // Detail GET /system/purchasePoleManage/detail?orderNumber=
 func (a *AdminPurchasePoleController) Detail(c *gin.Context) {
-	var r model.PurchasePoleApplicationTbl
-	if err := conf.Db.Where("order_number = ?", c.Query("orderNumber")).First(&r).Error; err != nil {
+	r, err := repository.PurchasePoleByOrderNumber(c.Query("orderNumber"))
+	if err != nil {
 		c.JSON(http.StatusOK, ResultError(400, "未找到购桩订单详情"))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(purchasePoleToDTO(r)))
+	c.JSON(http.StatusOK, ResultSuccess(purchasePoleToDTO(*r)))
 }
 
 // UpdateStatus POST /system/purchasePoleManage/updateStatus
 func (a *AdminPurchasePoleController) UpdateStatus(c *gin.Context) {
-	res := conf.Db.Model(&model.PurchasePoleApplicationTbl{}).
-		Where("order_number = ?", c.Query("orderNumber")).
-		Update("order_status", c.Query("orderStatus"))
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdatePurchasePoleStatus(c.Query("orderNumber"), c.Query("orderStatus"))
+	if rowsAffected == 0 {
 		c.JSON(http.StatusOK, ResultError(500, "更新购桩订单状态失败"))
 		return
 	}
@@ -134,8 +105,7 @@ func (a *AdminPurchasePoleController) BatchDelete(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(500, "批量删除失败"))
 		return
 	}
-	res := conf.Db.Where("order_number IN ?", orderNumbers).Delete(&model.PurchasePoleApplicationTbl{})
-	if res.RowsAffected > 0 {
+	if repository.DeletePurchasePolesByOrderNumbers(orderNumbers) > 0 {
 		c.JSON(http.StatusOK, ResultSuccess("批量删除成功"))
 		return
 	}

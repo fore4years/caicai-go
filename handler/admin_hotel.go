@@ -5,10 +5,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // hotelDTO 对应 Java domain.Hotel（hotel_tbl，驼峰）。
@@ -49,30 +48,8 @@ type AdminHotelController struct{}
 // hotelName 模糊、creat_time 倒序，返回 {list,total,pageNum,pageSize,pages}）。
 func (a *AdminHotelController) List(c *gin.Context) {
 	current, size := parsePage(c)
-	id := c.Query("id")
-	openid := c.Query("openid")
-	hotelName := c.Query("hotelName")
 
-	query := func() *gorm.DB {
-		db := conf.Db.Model(&model.HotelTbl{})
-		if id != "" {
-			if v, err := strconv.Atoi(id); err == nil {
-				db = db.Where("id = ?", v)
-			}
-		}
-		if openid != "" {
-			db = db.Where("openid = ?", openid)
-		}
-		if hotelName != "" {
-			db = db.Where("hotel_name LIKE ?", "%"+hotelName+"%")
-		}
-		return db
-	}
-
-	var total int64
-	query().Count(&total)
-	var rows []model.HotelTbl
-	query().Order("creat_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	total, rows := repository.ListHotels(c.Query("id"), c.Query("openid"), c.Query("hotelName"), pageOffset(current, size), size)
 
 	list := make([]hotelDTO, 0, len(rows))
 	for _, r := range rows {
@@ -100,8 +77,8 @@ func (a *AdminHotelController) UpdateReview(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(500, "更新审核状态失败"))
 		return
 	}
-	res := conf.Db.Model(&model.HotelTbl{}).Where("id = ?", id).Update("review", review)
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdateHotelReview(id, review)
+	if rowsAffected == 0 {
 		c.JSON(http.StatusOK, ResultError(500, "更新审核状态失败"))
 		return
 	}
@@ -119,8 +96,7 @@ func (a *AdminHotelController) BatchDelete(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(500, "批量删除失败"))
 		return
 	}
-	res := conf.Db.Where("id IN ?", ids).Delete(&model.HotelTbl{})
-	if res.RowsAffected > 0 {
+	if repository.DeleteHotelsByIDs(ids) > 0 {
 		c.JSON(http.StatusOK, ResultSuccess("批量删除成功"))
 		return
 	}
