@@ -94,8 +94,14 @@ func ListParkingSpaces(name, spacesCode, id, lockID, chargingGunID string, offse
 }
 
 // UpdateParkingSpaceByID 按 id 更新车位，返回受影响行数。
-func UpdateParkingSpaceByID(id string, updates map[string]interface{}) int64 {
+func UpdateParkingSpaceByID(id interface{}, updates map[string]interface{}) int64 {
 	res := conf.Db.Table("tab_parking_spaces").Where("id = ?", id).Updates(updates)
+	return res.RowsAffected
+}
+
+// DeleteParkingSpaceByID 按 id 删除车位，返回受影响行数。
+func DeleteParkingSpaceByID(id interface{}) int64 {
+	res := conf.Db.Table("tab_parking_spaces").Where("id = ?", id).Delete(nil)
 	return res.RowsAffected
 }
 

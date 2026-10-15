@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
 	"caicai-go/repository"
 )
@@ -189,17 +188,14 @@ type AdminChargeStationFourController struct{}
 // GetStationListByPage GET /system/chargeStationFour/getStationListByPage
 func (a *AdminChargeStationFourController) GetStationListByPage(c *gin.Context) {
 	current, size := parsePage(c)
-	var total int64
-	conf.Db.Table("tab_parking_spaces").Count(&total)
-	var rows []repository.ParkingSpace
-	conf.Db.Table("tab_parking_spaces").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	total, rows := repository.PageParkingSpaces(pageOffset(current, size), size)
 	c.JSON(http.StatusOK, ResultSuccessPage(total, rows))
 }
 
 // GetBySpacesCode GET /system/chargeStationFour/getBySpacesCode?spacesCode=
 func (a *AdminChargeStationFourController) GetBySpacesCode(c *gin.Context) {
-	var row repository.ParkingSpace
-	if err := conf.Db.Table("tab_parking_spaces").Where("spaces_code = ?", c.Query("spacesCode")).Scan(&row).Error; err != nil || row.ID == 0 {
+	row := repository.ParkingSpaceDTOBySpacesCode(c.Query("spacesCode"))
+	if row == nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -208,8 +204,8 @@ func (a *AdminChargeStationFourController) GetBySpacesCode(c *gin.Context) {
 
 // GetStationById GET /system/chargeStationFour/getStationById?id=
 func (a *AdminChargeStationFourController) GetStationById(c *gin.Context) {
-	var row repository.ParkingSpace
-	if err := conf.Db.Table("tab_parking_spaces").Where("id = ?", c.Query("id")).Scan(&row).Error; err != nil || row.ID == 0 {
+	row := repository.ParkingSpaceByID(c.Query("id"))
+	if row == nil {
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -254,12 +250,12 @@ func (a *AdminChargeStationFourController) UpdateById(c *gin.Context) {
 	if !req.ServiceFee.IsZero() {
 		updates["service_fee"] = req.ServiceFee
 	}
-	res := conf.Db.Table("tab_parking_spaces").Where("id = ?", req.ID).Updates(updates)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.UpdateParkingSpaceByID(req.ID, updates)
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 // DeleteById DELETE /system/chargeStationFour/deleteById/:id
 func (a *AdminChargeStationFourController) DeleteById(c *gin.Context) {
-	res := conf.Db.Table("tab_parking_spaces").Where("id = ?", c.Param("id")).Delete(nil)
-	c.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
+	rowsAffected := repository.DeleteParkingSpaceByID(c.Param("id"))
+	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
