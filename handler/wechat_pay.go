@@ -14,9 +14,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/wechatpay-apiv3/wechatpay-go/core"
 
-	"caicai-go/conf"
 	"caicai-go/logger"
-	"caicai-go/model"
 	"caicai-go/repository"
 )
 
@@ -277,8 +275,8 @@ func completeWxOrder(orderID string, amount int) {
 
 // buildCompleteOrder 按订单消费类型构造完结订单请求体（对齐 Java 各 onCompleteWx* 方法）。
 func buildCompleteOrder(orderID string, amount int) *wxCompleteOrder {
-	var order model.OrderTbl
-	if err := conf.Db.Where("orderid = ?", orderID).First(&order).Error; err != nil {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
 		logger.Mylog.Warn().Msgf("completeWxOrder 查不到订单: %s", orderID)
 		return nil
 	}

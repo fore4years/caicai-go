@@ -120,3 +120,12 @@ func InvoiceTitlesByOpenid(openid string) []model.InvoiceTitle {
 func UpdateInvoiceStateByInvoiceID(invoiceID string, state int) {
 	conf.Db.Model(&model.Invoice{}).Where("invoice_id = ?", invoiceID).Update("state", state)
 }
+
+// FindOrderByOrderid 按 orderid 查询订单。
+func FindOrderByOrderid(orderid string) (*model.OrderTbl, error) {
+	var order model.OrderTbl
+	if err := conf.Db.Where("orderid = ?", orderid).First(&order).Error; err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
