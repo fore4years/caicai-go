@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -9,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ OwnerController（/wx/owner、/wx） ============
@@ -20,7 +19,7 @@ type OwnerController struct{}
 // GetPlaceAll 对齐 Java indexSer.getPlaceAll：查询所有车位。
 func (c *OwnerController) GetPlaceAll(ctx *gin.Context) {
 	var places []model.PlaceTbl
-	conf.Db.Find(&places)
+	repository.FindAll(&places)
 	list := make([]PlaceDTO, 0, len(places))
 	for _, p := range places {
 		list = append(list, placeToDTO(p))
@@ -31,22 +30,13 @@ func (c *OwnerController) GetPlaceAll(ctx *gin.Context) {
 // GetPlace 对齐 Java indexSer.getPlace：按 ownerid 查车位并补充充电枪信息。
 func (c *OwnerController) GetPlace(ctx *gin.Context) {
 	ownerid := ctx.Query("ownerid")
-	var rows []struct {
-		model.PlaceTbl
-		LockID string `gorm:"column:lockid"`
-	}
-	conf.Db.Raw(
-		`SELECT p.*, l.lockid FROM place_tbl p
-		 LEFT JOIN lock_tbl l ON p.placeid = l.placeid
-		 WHERE ownerid = ? ORDER BY placeid ASC`, ownerid,
-	).Scan(&rows)
+	rows := repository.PlacesWithLockByOwnerid(ownerid)
 	list := make([]PlaceDtoDTO, 0, len(rows))
 	for _, r := range rows {
 		dto := placeToPlaceDtoDTO(r.PlaceTbl)
 		dto.ParkRate = r.ParkRate
 		dto.LockID = r.LockID
-		var cms []model.ChargeMessageTbl
-		conf.Db.Where("placeid = ?", r.Placeid).Find(&cms)
+		cms := repository.ChargeMessagesByPlaceid(r.Placeid)
 		if len(cms) > 0 {
 			dto.ChargeID = cms[len(cms)-1].Chargeid
 			dto.Ischarge = 1
@@ -58,13 +48,7 @@ func (c *OwnerController) GetPlace(ctx *gin.Context) {
 
 // GetOrders 对齐 Java mySer.getOrder_owner（返回 List<OrderBean>，非 Result 包装）。
 func (c *OwnerController) GetOrders(ctx *gin.Context) {
-	var orders []model.OrderTbl
-	conf.Db.Raw(
-		`SELECT * FROM order_tbl
-		 WHERE lockid IN (SELECT lockid FROM lock_tbl WHERE placeid IN (SELECT placeid FROM place_tbl WHERE ownerid = ?))
-		   AND state = '已完成'
-		 ORDER BY begin_time DESC`, ctx.Query("ownerid"),
-	).Scan(&orders)
+	orders := repository.OrdersByOwnerid(ctx.Query("ownerid"))
 	list := make([]OrderDTO, 0, len(orders))
 	for _, o := range orders {
 		list = append(list, orderToDTO(o))
@@ -85,9 +69,7 @@ func (c *OwnerController) PlaceAdd(ctx *gin.Context) {
 	relatedBuilding := ctx.PostForm("relatedBuilding")
 	carnumber := ctx.PostForm("carnumber")
 
-	var existing model.PlaceapplyTbl
-	if err := conf.Db.Where("name = ? AND code = ? AND streer = ? AND relatedBuilding = ? AND carnumber = ?",
-		name, code, streer, relatedBuilding, carnumber).First(&existing).Error; err == nil {
+	if repository.PlaceapplyExists(name, code, streer, relatedBuilding, carnumber) {
 		ctx.JSON(http.StatusOK, "noRepeat")
 		return
 	}
@@ -100,7 +82,7 @@ func (c *OwnerController) PlaceAdd(ctx *gin.Context) {
 		Code: code, Streer: streer, RelatedBuilding: relatedBuilding,
 		Carnumber: carnumber, ApplyTime: applyTime, State: "待审核",
 	}
-	if err := conf.Db.Create(&rec).Error; err != nil {
+	if err := repository.Create(&rec).Error; err != nil {
 		ctx.JSON(http.StatusOK, id)
 		return
 	}
@@ -110,7 +92,7 @@ func (c *OwnerController) PlaceAdd(ctx *gin.Context) {
 		Message: name + "先生（女士），您好，您注册的车位：" + province + city + streer + relatedBuilding + ",正在努力审核中，请留意后续消息~",
 		Msgtime: applyTime,
 	}
-	conf.Db.Create(&msg)
+	repository.Create(&msg)
 
 	ctx.JSON(http.StatusOK, id)
 }
@@ -126,8 +108,8 @@ func (c *OwnerController) PlaceUpdate(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, "车位id不能为空！")
 		return
 	}
-	var placeBean model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", p.Placeid).First(&placeBean).Error; err != nil {
+	placeBean, err := repository.PlaceByPlaceidDB(p.Placeid)
+	if err != nil {
 		ctx.JSON(http.StatusOK, "车位不存在！")
 		return
 	}
@@ -136,13 +118,13 @@ func (c *OwnerController) PlaceUpdate(ctx *gin.Context) {
 		return
 	}
 	if p.ParkRate != "" {
-		conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", p.Placeid).Updates(map[string]interface{}{
+		repository.UpdatePlaceFields(p.Placeid, map[string]interface{}{
 			"openTime":  p.OpenTime,
 			"park_rate": p.ParkRate,
 			"rate":      p.Rate,
 		})
 	} else {
-		conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", p.Placeid).Updates(map[string]interface{}{
+		repository.UpdatePlaceFields(p.Placeid, map[string]interface{}{
 			"openTime": p.OpenTime,
 			"rate":     p.Rate,
 		})
@@ -167,25 +149,25 @@ func (c *OwnerController) LockAdd(ctx *gin.Context) {
 		State:     "正常",
 		ProductID: ctx.PostForm("productId"),
 	}
-	if err := conf.Db.Create(&l).Error; err != nil {
+	if err := repository.Create(&l).Error; err != nil {
 		ctx.JSON(http.StatusOK, "notLockAdd")
 		return
 	}
-	conf.Db.Model(&model.TabParkingSpace{}).Where("spaces_code = ?", placeid).Update("lock_id", lockid)
-	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", placeid).Updates(map[string]interface{}{
+	repository.UpdateParkingSpaceLockID(placeid, lockid)
+	repository.UpdatePlaceFields(placeid, map[string]interface{}{
 		"longitude": ctx.PostForm("longitude"),
 		"latitude":  ctx.PostForm("latitude"),
 	})
-	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", placeid).Update("state", "可使用")
-	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", placeid).Update("rate", ctx.PostForm("rate"))
-	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", placeid).Update("openTime", ctx.PostForm("openTime"))
+	repository.UpdatePlaceField(placeid, "state", "可使用")
+	repository.UpdatePlaceField(placeid, "rate", ctx.PostForm("rate"))
+	repository.UpdatePlaceField(placeid, "openTime", ctx.PostForm("openTime"))
 	ctx.JSON(http.StatusOK, "ok")
 }
 
 // GetByLockMac 对齐 Java lockAddSer.getByLockMac：返回锁的 lockmac。
 func (c *OwnerController) GetByLockMac(ctx *gin.Context) {
-	var l model.LockTbl
-	if err := conf.Db.Where("lockid = ?", ctx.Query("lockid")).First(&l).Error; err != nil {
+	l, err := repository.LockByLockid(ctx.Query("lockid"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -208,41 +190,20 @@ func saveNamedImage(ctx *gin.Context, field string) (int32, bool) {
 		return 0, false
 	}
 	img := model.TabImage{Image: data}
-	if conf.Db.Create(&img).Error != nil {
+	if repository.Create(&img).Error != nil {
 		return 0, false
 	}
 	return img.ID, true
 }
 
-// nextPlaceSpacesCode 对齐 Java indexSerImpl.getNextSpacesCode：code + 5 位递增编号。
-func nextPlaceSpacesCode(code string) string {
-	if code == "" {
-		return ""
-	}
-	var maxCode string
-	conf.Db.Raw("SELECT MAX(placeid) FROM place_tbl WHERE placeid LIKE ?", code+"%").Scan(&maxCode)
-	if maxCode == "" {
-		maxCode = "0"
-	}
-	remainder := maxCode
-	if len(maxCode) >= len(code) && maxCode[:len(code)] == code {
-		remainder = maxCode[len(code):]
-	}
-	n, err := strconv.Atoi(remainder)
-	if err != nil {
-		return ""
-	}
-	return code + fmt.Sprintf("%05d", n+1)
-}
-
 // GetByIdPlace GET /wx/owner/getByIdPlace 对齐 Java indexSerImpl.getByIdPlace：按 placeid 查单个车位（返回列表）。
 func (c *OwnerController) GetByIdPlace(ctx *gin.Context) {
-	var place model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", ctx.Query("placeid")).First(&place).Error; err != nil {
+	place, err := repository.PlaceByPlaceidDB(ctx.Query("placeid"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess([]PlaceDtoDTO{}))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess([]PlaceDtoDTO{placeToPlaceDtoDTO(place)}))
+	ctx.JSON(http.StatusOK, ResultSuccess([]PlaceDtoDTO{placeToPlaceDtoDTO(*place)}))
 }
 
 // Save POST /wx/owner/save 对齐 Java indexCon.add + indexSerImpl.save：新增车位（证书图片可选，COS 上传省略）。
@@ -263,7 +224,7 @@ func (c *OwnerController) Save(ctx *gin.Context) {
 		imageID, _ = saveImageFromCtx(ctx)
 	}
 
-	spacesCode := nextPlaceSpacesCode(code)
+	spacesCode := repository.NextPlaceSpacesCode(code)
 	if spacesCode == "" {
 		ctx.JSON(http.StatusOK, false)
 		return
@@ -281,9 +242,8 @@ func (c *OwnerController) Save(ctx *gin.Context) {
 		State:           "待审核",
 		ImageID:         imageID,
 	}
-	res := conf.Db.Select("placeid", "ownerid", "province", "city", "district", "streer", "longitude", "latitude", "relatedBuilding", "state", "image_id").
-		Create(&rec)
-	ctx.JSON(http.StatusOK, res.Error == nil)
+	err := repository.CreateFields(&rec, []string{"placeid", "ownerid", "province", "city", "district", "streer", "longitude", "latitude", "relatedBuilding", "state", "image_id"})
+	ctx.JSON(http.StatusOK, err == nil)
 }
 
 // PlaceAddIdCardR POST /wx/owner/placeAdd_idCard_r 对齐 Java mySerImpl.placeAdd_r：回写身份证反面照。
@@ -296,7 +256,7 @@ func (c *OwnerController) PlaceAddIdCardR(ctx *gin.Context) {
 			url = strconv.Itoa(int(imageID))
 		}
 	}
-	conf.Db.Model(&model.PlaceapplyTbl{}).Where("id = ?", id).Update("idCard_r", url)
+	repository.UpdatePlaceapplyField(id, "idCard_r", url)
 	ctx.JSON(http.StatusOK, "ok")
 }
 
@@ -310,7 +270,7 @@ func (c *OwnerController) PlaceAddProve(ctx *gin.Context) {
 			url = strconv.Itoa(int(imageID))
 		}
 	}
-	conf.Db.Model(&model.PlaceapplyTbl{}).Where("id = ?", id).Update("prove", url)
+	repository.UpdatePlaceapplyField(id, "prove", url)
 	ctx.JSON(http.StatusOK, "ok")
 }
 
@@ -325,8 +285,7 @@ type ownerMessageDTO struct {
 
 // GetMsgs GET /wx/owner/getmsgs 对齐 Java mySerImpl.getmsgs：查询业主消息并倒序。
 func (c *OwnerController) GetMsgs(ctx *gin.Context) {
-	var msgs []model.MessageTbl
-	conf.Db.Where("ownerid = ?", ctx.Query("ownerid")).Find(&msgs)
+	msgs := repository.MessagesByOwnerid(ctx.Query("ownerid"))
 	// Java Collections.reverse 倒序
 	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
 		msgs[i], msgs[j] = msgs[j], msgs[i]
