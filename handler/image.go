@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ImageController 对齐 Java controller.ImageController（图片表 tab_image）。
@@ -18,7 +18,7 @@ type ImageController struct{}
 func (i *ImageController) GetById(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Query("id"))
 	var img model.TabImage
-	if err := conf.Db.Where("id = ?", id).First(&img).Error; err != nil {
+	if err := repository.FindByID(&img, id).Error; err != nil {
 		c.Data(http.StatusOK, "image/jpeg", nil)
 		return
 	}
@@ -32,7 +32,7 @@ func (i *ImageController) Add(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Create(&req)
+	res := repository.Create(&req)
 	c.JSON(http.StatusOK, ResultSuccess(res.Error == nil))
 }
 
@@ -40,8 +40,8 @@ func (i *ImageController) Add(c *gin.Context) {
 func (i *ImageController) GetAll(c *gin.Context) {
 	current, size := parsePage(c)
 	var total int64
-	conf.Db.Model(&model.TabImage{}).Count(&total)
+	repository.Count(&model.TabImage{}, &total)
 	var rows []model.TabImage
-	conf.Db.Model(&model.TabImage{}).Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.TabImage{}, "", pageOffset(current, size), size, &rows)
 	c.JSON(http.StatusOK, ResultSuccessPage(total, rows))
 }

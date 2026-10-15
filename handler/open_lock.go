@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ OpenLockController（/openLock） ============
@@ -15,22 +15,22 @@ type OpenLockController struct{}
 
 func (c *OpenLockController) List(ctx *gin.Context) {
 	var rows []model.OpenLockTbl
-	conf.Db.Find(&rows)
+	repository.FindAll(&rows)
 	ctx.JSON(http.StatusOK, ResultSuccess(rows))
 }
 
 func (c *OpenLockController) Page(ctx *gin.Context) {
 	current, size := parsePage(ctx)
 	var total int64
-	conf.Db.Model(&model.OpenLockTbl{}).Count(&total)
+	repository.Count(&model.OpenLockTbl{}, &total)
 	var rows []model.OpenLockTbl
-	conf.Db.Model(&model.OpenLockTbl{}).Order("create_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	repository.Page(&model.OpenLockTbl{}, "create_time desc", pageOffset(current, size), size, &rows)
 	ctx.JSON(http.StatusOK, ResultSuccessPage(total, rows))
 }
 
 func (c *OpenLockController) GetById(ctx *gin.Context) {
 	var o model.OpenLockTbl
-	if err := conf.Db.Where("id = ?", ctx.Param("id")).First(&o).Error; err != nil {
+	if err := repository.FindByID(&o, ctx.Param("id")).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -43,7 +43,7 @@ func (c *OpenLockController) Save(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&o).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&o).Error == nil))
 }
 
 func (c *OpenLockController) Update(ctx *gin.Context) {
@@ -52,11 +52,11 @@ func (c *OpenLockController) Update(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	res := conf.Db.Model(&model.OpenLockTbl{}).Where("id = ?", o.ID).Updates(o)
+	res := repository.UpdateByID(&model.OpenLockTbl{}, o.ID, o)
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }
 
 func (c *OpenLockController) DeleteById(ctx *gin.Context) {
-	res := conf.Db.Where("id = ?", ctx.Param("id")).Delete(&model.OpenLockTbl{})
+	res := repository.DeleteByID(&model.OpenLockTbl{}, ctx.Param("id"))
 	ctx.JSON(http.StatusOK, ResultSuccess(res.RowsAffected > 0))
 }

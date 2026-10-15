@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ ConfigController（/config） ============
@@ -20,5 +20,5 @@ func (c *ConfigController) Save(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(conf.Db.Create(&cfg).Error == nil))
+	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&cfg).Error == nil))
 }

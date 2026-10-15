@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ DriverUseController（/driverUse） ============
@@ -22,6 +22,6 @@ func (c *DriverUseController) Save(ctx *gin.Context) {
 		ReserveNumber: 3,
 		EveryDay:      timePtr(time.Now()),
 	}
-	conf.Db.Create(&rec)
+	repository.Create(&rec)
 	ctx.JSON(http.StatusOK, ResultSuccess(true))
 }

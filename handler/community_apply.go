@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ CommunityApplyController（/communityApply） ============
@@ -32,7 +32,7 @@ func (c *CommunityApplyController) Add(ctx *gin.Context) {
 	}
 	// 对齐 Java CommunityApplyServiceImpl.addCommunityApply：申请时间置为当前时间。
 	a.ApplyTime = timePtr(time.Now())
-	if conf.Db.Create(&a).Error != nil {
+	if repository.Create(&a).Error != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "添加小区申请失败"))
 		return
 	}
