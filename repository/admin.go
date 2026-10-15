@@ -95,6 +95,41 @@ func DeletePurchasePolesByOrderNumbers(orderNumbers []string) int64 {
 	return res.RowsAffected
 }
 
+// PurchasePolesByOrderStatus 按订单状态查询购桩申请（申请时间倒序）。
+func PurchasePolesByOrderStatus(orderStatus string) []model.PurchasePoleApplicationTbl {
+	var rows []model.PurchasePoleApplicationTbl
+	conf.Db.Where("order_status = ?", orderStatus).Order("apply_time desc").Find(&rows)
+	return rows
+}
+
+// LatestPurchasePoleByOpenid 查询某用户最新购桩申请。
+func LatestPurchasePoleByOpenid(openid string) (*model.PurchasePoleApplicationTbl, error) {
+	var latest model.PurchasePoleApplicationTbl
+	if err := conf.Db.Where("openid = ?", openid).Order("apply_time desc").First(&latest).Error; err != nil {
+		return nil, err
+	}
+	return &latest, nil
+}
+
+// PurchasePolesByOpenid 查询某用户购桩申请（申请时间倒序）。
+func PurchasePolesByOpenid(openid string) []model.PurchasePoleApplicationTbl {
+	var rows []model.PurchasePoleApplicationTbl
+	conf.Db.Where("openid = ?", openid).Order("apply_time desc").Find(&rows)
+	return rows
+}
+
+// DeletePurchasePoleByOrderNumber 删除购桩申请，返回受影响行数。
+func DeletePurchasePoleByOrderNumber(orderNumber string) int64 {
+	res := conf.Db.Where("order_number = ?", orderNumber).Delete(&model.PurchasePoleApplicationTbl{})
+	return res.RowsAffected
+}
+
+// UpdatePurchasePoleFields 按订单号更新购桩申请字段，返回受影响行数。
+func UpdatePurchasePoleFields(orderNumber string, updates map[string]interface{}) int64 {
+	res := conf.Db.Model(&model.PurchasePoleApplicationTbl{}).Where("order_number = ?", orderNumber).Updates(updates)
+	return res.RowsAffected
+}
+
 // ListProfitSharingConfigs 分页查询分账配置（spacesId 等值、receiverMchId 模糊、create_time 升序）。
 func ListProfitSharingConfigs(spacesID, receiverMchID string, offset, limit int) (int64, []model.TabProfitSharingConfig) {
 	query := func() *gorm.DB {

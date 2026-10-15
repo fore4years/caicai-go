@@ -10,8 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // ============ PurchasePoleApplicationController（/purchasePoleApplication） ============
@@ -20,10 +20,8 @@ type PurchasePoleApplicationController struct{}
 
 // UpdateOrderStatus 对应 Java PurchasePoleApplicationController.updateOrderStatus。
 func (c *PurchasePoleApplicationController) UpdateOrderStatus(ctx *gin.Context) {
-	res := conf.Db.Model(&model.PurchasePoleApplicationTbl{}).
-		Where("order_number = ?", ctx.Query("orderNumber")).
-		Update("order_status", ctx.Query("orderStatus"))
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdatePurchasePoleStatus(ctx.Query("orderNumber"), ctx.Query("orderStatus"))
+	if rowsAffected == 0 {
 		ctx.JSON(http.StatusOK, ResultError(400, "订单状态更新失败"))
 		return
 	}
@@ -32,8 +30,7 @@ func (c *PurchasePoleApplicationController) UpdateOrderStatus(ctx *gin.Context) 
 
 // GetByOrderStatus 对应 Java PurchasePoleApplicationController.getByOrderStatus（按申请时间倒序）。
 func (c *PurchasePoleApplicationController) GetByOrderStatus(ctx *gin.Context) {
-	var rows []model.PurchasePoleApplicationTbl
-	conf.Db.Where("order_status = ?", ctx.Param("orderStatus")).Order("apply_time desc").Find(&rows)
+	rows := repository.PurchasePolesByOrderStatus(ctx.Param("orderStatus"))
 	list := make([]purchasePoleDTO, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, purchasePoleToDTO(r))
@@ -91,14 +88,14 @@ func (c *PurchasePoleApplicationController) Create(ctx *gin.Context) {
 		OrderStatus:          orderStatus,
 		ApplyTime:            timePtr(time.Now()),
 	}
-	if err := conf.Db.Create(&p).Error; err != nil {
+	if err := repository.Create(&p).Error; err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "购桩申请创建失败"))
 		return
 	}
 
 	// 返回最新创建的订单号（按申请时间倒序第一条）。
-	var latest model.PurchasePoleApplicationTbl
-	if err := conf.Db.Where("openid = ?", req.Openid).Order("apply_time desc").First(&latest).Error; err != nil {
+	latest, err := repository.LatestPurchasePoleByOpenid(req.Openid)
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "订单创建成功但未找到订单信息"))
 		return
 	}
@@ -113,8 +110,7 @@ func generateOrderNumber() string {
 // GetCurrentUserApplication 对应 Java getCurrentUserApplication：取当前登录用户。
 func (c *PurchasePoleApplicationController) GetCurrentUserApplication(ctx *gin.Context) {
 	openid := ctx.GetString("openid")
-	var rows []model.PurchasePoleApplicationTbl
-	conf.Db.Where("openid = ?", openid).Order("apply_time desc").Find(&rows)
+	rows := repository.PurchasePolesByOpenid(openid)
 	if len(rows) == 0 {
 		ctx.JSON(http.StatusOK, ResultError(500, "未找到购桩申请信息"))
 		return
@@ -132,8 +128,7 @@ func (c *PurchasePoleApplicationController) GetByOpenid(ctx *gin.Context) {
 	if openid == "" {
 		openid = ctx.GetString("openid")
 	}
-	var rows []model.PurchasePoleApplicationTbl
-	conf.Db.Where("openid = ?", openid).Order("apply_time desc").Find(&rows)
+	rows := repository.PurchasePolesByOpenid(openid)
 	if len(rows) == 0 {
 		ctx.JSON(http.StatusOK, ResultError(500, "未找到购桩申请信息"))
 		return
@@ -147,8 +142,8 @@ func (c *PurchasePoleApplicationController) GetByOpenid(ctx *gin.Context) {
 
 // DeleteByOrderNumber 对应 Java deleteByOrderNumber。
 func (c *PurchasePoleApplicationController) DeleteByOrderNumber(ctx *gin.Context) {
-	res := conf.Db.Where("order_number = ?", ctx.Param("orderNumber")).Delete(&model.PurchasePoleApplicationTbl{})
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.DeletePurchasePoleByOrderNumber(ctx.Param("orderNumber"))
+	if rowsAffected == 0 {
 		ctx.JSON(http.StatusOK, ResultError(400, "购桩申请删除失败，订单可能不存在"))
 		return
 	}
@@ -158,8 +153,8 @@ func (c *PurchasePoleApplicationController) DeleteByOrderNumber(ctx *gin.Context
 // Pay 对应 Java pay：校验订单存在且为「待支付」，调用微信支付创建订单。
 func (c *PurchasePoleApplicationController) Pay(ctx *gin.Context) {
 	orderNumber := ctx.Param("orderNumber")
-	var p model.PurchasePoleApplicationTbl
-	if err := conf.Db.Where("order_number = ?", orderNumber).First(&p).Error; err != nil {
+	p, err := repository.PurchasePoleByOrderNumber(orderNumber)
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(400, "订单不存在"))
 		return
 	}
@@ -178,14 +173,12 @@ func (c *PurchasePoleApplicationController) UpdatePaymentInfo(ctx *gin.Context) 
 			payTime = t
 		}
 	}
-	res := conf.Db.Model(&model.PurchasePoleApplicationTbl{}).
-		Where("order_number = ?", ctx.Query("orderNumber")).
-		Updates(map[string]interface{}{
-			"transaction_id": ctx.Query("transactionId"),
-			"pay_time":       payTime,
-			"order_status":   "已支付",
-		})
-	if res.RowsAffected == 0 {
+	rowsAffected := repository.UpdatePurchasePoleFields(ctx.Query("orderNumber"), map[string]interface{}{
+		"transaction_id": ctx.Query("transactionId"),
+		"pay_time":       payTime,
+		"order_status":   "已支付",
+	})
+	if rowsAffected == 0 {
 		ctx.JSON(http.StatusOK, ResultError(400, "支付信息更新失败"))
 		return
 	}
@@ -194,12 +187,12 @@ func (c *PurchasePoleApplicationController) UpdatePaymentInfo(ctx *gin.Context) 
 
 // GetByOrderNumber 对应 Java getByOrderNumber。
 func (c *PurchasePoleApplicationController) GetByOrderNumber(ctx *gin.Context) {
-	var p model.PurchasePoleApplicationTbl
-	if err := conf.Db.Where("order_number = ?", ctx.Param("orderNumber")).First(&p).Error; err != nil {
+	p, err := repository.PurchasePoleByOrderNumber(ctx.Param("orderNumber"))
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(400, "未找到购桩申请信息"))
 		return
 	}
-	ctx.JSON(http.StatusOK, ResultSuccess(purchasePoleToDTO(p)))
+	ctx.JSON(http.StatusOK, ResultSuccess(purchasePoleToDTO(*p)))
 }
 
 // ApplyAndProcessRefund 对应 Java applyAndProcessRefund：一次性完成申请与退款。
@@ -214,8 +207,8 @@ func (c *PurchasePoleApplicationController) ApplyAndProcessRefund(ctx *gin.Conte
 	}
 
 	// 1. 验证订单是否存在
-	var app model.PurchasePoleApplicationTbl
-	if err := conf.Db.Where("order_number = ?", req.OrderNumber).First(&app).Error; err != nil {
+	app, err := repository.PurchasePoleByOrderNumber(req.OrderNumber)
+	if err != nil {
 		ctx.JSON(http.StatusOK, ResultError(500, "申请并处理退款异常: 购桩订单不存在"))
 		return
 	}
@@ -247,21 +240,21 @@ func (c *PurchasePoleApplicationController) ApplyAndProcessRefund(ctx *gin.Conte
 	// 6. 处理退款结果
 	switch refundStatus {
 	case "SUCCESS":
-		conf.Db.Model(&model.PurchasePoleApplicationTbl{}).Where("order_number = ?", req.OrderNumber).Updates(map[string]interface{}{
+		repository.UpdatePurchasePoleFields(req.OrderNumber, map[string]interface{}{
 			"order_status":  "已退款",
 			"refund_reason": req.RefundReason,
 			"refund_time":   time.Now(),
 		})
 		ctx.JSON(http.StatusOK, ResultSuccess("退款成功"))
 	case "PROCESSING", "CHANGE":
-		conf.Db.Model(&model.PurchasePoleApplicationTbl{}).Where("order_number = ?", req.OrderNumber).Updates(map[string]interface{}{
+		repository.UpdatePurchasePoleFields(req.OrderNumber, map[string]interface{}{
 			"order_status":  "退款中",
 			"refund_reason": req.RefundReason,
 			"refund_time":   time.Now(),
 		})
 		ctx.JSON(http.StatusOK, ResultSuccess("退款处理中"))
 	default:
-		conf.Db.Model(&model.PurchasePoleApplicationTbl{}).Where("order_number = ?", req.OrderNumber).Updates(map[string]interface{}{
+		repository.UpdatePurchasePoleFields(req.OrderNumber, map[string]interface{}{
 			"order_status":  "退款失败",
 			"refund_reason": req.RefundReason,
 		})
