@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/conf"
 	"caicai-go/model"
+	"caicai-go/repository"
 )
 
 // gatewayDTO 对应 Java model.GatewayBean（tab_gateway，驼峰）。
@@ -65,7 +65,7 @@ type AdminLoRaController struct{}
 // GetLoRaMax /system/getLoRaMax → 网关总数
 func (a *AdminLoRaController) GetLoRaMax(c *gin.Context) {
 	var n int64
-	conf.Db.Model(&model.TabGateway{}).Count(&n)
+	repository.Count(&model.TabGateway{}, &n)
 	c.JSON(http.StatusOK, n)
 }
 
@@ -73,8 +73,7 @@ func (a *AdminLoRaController) GetLoRaMax(c *gin.Context) {
 func (a *AdminLoRaController) GetLoRapage(c *gin.Context) {
 	current, size := parsePage(c)
 	var gateways []model.TabGateway
-	conf.Db.Model(&model.TabGateway{}).Order("install_time desc").
-		Offset(pageOffset(current, size)).Limit(size).Find(&gateways)
+	repository.Page(&model.TabGateway{}, "install_time desc", pageOffset(current, size), size, &gateways)
 	list := make([]gatewayDTO, 0, len(gateways))
 	for _, g := range gateways {
 		list = append(list, gatewayToDTO(g))
@@ -85,7 +84,7 @@ func (a *AdminLoRaController) GetLoRapage(c *gin.Context) {
 // GetGatewayById /system/getGatewayById?id=
 func (a *AdminLoRaController) GetGatewayById(c *gin.Context) {
 	var g model.TabGateway
-	if err := conf.Db.Where("id = ?", c.Query("id")).First(&g).Error; err != nil {
+	if err := repository.FindByID(&g, c.Query("id")).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
@@ -108,7 +107,7 @@ func (a *AdminLoRaController) Upbyid(c *gin.Context) {
 		c.JSON(http.StatusOK, 0)
 		return
 	}
-	conf.Db.Model(&model.WangguanTbl{}).Where("id = ?", req.ID).Updates(map[string]interface{}{
+	repository.UpdateByID(&model.WangguanTbl{}, req.ID, map[string]interface{}{
 		"name":         req.Name,
 		"sn":           req.Sn,
 		"wgtype":       req.Wgtype,
@@ -121,7 +120,7 @@ func (a *AdminLoRaController) Upbyid(c *gin.Context) {
 
 // Debyid /system/debyid/:id → 删除 wangguan_tbl
 func (a *AdminLoRaController) Debyid(c *gin.Context) {
-	conf.Db.Where("id = ?", c.Param("id")).Delete(&model.WangguanTbl{})
+	repository.DeleteByID(&model.WangguanTbl{}, c.Param("id"))
 	c.JSON(http.StatusOK, nil)
 }
 
@@ -132,7 +131,7 @@ func (a *AdminLoRaController) LoRaDel(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err == nil {
 		for _, id := range req.Xuanzhong {
-			conf.Db.Where("id = ?", id).Delete(&model.WangguanTbl{})
+			repository.DeleteByID(&model.WangguanTbl{}, id)
 		}
 	}
 	c.String(http.StatusOK, "删除成功！")
@@ -142,12 +141,8 @@ func loraSearch(c *gin.Context, fields []string) {
 	current, size := parsePage(c)
 	tiaojian := c.Query("tiaojian")
 	for _, field := range fields {
-		var max int64
-		conf.Db.Model(&model.TabGateway{}).Where(field+" LIKE ?", "%"+tiaojian+"%").Count(&max)
+		max, gateways := repository.SearchGateways(field, tiaojian, pageOffset(current, size), size)
 		if max != 0 {
-			var gateways []model.TabGateway
-			conf.Db.Model(&model.TabGateway{}).Where(field+" LIKE ?", "%"+tiaojian+"%").
-				Order("install_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&gateways)
 			list := make([]gatewayDTO, 0, len(gateways))
 			for _, g := range gateways {
 				list = append(list, gatewayToDTO(g))
@@ -170,14 +165,13 @@ func (a *AdminLoRaController) SearchByMac(c *gin.Context) {
 	mac := c.Query("mac")
 	if strings.TrimSpace(mac) == "" {
 		var total int64
-		conf.Db.Model(&model.TabGateway{}).Count(&total)
+		repository.Count(&model.TabGateway{}, &total)
 		if total == 0 {
 			c.JSON(http.StatusOK, nil)
 			return
 		}
 		var gateways []model.TabGateway
-		conf.Db.Model(&model.TabGateway{}).Order("install_time desc").
-			Offset(pageOffset(current, size)).Limit(size).Find(&gateways)
+		repository.Page(&model.TabGateway{}, "install_time desc", pageOffset(current, size), size, &gateways)
 		list := make([]gatewayDTO, 0, len(gateways))
 		for _, g := range gateways {
 			list = append(list, gatewayToDTO(g))
@@ -185,15 +179,11 @@ func (a *AdminLoRaController) SearchByMac(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"max": total, "list": list})
 		return
 	}
-	var max int64
-	conf.Db.Model(&model.TabGateway{}).Where("mac LIKE ?", "%"+mac+"%").Count(&max)
+	max, gateways := repository.PageGatewaysByMac(mac, pageOffset(current, size), size)
 	if max == 0 {
 		c.JSON(http.StatusOK, nil)
 		return
 	}
-	var gateways []model.TabGateway
-	conf.Db.Model(&model.TabGateway{}).Where("mac LIKE ?", "%"+mac+"%").
-		Order("install_time desc").Offset(pageOffset(current, size)).Limit(size).Find(&gateways)
 	list := make([]gatewayDTO, 0, len(gateways))
 	for _, g := range gateways {
 		list = append(list, gatewayToDTO(g))
@@ -205,11 +195,7 @@ func (a *AdminLoRaController) SearchByMac(c *gin.Context) {
 func (a *AdminLoRaController) RaChange(c *gin.Context) {
 	current, size := parsePage(c)
 	tiaojian := c.Query("tiaojian")
-	var max int64
-	conf.Db.Model(&model.WangguanTbl{}).Where("azadd LIKE ?", "%"+tiaojian+"%").Count(&max)
-	var rows []model.WangguanTbl
-	conf.Db.Model(&model.WangguanTbl{}).Where("azadd LIKE ?", "%"+tiaojian+"%").
-		Offset(pageOffset(current, size)).Limit(size).Find(&rows)
+	max, rows := repository.SearchWangguanByAzadd(tiaojian, pageOffset(current, size), size)
 	c.JSON(http.StatusOK, gin.H{"max": max, "list": rows})
 }
 
@@ -220,8 +206,7 @@ type AdminLockController struct{}
 func (a *AdminLockController) GetlockPage(c *gin.Context) {
 	current, size := parsePage(c)
 	var locks []model.LockTbl
-	conf.Db.Model(&model.LockTbl{}).
-		Offset(pageOffset(current, size)).Limit(size).Find(&locks)
+	repository.Page(&model.LockTbl{}, "", pageOffset(current, size), size, &locks)
 	list := make([]lockDTO, 0, len(locks))
 	for _, l := range locks {
 		list = append(list, lockToDTO(l))
@@ -232,15 +217,18 @@ func (a *AdminLockController) GetlockPage(c *gin.Context) {
 // GetChargePage /system/getChargePage?page=&length=
 func (a *AdminLockController) GetChargePage(c *gin.Context) {
 	current, size := parsePage(c)
-	var rows []chargeDTO
-	conf.Db.Raw("SELECT placeid, charge FROM charge_tbl LIMIT ?,?", pageOffset(current, size), size).Scan(&rows)
+	charges := repository.AllCharges(pageOffset(current, size), size)
+	rows := make([]chargeDTO, 0, len(charges))
+	for _, ch := range charges {
+		rows = append(rows, chargeDTO{Placeid: ch.Placeid, Charge: ch.Charge})
+	}
 	c.JSON(http.StatusOK, rows)
 }
 
 // GetlockMax /system/getlockMax
 func (a *AdminLockController) GetlockMax(c *gin.Context) {
 	var n int64
-	conf.Db.Model(&model.LockTbl{}).Count(&n)
+	repository.Count(&model.LockTbl{}, &n)
 	c.JSON(http.StatusOK, n)
 }
 
@@ -250,26 +238,26 @@ func (a *AdminLockController) GetPlace(c *gin.Context) {
 		Placeid string `json:"placeid"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	var p model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", req.Placeid).First(&p).Error; err != nil {
+	p, err := repository.PlaceByPlaceidDB(req.Placeid)
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
-	c.JSON(http.StatusOK, placeToDTO(p))
+	c.JSON(http.StatusOK, placeToDTO(*p))
 }
 
 // disablePlace 切换车位状态，返回提示语。
 func disablePlace(placeid string) string {
-	var p model.PlaceTbl
-	if err := conf.Db.Where("placeid = ?", placeid).First(&p).Error; err != nil {
+	p, err := repository.PlaceByPlaceidDB(placeid)
+	if err != nil {
 		return "禁用失败，车位状态非可使用"
 	}
 	switch p.State {
 	case "可使用":
-		conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", placeid).Update("state", "已禁用")
+		repository.UpdatePlaceStateByPlaceid(placeid, "已禁用")
 		return "禁用成功！"
 	case "已禁用":
-		conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", placeid).Update("state", "可使用")
+		repository.UpdatePlaceStateByPlaceid(placeid, "可使用")
 		return "解除禁用成功！"
 	default:
 		return "禁用失败，车位状态非可使用"
@@ -295,15 +283,7 @@ func (a *AdminLockController) LockChange(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req)
 
-	db := conf.Db.Table("lock_tbl l").Select("l.*").
-		Joins("left join place_tbl p on l.placeid = p.placeid")
-	if req.Tiaojian == "已禁用" {
-		db = db.Where("p.state = ?", "已禁用")
-	} else {
-		db = db.Where("p.state <> ?", "已禁用")
-	}
-	var locks []model.LockTbl
-	db.Scan(&locks)
+	locks := repository.LocksByState(req.Tiaojian)
 	list := make([]lockDTO, 0, len(locks))
 	for _, l := range locks {
 		list = append(list, lockToDTO(l))
@@ -329,12 +309,8 @@ func (a *AdminLockController) Sousuo(c *gin.Context) {
 	current, size := parsePage(c)
 	tiaojian := c.Query("tiaojian")
 	for _, field := range []string{"fix_date", "placeid", "lockid", "lockmac", "state"} {
-		var max int64
-		conf.Db.Model(&model.LockTbl{}).Where(field+" LIKE ?", "%"+tiaojian+"%").Count(&max)
+		max, locks := repository.SearchLocks(field, tiaojian, pageOffset(current, size), size)
 		if max != 0 {
-			var locks []model.LockTbl
-			conf.Db.Model(&model.LockTbl{}).Where(field+" LIKE ?", "%"+tiaojian+"%").
-				Offset(pageOffset(current, size)).Limit(size).Find(&locks)
 			list := make([]lockDTO, 0, len(locks))
 			for _, l := range locks {
 				list = append(list, lockToDTO(l))
@@ -355,12 +331,11 @@ func (a *AdminLockController) Accessupdatestate(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 
 	// 插入消息 + 标记充电桩 + 通过审核（对齐 Java access()）
-	conf.Db.Exec("INSERT INTO message_tbl (ownerid, msgtime, message, status) VALUES (?,?,?,?)",
-		req.Ownerid, time.Now().Format("2006-01-02 15:04:05"), "充电桩申请已通过~", "未读")
-	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", req.Placeid).Update("ischarge", 1)
-	res := conf.Db.Exec("UPDATE charge_tbl SET charge = '已通过' WHERE placeid = ?", req.Placeid)
+	repository.InsertMessage(req.Ownerid, time.Now().Format("2006-01-02 15:04:05"), "充电桩申请已通过~", "未读")
+	repository.UpdatePlaceIscharge(req.Placeid)
+	rowsAffected := repository.UpdateChargeStateByPlaceid(req.Placeid, "已通过")
 
-	if res.RowsAffected != 0 {
+	if rowsAffected != 0 {
 		c.String(http.StatusOK, "已通过")
 		return
 	}
@@ -374,10 +349,9 @@ type AdminFaultController struct{}
 func (a *AdminFaultController) GetFault(c *gin.Context) {
 	current, size := parsePage(c)
 	var max int64
-	conf.Db.Model(&model.FaultTbl{}).Count(&max)
+	repository.Count(&model.FaultTbl{}, &max)
 	var faults []model.FaultTbl
-	conf.Db.Model(&model.FaultTbl{}).Order("putTime desc").
-		Offset(pageOffset(current, size)).Limit(size).Find(&faults)
+	repository.Page(&model.FaultTbl{}, "putTime desc", pageOffset(current, size), size, &faults)
 	list := make([]faultDTO, 0, len(faults))
 	for _, f := range faults {
 		list = append(list, faultToDTO(f))
@@ -392,7 +366,7 @@ func (a *AdminFaultController) FaultMushDel(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err == nil {
 		for _, id := range req.Xuanzhong {
-			conf.Db.Where("faultid = ?", id).Delete(&model.FaultTbl{})
+			repository.DeleteFaultByFaultid(id)
 		}
 	}
 	c.String(http.StatusOK, "批量删除成功！")
@@ -400,17 +374,17 @@ func (a *AdminFaultController) FaultMushDel(c *gin.Context) {
 
 // GetFaultById /system/getFaultById?faultid=
 func (a *AdminFaultController) GetFaultById(c *gin.Context) {
-	var f model.FaultTbl
-	if err := conf.Db.Where("faultid = ?", c.Query("faultid")).First(&f).Error; err != nil {
+	f, err := repository.FaultByFaultid(c.Query("faultid"))
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
-	c.JSON(http.StatusOK, faultToDTO(f))
+	c.JSON(http.StatusOK, faultToDTO(*f))
 }
 
 // UpdateState /system/updateState?faultid=&state=
 func (a *AdminFaultController) UpdateState(c *gin.Context) {
-	conf.Db.Model(&model.FaultTbl{}).Where("faultid = ?", c.Query("faultid")).Update("state", c.Query("state"))
+	repository.UpdateFaultState(c.Query("faultid"), c.Query("state"))
 	c.String(http.StatusOK, "状态更新成功！")
 }
 
@@ -419,12 +393,8 @@ func (a *AdminFaultController) Sousuo(c *gin.Context) {
 	current, size := parsePage(c)
 	tiaojian := c.Query("tiaojian")
 	for _, field := range []string{"lockmac", "putTime", "error", "state"} {
-		var max int64
-		conf.Db.Model(&model.FaultTbl{}).Where(field+" LIKE ?", "%"+tiaojian+"%").Count(&max)
+		max, faults := repository.SearchFaults(field, tiaojian, pageOffset(current, size), size)
 		if max != 0 {
-			var faults []model.FaultTbl
-			conf.Db.Model(&model.FaultTbl{}).Where(field+" LIKE ?", "%"+tiaojian+"%").
-				Offset(pageOffset(current, size)).Limit(size).Find(&faults)
 			list := make([]faultDTO, 0, len(faults))
 			for _, f := range faults {
 				list = append(list, faultToDTO(f))
