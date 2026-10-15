@@ -15,8 +15,8 @@ import (
 	"caicai-go/conf"
 	"caicai-go/logger"
 	"caicai-go/model"
-	"caicai-go/objects"
 	"caicai-go/protocol"
+	"caicai-go/repository"
 )
 
 var (
@@ -157,8 +157,7 @@ func onHeartbeat(client mqtt.Client, msg mqtt.Message) {
 	}
 
 	// 2. 未命中缓存，查库确认是否已存在（如服务重启后缓存丢失）
-	var exist model.TabGateway
-	if err := conf.Db.Where("mac = ?", req.Imei).First(&exist).Error; err == nil {
+	if repository.GatewayByMac(req.Imei) != nil {
 		if rdb != nil {
 			rdb.SAdd(ctx, gatewayRegisteredKey, req.Imei)
 		}
@@ -166,7 +165,7 @@ func onHeartbeat(client mqtt.Client, msg mqtt.Message) {
 	}
 
 	// 3. 未注册，入库 + 写缓存
-	if err := conf.Db.Exec("INSERT INTO tab_gateway(mac, iccid) VALUES (?, ?)", req.Imei, req.Iccid).Error; err != nil {
+	if err := repository.InsertGateway(req.Imei, req.Iccid); err != nil {
 		logger.Mylog.Err(err).Msgf("网关注册入库失败: imei=%s, iccid=%s", req.Imei, req.Iccid)
 		return
 	}
@@ -306,24 +305,12 @@ func (lg *lockGateway) deviceID() string {
 
 // getLockByOrder 根据订单查询锁及其产品/网关信息（对应 Java LockService.getByOrder + product + gateway）。
 func getLockByOrder(orderID string) (*lockGateway, error) {
-	var lock model.LockTbl
-	if err := conf.Db.Raw(
-		"SELECT l.* FROM order_tbl o LEFT JOIN tab_parking_spaces ps ON o.spaces_id = ps.id LEFT JOIN lock_tbl l ON ps.lock_id = l.lockid WHERE o.orderid = ?",
-		orderID,
-	).Scan(&lock).Error; err != nil {
+	lock, product, gateway, err := repository.LockProductGatewayByOrder(orderID)
+	if err != nil {
 		return nil, err
 	}
 	if lock.Lockid == "" {
 		return nil, nil
-	}
-
-	product, err := objects.TabProduct.WithContext(context.Background()).Where(objects.TabProduct.Pid.Eq(lock.ProductID)).First()
-	if err != nil {
-		return nil, err
-	}
-	gateway, err := objects.TabGateway.WithContext(context.Background()).Where(objects.TabGateway.ID.Eq(product.GatewayID)).First()
-	if err != nil {
-		return nil, err
 	}
 	return &lockGateway{lock: lock, product: *product, gateway: *gateway}, nil
 }
@@ -376,22 +363,14 @@ func StartLock(orderID string) bool {
 		return false
 	}
 
-	var count int64
-	conf.Db.Model(&model.OrderTbl{}).
-		Where("lockid = ? AND orderid <> ? AND state IN ('使用中','进行中')", lg.lock.Lockid, orderID).
-		Count(&count)
-	if count > 0 {
+	if repository.CountActiveOrdersByLock(lg.lock.Lockid, orderID) > 0 {
 		return false
 	}
 
 	//SendCommand(lg.deviceID(), protocol.OpOpenPlaceLock, protocol.DirectionDefault, nil)
 
-	now := time.Now()
-	conf.Db.Model(&model.PlaceTbl{}).Where("placeid = ?", lg.lock.Placeid).Update("state", "使用中")
-	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
-		"state":      "使用中",
-		"begin_time": now,
-	})
+	repository.UpdatePlaceState(lg.lock.Placeid, "使用中")
+	repository.StartOrder(orderID, time.Now())
 	logger.Mylog.Info().Msgf("已下发开锁指令, orderId: %s", orderID)
 	return true
 }
