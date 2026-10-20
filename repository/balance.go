@@ -1,6 +1,10 @@
 package repository
 
 import (
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
@@ -35,12 +39,48 @@ func PaidRechargeOrdersByOpenid(openid string) []model.RechargeOrderTbl {
 	return orders
 }
 
-// RechargeBalance 充值余额（事务内原子更新）。
+// RechargeBalance 充值余额（事务内：加余额 + 建充值订单 + 记余额明细）。
 func RechargeBalance(openid, amt string) error {
+	amount, err := decimal.NewFromString(amt)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	orderID := strings.ReplaceAll(uuid.NewString(), "-", "")
 	return conf.Db.Transaction(func(tx *gorm.DB) error {
-		return tx.Exec(
+		res := tx.Exec(
 			"UPDATE user_tbl SET balans = balans + CAST(? AS DECIMAL(10,2)) WHERE openid = ?",
 			amt, openid,
-		).Error
+		)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected <= 0 {
+			return gorm.ErrRecordNotFound
+		}
+
+		// 建充值订单（已支付、可退），供「充值记录/退费」界面展示
+		if err := tx.Create(&model.RechargeOrderTbl{
+			OrderID:               orderID,
+			Openid:                openid,
+			RechargeAmount:        amount,
+			RefundedAmount:        decimal.Zero,
+			RemainingRefundAmount: amount,
+			MaxRefundAmount:       amount,
+			OrderStatus:           "已支付",
+			CreateTime:            &now,
+			UpdateTime:            &now,
+			PaymentTime:           &now,
+		}).Error; err != nil {
+			return err
+		}
+
+		// 记余额明细
+		return tx.Create(&model.TabBalanceRecord{
+			Openid:     openid,
+			Type:       "充值",
+			Amount:     amount,
+			CreateTime: &now,
+		}).Error
 	})
 }

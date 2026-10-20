@@ -25,7 +25,7 @@ func CloseGauge(imei string, data int) bool {
 
 // ClosePlaceLock 关闭车位锁
 func ClosePlaceLock(imei string) bool {
-	return SendCommand(imei, int(protocol.OpClosePlaceLock), -1)
+	return SendCommand(imei, int(protocol.OpClosePlaceLock), noneSocket)
 }
 
 // OpenGunLock 开枪锁

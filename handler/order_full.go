@@ -19,7 +19,7 @@ import (
 
 // newOrderID 生成订单号。
 func newOrderID() string {
-	return "OD" + time.Now().Format("20060102150405") + strconv.Itoa(int(time.Now().UnixNano()%100000))
+	return time.Now().Format("20060102150405") + strconv.Itoa(int(time.Now().UnixNano()%100000))
 }
 
 // orderDeviceID 根据订单解析设备标识（产品 IMEI 或 NID）。用于二轮车等 pid 直接关联产品的订单。
@@ -637,7 +637,7 @@ func linXiangCloseOrder(order *model.OrderTbl) {
 	gun := repository.ChargingGunByPrivateOrder(order.Orderid)
 	if gun != nil {
 		if isZeroTime(order.OverTime) && order.ChargingDegree.IsZero() {
-			service.SendCommand(gun.DeviceID(), protocol.OpCloseEle, -1)
+			service.CloseGauge(gun.DeviceID(), 0)
 		}
 	}
 	if order.ChargeGunPull == 1 && order.ChargingDegree.IsZero() {
@@ -1159,6 +1159,21 @@ func (o *OrderController) GetOrderRechargeAmount(c *gin.Context) {
 	c.JSON(http.StatusOK, ResultSuccess(totalFee))
 }
 
+// GetOrderReport 获取二轮车订单的实时设备上报数据（report 主题，Redis 按订单号缓存）。
+func (o *OrderController) GetOrderReport(c *gin.Context) {
+	raw := service.GetRedisValue("orderReport:" + c.Query("orderId"))
+	if raw == "" {
+		c.JSON(http.StatusOK, ResultSuccess(nil))
+		return
+	}
+	var m map[string]interface{}
+	if json.Unmarshal([]byte(raw), &m) != nil {
+		c.JSON(http.StatusOK, ResultSuccess(nil))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(m))
+}
+
 func (o *OrderController) GetExpectDuration(c *gin.Context) {
 	batteryCapacity := queryFloat(c, "batteryCapacity")
 	remainingQuantity := queryFloat(c, "remainingQuantity")
@@ -1437,6 +1452,8 @@ func openGauge(orderID string) bool {
 		"state":      repository.OrderStateUse,
 	})
 	repository.ActivateReceptacle(receptacle.ID)
+	// 维护设备→订单映射（report 主题按 imei::channel 路由到订单号）
+	service.SetMap(product.Imei+"::"+strconv.Itoa(rid), orderID)
 	return true
 }
 
@@ -1574,7 +1591,30 @@ func settleTwiceOrder(orderID string, withGauge bool) bool {
 		newPackageDuration, packageOrderNo, receptacleID, chargingTime, now,
 		state != wxPayStateCancel, completeWxOrder,
 	)
+	if err == nil {
+		clearDeviceOrderMap(orderID)
+	}
 	return err == nil
+}
+
+// clearDeviceOrderMap 清除二轮车订单的设备→订单映射。
+func clearDeviceOrderMap(orderID string) {
+	receptacle := repository.ReceptacleByOrderid(orderID)
+	if receptacle == nil {
+		return
+	}
+	product := repository.ProductByPid(receptacle.Pid)
+	if product == nil {
+		return
+	}
+	rid := strings.Split(receptacle.Name, "号")[0]
+	service.DeleteMap(product.Imei + "::" + rid)
+}
+
+// init 把二轮车结算函数注入 service（用于 service 层 GaugeFull 充满自停触发结算，
+// 打破 service→handler 循环依赖）。
+func init() {
+	service.SettleTwiceOrderFn = settleTwiceOrder
 }
 
 // parseTimePtr 解析时间字符串为 time.Time（零值表示空）。

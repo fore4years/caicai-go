@@ -20,11 +20,14 @@ func registerPayment(r *gin.Engine) {
 
 	wx := r.Group("/wx")
 	{
-		wx.Any("/onWxCallbackNotify", wxPay.OnWxCallbackNotify)
+		wx.Any("/wechat/callback", wxPay.OnWxCallbackNotify)      // 支付分回调（对齐 Java /wechat/callback）
+		wx.Any("/wechat/refund/notify", wxPay.OnWxCallbackNotify) // 退款回调（对齐 Java，转调 wechatCallback）
+		wx.POST("/createPayOrder", wxPay.CreatePayOrder)          // 创建支付分订单
 		wx.Any("/queryWxOrder", wxPay.QueryWxOrder)
 		wx.Any("/cancelWxOrder", wxPay.CancelWxOrder)
 		wx.Any("/completeWxOrder", wxPay.CompleteWxOrder)
 		wx.GET("/refunds", wxPay.Refunds)
+		wx.GET("/refund-query", wxPay.RefundQuery) // 退款状态查询
 		wx.POST("/subtractDefaultAmount", wxPay.SubtractDefaultAmount)
 	}
 }

@@ -645,6 +645,7 @@ func RouterInit(r *gin.Engine) {
 		order.GET("/getCurrentValue", orderController.GetCurrentValue)
 		order.GET("/getVoltageValue", orderController.GetVoltageValue)
 		order.GET("/getOrderRechargeAmount", orderController.GetOrderRechargeAmount)
+		order.GET("/getOrderReport", orderController.GetOrderReport)
 		order.GET("/getMeterValueByPrivate", orderController.GetMeterValueByPrivate)
 		order.GET("/getOrderState", orderController.GetOrderState)
 		order.GET("/getplaceUsable", orderController.GetplaceUsable)

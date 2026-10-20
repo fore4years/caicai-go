@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments"
 
+	"caicai-go/conf"
 	"caicai-go/constant"
 	"caicai-go/logger"
 	"caicai-go/model"
@@ -27,25 +29,39 @@ import (
 // DB 层的余额写入（recharge）与金额计算（completeWxOrder 的电费明细）忠实还原。
 // ============================================================================
 
-// 对齐 Java wechat.WxPayConfig 的微信支付 v3 常量。真实 HTTP 调用被 stub，
-// 此处仅用于构造/记录请求参数（保留常量以便后续接入真实 SDK 时直接使用）。
+// 微信支付 v3 固定端点（微信侧 API 地址，不随环境变化）。
 const (
-	wxPayAppID       = "wx4fc1474ea10f5d5e"
-	wxPayMerchantID  = "1662744190"
-	wxPayMchSerialNo = "5248C4949E9441F47DDABD76C29E9C65041566CE"
-	wxPayAPIv3Key    = "Wisdom028qqcomlanlan818331125111"
-	wxPayServiceID   = "00003004000000170685804269033905"
-	wxPayServiceName = "成都七彩云创信息技术有限公司"
-	wxPayRefundURL   = "https://api.mch.weixin.qq.com/v3/refund/domestic/refunds"
-	wxPayBaseURL     = "https://api.mch.weixin.qq.com/v3/payscore/serviceorder"
-	wxPayNotifyURL   = "https://www.caiparking.com/pay/payCallback"
+	wxPayRefundURL = "https://api.mch.weixin.qq.com/v3/refund/domestic/refunds"
+	wxPayBaseURL   = "https://api.mch.weixin.qq.com/v3/payscore/serviceorder"
 )
+
+// 环境相关配置（appid/商户号/密钥/回调地址等）从 conf.yaml 的 wxpay 段读取。
+var (
+	wxPayAppID       string
+	wxPayMerchantID  string
+	wxPayMchSerialNo string
+	wxPayAPIv3Key    string
+	wxPayServiceID   string
+	wxPayServiceName string
+	wxPayNotifyURL   string
+)
+
+func init() {
+	wxPayAppID = conf.Cfg.Wxpay.Appid
+	wxPayMerchantID = conf.Cfg.Wxpay.MchID
+	wxPayMchSerialNo = conf.Cfg.Wxpay.MchSerialNo
+	wxPayAPIv3Key = conf.Cfg.Wxpay.APIv3Key
+	wxPayServiceID = conf.Cfg.Wxpay.ServiceID
+	wxPayServiceName = conf.Cfg.Wxpay.ServiceName
+	wxPayNotifyURL = strings.TrimRight(conf.Cfg.Wxpay.NotifyDomain, "/") + "/pay/payCallback"
+	wxPayScoreNotifyURL = strings.TrimRight(conf.Cfg.Wxpay.NotifyDomain, "/") + "/wx/wechat/callback"
+}
 
 // ============================ 请求 / 响应 DTO ============================
 
 // wechatPayRequest 对齐 Java model.WeChatPayBen（Integer totalfee, String tradeno, String openid）。
 type wechatPayRequest struct {
-	Totalfee int    `json:"totalfee"`
+	Totalfee string `json:"totalfee"`
 	Tradeno  string `json:"tradeno"`
 	Openid   string `json:"openid"`
 	OrderId  string `json:"orderId"`
@@ -171,7 +187,11 @@ func (w *WeChatPaymentController) Payment(c *gin.Context) {
 	logger.Mylog.Info().Msgf("orderId: %s", orderId)
 	// 对齐 Java preOrder：金额单位分 = totalfee * 100，币种 = tradeno；描述「余额充值」、
 	// appid/mchid/notifyUrl 见 prepayJsapi（真实调用微信支付 v3 统一下单）。
-	totalFen := req.Totalfee * 100
+	totalFee, err := strconv.Atoi(req.Totalfee)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ResultError(400, "请输入正确费用"))
+	}
+	totalFen := totalFee * 100
 	resp, err := prepayJsapi(totalFen, req.Tradeno, req.Openid, orderId)
 	if err != nil {
 		logger.Mylog.Error().Err(err).Msg("微信支付下单失败")
@@ -324,6 +344,17 @@ func (w *WxPayController) OnWxCallbackNotify(c *gin.Context) {
 	c.String(http.StatusOK, "SUCCESS")
 }
 
+// CreatePayOrder 创建支付分订单，对齐 Java WxPayController.createPayOrder。
+func (w *WxPayController) CreatePayOrder(c *gin.Context) {
+	orderID := c.Query("orderId")
+	if orderID == "" {
+		orderID = c.PostForm("orderId")
+	}
+	res := createPayScoreOrder(orderID, false, "")
+	logger.Mylog.Info().Msgf("支付分:创建订单返回:%+v", res)
+	c.JSON(http.StatusOK, ResultSuccess(res))
+}
+
 // QueryWxOrder 查询支付分订单，对齐 Java onQueryWxOrder。
 func (w *WxPayController) QueryWxOrder(c *gin.Context) {
 	outOrderNo := c.Query("outOrderNo")
@@ -383,6 +414,22 @@ func (w *WxPayController) Refunds(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, ResultSuccess(refundResult{Status: status}))
+}
+
+// RefundQuery 查询退款状态，对齐 Java WxPayController.refundQuery。
+func (w *WxPayController) RefundQuery(c *gin.Context) {
+	outRefundNo := c.Query("outRefundNo")
+	if outRefundNo == "" {
+		c.JSON(http.StatusOK, ResultError(500, "参数错误: outRefundNo不能为空"))
+		return
+	}
+	status, err := refundQueryWxOrder(outRefundNo)
+	if err != nil {
+		logger.Mylog.Error().Err(err).Msg("退款查询失败")
+		c.JSON(http.StatusOK, ResultError(500, "退款查询失败"))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(refundResult{Status: status, OutRefundNo: outRefundNo}))
 }
 
 // SubtractDefaultAmount 取消订单扣除违约金/定金，对齐 Java subtractDefaultAmount。

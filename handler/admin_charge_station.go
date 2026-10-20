@@ -165,15 +165,24 @@ func (a *AdminChargeStationController) UpdateByPid(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	powerMax, _ := strconv.Atoi(req.PowerMax)
-	rowsAffected := repository.UpdateChargingStationByPid(req.Pid, map[string]interface{}{
-		"name":      req.Name,
-		"place":     req.Place,
-		"power_max": powerMax,
-		"longitude": req.Longitude,
-		"latitude":  req.Latitude,
-	})
-	c.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
+	station, err := repository.ChargingStationByPid(req.Pid)
+	if err != nil {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	station.Name = req.Name
+	station.Place = req.Place
+	if powerMax, err := strconv.Atoi(req.PowerMax); err == nil {
+		station.PowerMax = int32(powerMax)
+	}
+	if req.Longitude != 0 || req.Latitude != 0 {
+		station.Point = model.NewPoint(req.Longitude, req.Latitude)
+	}
+	if err := repository.SaveChargingStation(station); err != nil {
+		c.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(true))
 }
 
 // DeleteById DELETE /system/chargeStation/deleteById/:id

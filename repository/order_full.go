@@ -196,7 +196,7 @@ func ReOrderPowerValue(orderID string) decimal.Decimal {
 // ReOrderPowerNoServiceFees 查询订单电费（不含服务费）。
 func ReOrderPowerNoServiceFees(orderID string) decimal.Decimal {
 	var v decimal.Decimal
-	conf.Db.Raw(`SELECT COALESCE(SUM((over_value - start_value) * charging_price_tbl.total),0)
+	conf.Db.Raw(`SELECT COALESCE(SUM((over_value - start_value) * COALESCE(charging_price_tbl.total, 0)),0)
 		FROM re_order_electronic_tbl
 		LEFT JOIN tab_price_time ON tab_price_time.id = re_order_electronic_tbl.price_time_id
 		LEFT JOIN charging_price_tbl ON charging_price_tbl.id = tab_price_time.price_id

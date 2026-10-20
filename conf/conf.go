@@ -17,6 +17,7 @@ type Config struct {
 	Mysql MysqlConf `mapstructure:"mysql"`
 	App   AppConf   `mapstructure:"app"`
 	Tcp   TcpConf   `mapstructure:"tcp"`
+	Wxpay WxpayConf `mapstructure:"wxpay"`
 }
 
 var (

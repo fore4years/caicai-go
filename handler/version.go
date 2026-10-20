@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -25,7 +26,24 @@ func (c *VersionController) Page(ctx *gin.Context) {
 	repository.Count(&model.VersionTbl{}, &total)
 	var rows []model.VersionTbl
 	repository.Page(&model.VersionTbl{}, "create_time desc", pageOffset(current, size), size, &rows)
-	ctx.JSON(http.StatusOK, ResultSuccessPage(total, rows))
+	type VersionResult struct {
+		ID            int32      `json:"id"`
+		VersionNumber string     `json:"versionNumber"`
+		Content       string     `json:"content"`
+		CreateTime    *time.Time `json:"createTime"`
+		UpdateTime    *time.Time `json:"updateTime"`
+	}
+	var res []VersionResult
+	for _, item := range rows {
+		res = append(res, VersionResult{
+			ID:            item.ID,
+			VersionNumber: item.VersionNumber,
+			Content:       item.Content,
+			CreateTime:    item.CreateTime,
+			UpdateTime:    item.UpdateTime,
+		})
+	}
+	ctx.JSON(http.StatusOK, ResultSuccessPage(total, res))
 }
 
 func (c *VersionController) GetById(ctx *gin.Context) {

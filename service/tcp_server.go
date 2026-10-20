@@ -125,5 +125,6 @@ func SendTCP(deviceID string, frame []byte) bool {
 		logger.Mylog.Err(err).Msgf("TCP 下发失败, device: %s", deviceID)
 		return false
 	}
+	logger.Mylog.Info().Msgf("TCP 下发成功, device: %s, frame: %s", deviceID, hex.EncodeToString(frame))
 	return true
 }

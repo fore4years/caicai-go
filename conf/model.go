@@ -31,3 +31,14 @@ type AppConf struct {
 type TcpConf struct {
 	Port int16
 }
+
+type WxpayConf struct {
+	APIv3Key       string `mapstructure:"api-v3-key"`
+	Appid          string `mapstructure:"appid"`
+	MchID          string `mapstructure:"mch-id"`
+	MchSerialNo    string `mapstructure:"mch-serial-no"`
+	ServiceID      string `mapstructure:"service-id"`
+	ServiceName    string `mapstructure:"service-name"`
+	NotifyDomain   string `mapstructure:"notify-domain"`
+	PrivateKeyPath string `mapstructure:"private-key-path"`
+}

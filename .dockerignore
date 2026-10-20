@@ -4,6 +4,4 @@ conf.yaml
 
 apiclient_key.pem
 
-protocol/demo_register.json
-
 /cmd

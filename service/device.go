@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
+	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -20,8 +21,9 @@ import (
 )
 
 var (
-	mqttClient mqtt.Client
-	rdb        *redis.Client
+	mqttClient     mqtt.Client
+	rdb            *redis.Client
+	orderDeviceMap map[string]string //用于设备反查orderid
 )
 
 // deviceTopicPrefix 设备主题前缀。
@@ -98,6 +100,8 @@ func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 			time.Sleep(2 * time.Second)
 		}
 	}
+
+	orderDeviceMap = make(map[string]string, 200)
 }
 
 // onDeviceMessage 处理 MQTT 上行设备数据（topic = device/{imei}/report|event|alarm）。
@@ -286,6 +290,29 @@ func DelRedisValue(key string) {
 		return
 	}
 	rdb.Del(context.Background(), key)
+}
+
+var orderDeviceMu sync.RWMutex
+
+// SetMap 设置device -> orderid
+// key的格式: imei::channel
+func SetMap(key, value string) {
+	orderDeviceMu.Lock()
+	defer orderDeviceMu.Unlock()
+	orderDeviceMap[key] = value
+}
+
+func GetMap(key string) (string, bool) {
+	orderDeviceMu.RLock()
+	defer orderDeviceMu.RUnlock()
+	v, ok := orderDeviceMap[key]
+	return v, ok
+}
+
+func DeleteMap(key string) {
+	orderDeviceMu.Lock()
+	defer orderDeviceMu.Unlock()
+	delete(orderDeviceMap, key)
 }
 
 // lockGateway 锁及其关联的产品/网关信息。

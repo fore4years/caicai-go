@@ -131,7 +131,7 @@ func (c *ChargeStationController) Add(ctx *gin.Context) {
 		newStation.Point = model.NewPoint(lng, lat)
 	}
 
-	if err := repository.Create(&newStation).Error; err != nil {
+	if err := repository.SaveChargingStation(&newStation); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}

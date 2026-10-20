@@ -24,3 +24,21 @@ app:
 
 tcp:
   port: 10013
+
+wxpay:
+  # APIv3密钥
+  api-v3-key: "Wisdom028qqcomlanlan818331125111"
+  # APPID
+  appid: "wx4fc1474ea10f5d5e"
+  # 商户ID
+  mch-id: "1662744190"
+  # 商户API证书序列号
+  mch-serial-no: "5248C4949E9441F47DDABD76C29E9C65041566CE"
+  # 服务ID
+  service-id: "00003004000000170685804269033905"
+  # 服务名称
+  service-name: "成都七彩云创信息技术有限公司"
+  # 回调通知域名（普通支付/支付分回调都会拼到该域名下；本地联调可改成内网穿透地址）
+  notify-domain: "https://www.caiparking.com"
+  # 商户私钥文件路径
+  private-key-path: "apiclient_key.pem"

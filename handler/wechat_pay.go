@@ -39,8 +39,8 @@ const (
 	wxPayStateRevoke = "REVOKED"
 )
 
-// 微信支付分创建订单的回调通知地址（对齐 Java WxPayImp.getPayScoreResponse 的 notify_url）。
-const wxPayScoreNotifyURL = "https://www.caiparking.com/wx/wechat/callback"
+// 微信支付分创建订单的回调通知地址（notify-domain + /wx/wechat/callback，从 conf.yaml 读取，init 中赋值）。
+var wxPayScoreNotifyURL string
 
 // ============================ 响应 DTO（前端拉起支付参数） ============================
 

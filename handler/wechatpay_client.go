@@ -15,13 +15,13 @@ import (
 	"github.com/wechatpay-apiv3/wechatpay-go/services/refunddomestic"
 	"github.com/wechatpay-apiv3/wechatpay-go/utils"
 
+	"caicai-go/conf"
 	"caicai-go/logger"
 )
 
 // ============================================================================
 // 微信支付 v3 客户端（普通商户模式），基于官方 wechatpay-go SDK。
-// 商户配置复用 handler/wxpay_controller.go 中的常量（商户号/证书序列号/APIv3 密钥），
-// 商户私钥从 apiclient_key.pem 加载。
+// 商户配置（商户号/证书序列号/APIv3 密钥/私钥路径等）从 conf.yaml 的 wxpay 段读取。
 // ============================================================================
 
 var (
@@ -34,7 +34,7 @@ var (
 // 具备「签名 / 验签 / 敏感字段加解密」能力，仅初始化一次。
 func getWxPayClient() (*core.Client, error) {
 	wxPayClientOnce.Do(func() {
-		privateKey, err := utils.LoadPrivateKeyWithPath("apiclient_key.pem")
+		privateKey, err := utils.LoadPrivateKeyWithPath(conf.Cfg.Wxpay.PrivateKeyPath)
 		if err != nil {
 			wxPayClientErr = fmt.Errorf("加载商户私钥失败: %w", err)
 			return
@@ -104,6 +104,25 @@ func refundWxOrder(transactionID, outRefundNo string, refund, total int) (string
 	}
 	if resp.Status == nil {
 		return "", fmt.Errorf("微信退款返回缺少 status")
+	}
+	return string(*resp.Status), nil
+}
+
+// refundQueryWxOrder 查询退款状态（按商户退款单号），对齐 Java WxPayService.refundQuery。
+func refundQueryWxOrder(outRefundNo string) (string, error) {
+	client, err := getWxPayClient()
+	if err != nil {
+		return "", err
+	}
+	svc := refunddomestic.RefundsApiService{Client: client}
+	resp, _, err := svc.QueryByOutRefundNo(context.Background(), refunddomestic.QueryByOutRefundNoRequest{
+		OutRefundNo: core.String(outRefundNo),
+	})
+	if err != nil {
+		return "", err
+	}
+	if resp.Status == nil {
+		return "", fmt.Errorf("微信退款查询返回缺少 status")
 	}
 	return string(*resp.Status), nil
 }

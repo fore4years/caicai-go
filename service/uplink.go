@@ -1,12 +1,17 @@
 package service
 
 import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/shopspring/decimal"
 
 	"caicai-go/logger"
+	"caicai-go/model"
 	"caicai-go/protocol"
 	"caicai-go/repository"
 )
@@ -23,7 +28,30 @@ func directionString(ctl byte) string {
 	}
 }
 
-// handleDeviceUplink 处理上行设备数据：按 cmd 缓存到对应用途的 Redis 键，对齐 Java MessageListeningServiceImpl。
+// bcdToInt 将 BCD 字节解码为整数（每字节两 BCD 数字），对齐 Java ByteUtils.bcdToInt。
+func bcdToInt(b []byte) int {
+	result := 0
+	for _, v := range b {
+		result = result*100 + int((v&0xf0)>>4)*10 + int(v&0x0f)
+	}
+	return result
+}
+
+// meterFromGunData 解析拔枪/还枪上行电量（对齐 Java ChangeGunPull/BackMessage.getMeterValue）。
+// 4G（nid>12）返回逗号分隔的第 2 段 * 100；否则按 BCD 解码。
+func meterFromGunData(nid string, data []byte) int32 {
+	if parts := strings.Split(string(data), ","); len(parts) > 2 && len(nid) > 12 {
+		if v, err := decimal.NewFromString(parts[1]); err == nil {
+			return int32(v.Mul(decimal.NewFromInt(100)).Round(0).IntPart())
+		}
+	}
+	if len(data) == 0 || len(data) > 4 {
+		return -1
+	}
+	return int32(bcdToInt(data))
+}
+
+// handleDeviceUplink 处理上行设备数据：按 cmd 缓存/落库，对齐 Java MessageListeningServiceImpl。
 func handleDeviceUplink(deviceID string, ctl, cmd byte, data []byte) {
 	nid := strings.ToUpper(deviceID)
 	dir := directionString(ctl)
@@ -42,8 +70,8 @@ func handleDeviceUplink(deviceID string, ctl, cmd byte, data []byte) {
 		if v, err := decimal.NewFromString(dataStr); err == nil {
 			SetRedisValue(nid+dir+":voltage", v.Div(decimal.NewFromInt(10)).Round(2).String())
 		}
-	case protocol.OpGetPrivateData: // 私桩数据 → key = nid+方向
-		SetRedisValue(nid+dir, dataStr)
+	case protocol.OpGetPrivateData: // 私桩数据 → 更新电量 + Redis 参数
+		onGetPrivateData(nid, dir, dataStr)
 	case protocol.OpGetGunHolderStatus: // 枪座状态 → key = nid:gun_holder_status
 		SetRedisValue(nid+":gun_holder_status", dataStr)
 	case protocol.OpGetChargeGunStatus: // 充电枪状态 → key = nid+方向:charge_gun_status
@@ -52,15 +80,27 @@ func handleDeviceUplink(deviceID string, ctl, cmd byte, data []byte) {
 		onGetGaugePower(nid, dataStr)
 	case protocol.OpGetGaugePowerAll: // 所有继电器电量 → 更新各通道插座电量
 		onGetAllGaugePower(nid, dataStr)
+	case protocol.OpButtonDown: // 紧急按钮按下
+		onButtonDown(nid, dir)
+	case protocol.OpButtonUp: // 紧急按钮复位
+		onButtonUp(nid, dir)
+	case protocol.OpChargeGunDisconnect: // 充电枪与车辆断开
+		onChargeGunDisconnect(nid)
+	case protocol.OpGatewayRegister: // 网关注册（TCP 0xFF）
+		onGatewayRegister(nid, data)
 	default:
-		handleOrderedUplink(nid, cmd, dataStr)
+		handleOrderedUplink(nid, dir, cmd, data, dataStr)
 	}
 }
 
-// handleOrderedUplink 处理需要按订单查询的上行事件（距离检测、充满、插枪/还枪、BMS）。
-func handleOrderedUplink(nid string, cmd byte, dataStr string) {
+// handleOrderedUplink 处理需要按订单查询的上行事件（距离检测、充满、插枪/还枪、BMS、电表示数）。
+func handleOrderedUplink(nid, dir string, cmd byte, data []byte, dataStr string) {
 	order := repository.FindUseOrderByDevice(nid)
 	if order == nil {
+		order = repository.FindPrivateUseOrderByDevice(nid)
+	}
+	if order == nil {
+		logger.Mylog.Debug().Msgf("未找到设备对应订单, device=%s cmd=0x%02X", nid, cmd)
 		return
 	}
 
@@ -80,13 +120,191 @@ func handleOrderedUplink(nid string, cmd byte, dataStr string) {
 		} else {
 			SetRedisValue("orderState:"+order.Orderid, "充电完成")
 		}
+	case protocol.OpGetPower: // 电表示数
+		onGetPower(nid, dir, data, order)
+	case protocol.OpGetDoubleGunData: // 双枪计量数据
+		onGetDoubleGunData(nid, dir, dataStr, order)
 	case protocol.OpChargeGunPull: // 充电枪已拔出
-		repository.UpdateOrderChargeGunPull(order.Orderid, 1)
-		SetRedisValue("orderState:"+order.Orderid, "插枪入车")
+		onChargeGunPull(nid, dir, data, order)
 	case protocol.OpChargeGunBack: // 充电枪已归还
-		repository.UpdateOrderChargeGunPull(order.Orderid, 0)
-		SetRedisValue("orderState:"+order.Orderid, "充电完成")
+		onChargeGunBack(nid, dir, data, order)
 	}
+}
+
+// onGetPower 返回电表示数：更新充电枪表底 + 订单电子电量（对齐 Java onGetPower）。
+func onGetPower(nid, dir string, data []byte, order *model.OrderTbl) {
+	meter := int32(bcdToInt(data))
+	repository.UpdateChargingGunMeter(nid, dir, meter)
+	repository.SaveOrUpdateOrderElectronicMeter(order.Orderid, meter)
+}
+
+// onGetDoubleGunData 双枪计量数据：更新订单电子电量 + Redis 功率/电流/电压（对齐 Java onGetDoubleGunData）。
+func onGetDoubleGunData(nid, dir, dataStr string, order *model.OrderTbl) {
+	parts := strings.Split(dataStr, ",")
+	if len(parts) < 5 {
+		return
+	}
+	meterValue, err := decimal.NewFromString(parts[1])
+	if err != nil {
+		return
+	}
+	meter := meterValue.Mul(decimal.NewFromInt(100)).Round(0)
+	repository.SaveOrUpdateOrderElectronicMeter(order.Orderid, int32(meter.IntPart()))
+
+	SetRedisValue(nid+dir, parts[4])            // 功率
+	SetRedisValue(nid+dir+":current", parts[2]) // 电流
+	SetRedisValue(nid+dir+":voltage", parts[3]) // 电压
+}
+
+// onGetPrivateData 私桩数据：更新订单电子电量 + Redis 功率/电压/电流（对齐 Java onGetPrivateData）。
+func onGetPrivateData(nid, dir, dataStr string) {
+	parts := strings.Split(dataStr, ",")
+	if len(parts) < 5 {
+		return
+	}
+	meterValue, err := decimal.NewFromString(parts[1])
+	if err != nil {
+		return
+	}
+	meter := meterValue.Mul(decimal.NewFromInt(100)).Round(0)
+
+	if order := repository.FindPrivateUseOrderByDevice(nid); order != nil {
+		repository.SaveOrUpdateOrderElectronicMeter(order.Orderid, int32(meter.IntPart()))
+	}
+
+	// 小程序所需参数：功率(W, 除以1000保留1位)、电压、电流
+	power, _ := decimal.NewFromString(parts[4])
+	powerValue, _ := power.Div(decimal.NewFromInt(1000)).Round(1).Float64()
+	voltageValue, _ := decimal.NewFromString(parts[3])
+	currentValue, _ := decimal.NewFromString(parts[2])
+	m := map[string]float64{
+		"power":   powerValue,
+		"voltage": voltageValue.InexactFloat64(),
+		"current": currentValue.InexactFloat64(),
+	}
+	b, _ := json.Marshal(m)
+	SetRedisValue(nid+dir, string(b))
+}
+
+// onChargeGunPull 充电枪拔出：更新表底 + 新增时段电量 + Redis（对齐 Java onChangeGunPull）。
+func onChargeGunPull(nid, dir string, data []byte, order *model.OrderTbl) {
+	meter := meterFromGunData(nid, data)
+	logger.Mylog.Info().Msgf("充电枪拔出: device=%s dir=%s order=%s meter=%d", nid, dir, order.Orderid, meter)
+	repository.UpdateChargingGunMeter(nid, dir, meter)
+	repository.UpdateOrderChargeGunPull(order.Orderid, 1)
+	repository.AddOrderElectronic(order.Orderid, meter)
+	SetRedisValue("orderState:"+order.Orderid, "插枪入车")
+
+	// 驿享充电且无车位锁时，以拔枪时间作为开始时间
+	if order.ConsumptionType == "驿享充电" {
+		if spaces := repository.SpacesByID(order.SpacesID); spaces != nil && spaces.LockID == "" {
+			repository.UpdateOrderBeginTime(order.Orderid)
+		}
+	}
+}
+
+// onChargeGunBack 充电枪归还：更新表底 + 结束时间/充电时长/充电度数/电子电量 + Redis。
+// 对齐 Java onChangeGunBack → handleGunReturnOrderCompletion 的数据落库部分（订单扣费结束仍走 HTTP）。
+func onChargeGunBack(nid, dir string, data []byte, order *model.OrderTbl) {
+	meter := meterFromGunData(nid, data)
+	logger.Mylog.Info().Msgf("充电枪归还: device=%s dir=%s order=%s meter=%d", nid, dir, order.Orderid, meter)
+	repository.UpdateChargingGunMeter(nid, dir, meter)
+	repository.UpdateOrderChargeGunPull(order.Orderid, 0)
+	repository.UpdateOrderOverTime(order.Orderid)
+	repository.UpdateOrderChargingTime(order.Orderid)
+	repository.UpdateChargingDegreeForOrder(order.Orderid)
+	repository.SaveOrUpdateOrderElectronicMeter(order.Orderid, meter)
+	SetRedisValue("orderState:"+order.Orderid, "充电完成")
+}
+
+// onButtonDown 紧急按钮按下：写入 charging_state_tbl（对齐 Java onButtonDown）。
+func onButtonDown(nid, dir string) {
+	product := repository.ProductByDeviceID(nid)
+	if product == nil {
+		return
+	}
+	gun := repository.ChargingGunByPidAndDirection(product.Pid, dir)
+	if gun == nil {
+		return
+	}
+	address, phone, ownership := "", "", ""
+	if gun.Gun.Direction == "D" { // 私桩
+		if place, _ := repository.PrivatePlaceByChargingGunID(gun.Gun.ID); place != nil {
+			address = place.Place
+			if bean := repository.PrivateChargingBySpacesNum(place.SpacesCode); bean != nil {
+				ownership = bean.Name
+				phone = bean.Phone
+			}
+		}
+	} else {
+		if spaces := repository.SpacesByChargingGunID(gun.Gun.ID); spaces != nil {
+			address = spaces.Place
+		}
+	}
+	if repository.ChargingStatePressedExists(product.Pid, dir) {
+		return
+	}
+	repository.InsertChargingState(&model.ChargingStateTbl{
+		ProductID:            product.Pid,
+		Direction:            dir,
+		EmergencyButtonState: "Pressed",
+		Model:                strconv.Itoa(int(gun.Gun.Model)),
+		ProductOwnership:     ownership,
+		Address:              address,
+		Phone:                phone,
+		Area:                 extractArea(address),
+	})
+	logger.Mylog.Info().Msgf("紧急按钮按下: device=%s dir=%s pid=%s address=%s", nid, dir, product.Pid, address)
+}
+
+// onButtonUp 紧急按钮复位：删除 charging_state_tbl（对齐 Java onButtonUp）。
+func onButtonUp(nid, dir string) {
+	product := repository.ProductByDeviceID(nid)
+	if product == nil {
+		return
+	}
+	repository.DeleteChargingState(product.Pid, dir)
+	logger.Mylog.Info().Msgf("紧急按钮复位: device=%s dir=%s pid=%s", nid, dir, product.Pid)
+}
+
+// onChargeGunDisconnect 充电枪与车辆断开：记录断开时间（对齐 Java onChangeGunDisconnect）。
+func onChargeGunDisconnect(nid string) {
+	if order := repository.FindUseOrderByDevice(nid); order != nil {
+		repository.UpdateOrderGunDisconnectTime(order.Orderid)
+		logger.Mylog.Info().Msgf("枪车断开: device=%s order=%s", nid, order.Orderid)
+	}
+}
+
+// onGatewayRegister 网关注册（TCP 0xFF）：按 4G/LoRa 区分 mac/iccid，不存在则入库。
+// 对齐 Java GatewayServiceImpl.onMessage。
+func onGatewayRegister(nid string, data []byte) {
+	var mac, iccid string
+	if len(nid) > 8 {
+		// 4G：mac = 设备标识（imei），data 形如 "iccid81.69.46.160..."，取分隔符前段作为 iccid
+		mac = nid
+		iccid = strings.Split(string(data), "81.69.46.160")[0]
+	} else {
+		// LoRa：mac = data 的 hex
+		mac = strings.ToUpper(hex.EncodeToString(data))
+	}
+	if repository.GatewayByMac(mac) != nil {
+		logger.Mylog.Debug().Msgf("网关已注册, 跳过: mac=%s", mac)
+		return
+	}
+	if err := repository.InsertGateway(mac, iccid); err != nil {
+		logger.Mylog.Err(err).Msgf("网关注册入库失败: mac=%s, iccid=%s", mac, iccid)
+		return
+	}
+	logger.Mylog.Info().Msgf("网关注册成功: mac=%s, iccid=%s", mac, iccid)
+}
+
+// extractArea 从地址中提取「X区」（对齐 Java 正则 (?<=[省市区])[^省市区]+(?=区)）。
+func extractArea(address string) string {
+	re := regexp.MustCompile(`[省市区]([^省市区]+)区`)
+	if m := re.FindStringSubmatch(address); m != nil {
+		return m[1] + "区"
+	}
+	return ""
 }
 
 // onGetGaugePower 读取二轮车继电器电量（对齐 Java onGetGaugePower）。
@@ -105,15 +323,35 @@ func onGetGaugePower(nid, dataStr string) {
 
 	product := repository.ProductByDeviceID(nid)
 	if product == nil {
+		logger.Mylog.Debug().Msgf("二轮车电量上报未找到产品, device=%s", nid)
 		return
 	}
+
+	// 电压 > 250V 判定设备故障，主动关闸（对齐 Java onGetGaugePower）
+	if v, err := strconv.ParseFloat(parts[3], 64); err == nil && v > 250.0 {
+		logger.Mylog.Warn().Msgf("设备故障: 电压 %s > 250V, 自动关闸, pid=%s, 通道=%s", parts[3], product.Pid, channel)
+		if rid, e := strconv.Atoi(channel); e == nil {
+			CloseGauge(product.Imei, rid)
+		}
+	}
+
 	repository.UpsertReceptaclePower(product.Pid, channel, meterValue)
 
 	order := repository.FindTwiceOrderByPidAndChannel(product.Pid, channel)
 	if order == nil {
+		logger.Mylog.Debug().Msgf("二轮车电量上报未找到使用中订单, pid=%s channel=%s", product.Pid, channel)
+		return
+	}
+	// 功率异常值（>10000）跳过（硬件偶发异常，对齐 Java）
+	if p, e := strconv.ParseFloat(power, 64); e == nil && p > 10000 {
 		return
 	}
 	repository.UpdateReOrderPower(order.Orderid, meterValue, power)
+
+	// 充满自停模式（未选择定时）：功率连续低时判定充满并自动结束（对齐 Java onGetGaugePower → GaugeFull）
+	if order.TwiceChargeTime == "" {
+		GaugeFull(order.Orderid)
+	}
 }
 
 // onGetAllGaugePower 读取所有继电器电量（对齐 Java onGetAllGaugePower）。
@@ -132,15 +370,12 @@ func onGetAllGaugePower(nid, dataStr string) {
 
 // mqttDeviceReport MQTT 上报的 JSON 载荷（topic = device/{imei}/report）。
 type mqttDeviceReport struct {
-	Event        string          `json:"event"`
-	Channel      int             `json:"channel"`
-	Relay        int             `json:"relay"`
-	VoltageV     float64         `json:"voltage_v"`
-	CurrentA     float64         `json:"current_a"`
-	PowerW       decimal.Decimal `json:"power_w"`
-	EnergyKwh    decimal.Decimal `json:"energy_kwh"`
-	FrequencyHz  float64         `json:"frequency_hz"`
-	TemperatureC float64         `json:"temperature_c"`
+	Channel     int32   `json:"Channel"`
+	Current     float64 `json:"Current"`
+	Voltage     float64 `json:"Voltage"`
+	Power       float64 `json:"Power"`
+	Temperature float64 `json:"Temperature"`
+	Energy      float64 `json:"Energy"`
 }
 
 // extractDeviceFromTopic 从 topic（device/{imei}/report）中提取设备标识（imei/nid）。
@@ -159,12 +394,30 @@ func handleMqttReport(deviceID string, report mqttDeviceReport) {
 		logger.Mylog.Debug().Msgf("MQTT 上报未找到产品, device: %s", deviceID)
 		return
 	}
-	channel := strconv.Itoa(report.Channel)
-	repository.UpsertReceptaclePower(product.Pid, channel, report.EnergyKwh)
+	logger.Mylog.Info().Msgf(
+		"device: %s ====> 通道: %d 电流: %.2f 电压: %.2f 功率: %.2f 电量: %.2f",
+		deviceID, report.Channel, report.Current, report.Voltage, report.Power, report.Energy,
+	)
+	channel := fmt.Sprintf("%d", report.Channel)
+	power := decimal.NewFromFloat(report.Power)
+	meterValue := decimal.NewFromFloat(report.Energy)
+	repository.UpsertReceptaclePower(product.Pid, channel, meterValue)
 
-	order := repository.FindTwiceOrderByPidAndChannel(product.Pid, channel)
-	if order == nil {
-		return
+	// 通过 imei::channel 映射订单号（开闸时 SetMap 写入），内存映射丢失时回退 DB 反查并回填
+	orderID, ok := GetMap(deviceID + "::" + channel)
+	if !ok {
+		order := repository.FindTwiceOrderByPidAndChannel(product.Pid, channel)
+		if order == nil {
+			return
+		}
+		orderID = order.Orderid
+		SetMap(deviceID+"::"+channel, orderID)
 	}
-	repository.SetReOrderPower(order.Orderid, report.EnergyKwh, report.PowerW)
+
+	// 计费电量落库
+	repository.SetReOrderPower(orderID, meterValue, power)
+
+	// 前端展示：按订单号缓存最新上报数据
+	reportJSON, _ := json.Marshal(report)
+	SetRedisValue("orderReport:"+orderID, string(reportJSON))
 }

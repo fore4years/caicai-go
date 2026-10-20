@@ -1,6 +1,0 @@
-// device/{imei}/register
-// 注册,第一次心跳视为注册
-{
-  "imei": "xx",
-  "iccid": "xx"
-}

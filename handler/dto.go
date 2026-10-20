@@ -145,7 +145,7 @@ type OrderDTO struct {
 	DecideAmount         decimal.Decimal `json:"decideAmount,omitempty"`
 	ImageID              string          `json:"imageId,omitempty"`
 	WechatTransactionID  string          `json:"wechatTransactionId,omitempty"`
-	ChargingDegree       float64         `json:"chargingDegree,omitempty"`
+	ChargingDegree       float64         `json:"chargingDegree"`
 	SpacesID             int32           `json:"spacesId,omitempty"`
 	ChargerPower         int32           `json:"chargerPower,omitempty"`
 	ChargeGunPull        int32           `json:"chargeGunPull,omitempty"`

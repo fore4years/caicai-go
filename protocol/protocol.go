@@ -5,6 +5,7 @@
 package protocol
 
 import (
+	"caicai-go/logger"
 	"encoding/hex"
 	"errors"
 )
@@ -164,9 +165,15 @@ func Decode(b []byte) (deviceID string, ctl, cmd byte, data []byte, err error) {
 		return deviceID, ctl, cmd, nil, errors.New("长度字段越界")
 	}
 	data = frame[6:bodyEnd]
+	// CRC 仅日志告警、不拦截（对齐 Java GateWayMessageCodec：读取 crc 但不校验）
 	if frame[bodyEnd] != crc8(frame[:bodyEnd]) {
-		return deviceID, ctl, cmd, data, errors.New("校验和不匹配")
+		logger.Mylog.Debug().Msgf("CRC 不匹配(忽略): 收到=0x%02X 计算=0x%02X", frame[bodyEnd], crc8(frame[:bodyEnd]))
 	}
+	logger.Mylog.Debug().
+		Str("deviceID", deviceID).
+		Int("cmd", int(cmd)).
+		Bytes("data", data). // bytes 会转 hex
+		Msgf("收到帧 %s", string(data))
 	return deviceID, ctl, cmd, data, nil
 }
 

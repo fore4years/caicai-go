@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"fmt"
+
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
@@ -8,11 +10,11 @@ import (
 	"caicai-go/model"
 )
 
-// chargeStationGeoCols 充电站查询列（经纬度取 longitude/latitude）。
-const chargeStationGeoCols = "id, longitude, latitude, place, name, openid, power_max, pid, create_time, update_time"
+// chargeStationGeoCols 充电站查询列（经纬度取自 point 空间字段）。
+const chargeStationGeoCols = "id, point, place, name, openid, power_max, pid, create_time, update_time"
 
-// chargeStationDistanceSQL 充电站经纬度到查询点的球面距离（米），Haversine 公式。
-const chargeStationDistanceSQL = "(6371000 * 2 * ASIN(SQRT(POWER(SIN((RADIANS(latitude) - RADIANS(?)) / 2), 2) + COS(RADIANS(?)) * COS(RADIANS(latitude)) * POWER(SIN((RADIANS(longitude) - RADIANS(?)) / 2), 2))))"
+// chargeStationDistanceSQL 充电站点到查询点的球面距离（米），对齐 Java ST_Distance_Sphere。
+const chargeStationDistanceSQL = "ST_Distance_Sphere(point, ST_GeomFromText(?))"
 
 // ChargingStationByPid 按 pid 查询充电站。
 func ChargingStationByPid(pid string) (*model.ChargingStationTbl, error) {
@@ -48,9 +50,19 @@ func ChargingStationByPidDB(pid string) (*model.ChargingStationTbl, error) {
 	return &station, nil
 }
 
-// SaveChargingStation 保存充电站（存在则更新）。
+// SaveChargingStation 保存充电站（ID=0 新增，否则按 id 更新；point 用 ST_GeomFromText 写入）。
 func SaveChargingStation(station *model.ChargingStationTbl) error {
-	return conf.Db.Save(station).Error
+	pointWKT := station.Point.String()
+	if station.ID == 0 {
+		return conf.Db.Exec(
+			"INSERT INTO charging_station_tbl (point, place, name, openid, pid, power_max) VALUES (ST_GeomFromText(?),?,?,?,?,?)",
+			pointWKT, station.Place, station.Name, station.Openid, station.Pid, station.PowerMax,
+		).Error
+	}
+	return conf.Db.Exec(
+		"UPDATE charging_station_tbl SET point = ST_GeomFromText(?), place = ?, name = ?, openid = ?, power_max = ?, update_time = NOW() WHERE id = ?",
+		pointWKT, station.Place, station.Name, station.Openid, station.PowerMax, station.ID,
+	).Error
 }
 
 // CountChargingStations 统计充电站数量。
@@ -63,10 +75,11 @@ func CountChargingStations() int64 {
 // ChargingStationsByPoint 按经纬度距离分页查询充电站。
 func ChargingStationsByPoint(lat, lng float64, limit, offset int) []model.ChargingStationTbl {
 	var rows []model.ChargingStationTbl
+	pointWKT := fmt.Sprintf("POINT(%f %f)", lng, lat)
 	conf.Db.Raw(
 		"SELECT "+chargeStationGeoCols+", "+chargeStationDistanceSQL+" AS distance FROM charging_station_tbl "+
 			"ORDER BY "+chargeStationDistanceSQL+" ASC LIMIT ? OFFSET ?",
-		lat, lat, lng, lat, lat, lng, limit, offset,
+		pointWKT, pointWKT, limit, offset,
 	).Scan(&rows)
 	return rows
 }
@@ -82,7 +95,7 @@ func AllChargingStations() ([]model.ChargingStationTbl, error) {
 func InsertReOrderPower(orderID string, meterValue interface{}) error {
 	return conf.Db.Exec(
 		"INSERT INTO re_order_electronic_tbl (order_id, start_value, over_value, price_time_id) "+
-			"VALUES (?,?,?,(SELECT id FROM tab_price_time WHERE start_time < curtime() AND over_time >= curtime()))",
+			"VALUES (?,?,?,(SELECT id FROM tab_price_time WHERE start_time < curtime() AND over_time >= curtime() LIMIT 1))",
 		orderID, meterValue, meterValue,
 	).Error
 }
@@ -99,7 +112,7 @@ func ReOrderPowerValueByOrderid(orderID string) *decimal.Decimal {
 // ReOrderPowerFeesByOrderid 查询订单电费合计。
 func ReOrderPowerFeesByOrderid(orderID string) *decimal.Decimal {
 	var d decimal.Decimal
-	if err := conf.Db.Raw(`SELECT SUM((over_value - start_value) * (charging_price_tbl.total + charging_price_tbl.service))
+	if err := conf.Db.Raw(`SELECT COALESCE(SUM((over_value - start_value) * (COALESCE(charging_price_tbl.total, 0) + COALESCE(charging_price_tbl.service, 0))),0)
 		FROM re_order_electronic_tbl
 		LEFT JOIN tab_price_time ON tab_price_time.id = re_order_electronic_tbl.price_time_id
 		LEFT JOIN charging_price_tbl ON charging_price_tbl.id = tab_price_time.price_id
@@ -113,8 +126,8 @@ func ReOrderPowerFeesByOrderid(orderID string) *decimal.Decimal {
 func ReOrderPowerElectronicByOrderid(orderID string) (decimal.Decimal, decimal.Decimal) {
 	var totalFee, serviceFee decimal.Decimal
 	if err := conf.Db.Raw(`SELECT
-			SUM((over_value - start_value) * charging_price_tbl.total) AS totalFee,
-			SUM((over_value - start_value) * charging_price_tbl.service) AS serviceFee
+			COALESCE(SUM((over_value - start_value) * COALESCE(charging_price_tbl.total, 0)),0) AS totalFee,
+			COALESCE(SUM((over_value - start_value) * COALESCE(charging_price_tbl.service, 0)),0) AS serviceFee
 		FROM re_order_electronic_tbl
 		LEFT JOIN tab_price_time ON tab_price_time.id = re_order_electronic_tbl.price_time_id
 		LEFT JOIN charging_price_tbl ON charging_price_tbl.id = tab_price_time.price_id
@@ -161,18 +174,13 @@ func ProductExistsByPid(pid string) bool {
 	return n > 0
 }
 
-// InsertChargingStation 新增充电站。
+// InsertChargingStation 新增充电站（point 用 ST_GeomFromText 写入）。
 func InsertChargingStation(place, name, openid, pid string, powerMax int, longitude, latitude float64) error {
+	pointWKT := fmt.Sprintf("POINT(%f %f)", longitude, latitude)
 	return conf.Db.Exec(
-		"INSERT INTO charging_station_tbl (place, name, openid, pid, power_max, longitude, latitude) VALUES (?,?,?,?,?,?,?)",
-		place, name, openid, pid, powerMax, longitude, latitude,
+		"INSERT INTO charging_station_tbl (point, place, name, openid, pid, power_max) VALUES (ST_GeomFromText(?),?,?,?,?,?)",
+		pointWKT, place, name, openid, pid, powerMax,
 	).Error
-}
-
-// UpdateChargingStationByPid 按 pid 更新充电站，返回受影响行数。
-func UpdateChargingStationByPid(pid string, updates map[string]interface{}) int64 {
-	res := conf.Db.Model(&model.ChargingStationTbl{}).Where("pid = ?", pid).Updates(updates)
-	return res.RowsAffected
 }
 
 // DeleteChargingStationByID 删除充电站，返回受影响行数。
