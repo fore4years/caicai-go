@@ -12,12 +12,13 @@ func init() {
 }
 
 // LocalDateTime 对应 Java 的 LocalDateTime。
-// Jackson 对 LocalDateTime 默认按 ISO 序列化（无时区），这里对齐为 2006-01-02T15:04:05。
+// Java 通过 JacksonConfig 将 LocalDateTime 序列化为 "yyyy-MM-dd HH:mm:ss"（空格分隔，非 ISO 的 T），
+// 前端 timeUtils 依赖空格分隔格式解析，这里保持一致。
 type LocalDateTime time.Time
 
-// MarshalJSON 将时间序列化为与 Java LocalDateTime 一致的 ISO 格式。
+// MarshalJSON 将时间序列化为与 Java LocalDateTime 一致的 "yyyy-MM-dd HH:mm:ss" 格式。
 func (t LocalDateTime) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + time.Time(t).Format("2006-01-02T15:04:05") + `"`), nil
+	return []byte(`"` + time.Time(t).Format("2006-01-02 15:04:05") + `"`), nil
 }
 
 // timeToLocal 将可空时间转为 LocalDateTime；nil 或零值返回 nil（对齐 Java non_null 省略 null 字段）。

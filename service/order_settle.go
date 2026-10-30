@@ -12,6 +12,9 @@ import (
 // 签名与 handler.settleTwiceOrder 一致：withGauge 表示结算时是否带关闸。
 var SettleTwiceOrderFn func(orderID string, withGauge bool) bool
 
+// FinishGunReturnOrderFn 充电枪归还（OpChargeGunBack）自动结束订单函数，由 handler 注入（打破循环依赖）。
+var FinishGunReturnOrderFn func(orderID string, meter int32)
+
 // CloseGaugeByOrder 关闭订单对应插座的继电器（对齐 Java CloseGAUGE）。
 func CloseGaugeByOrder(orderID string) {
 	receptacle := repository.ReceptacleByOrderid(orderID)

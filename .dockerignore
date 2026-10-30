@@ -5,3 +5,6 @@ conf.yaml
 apiclient_key.pem
 
 /cmd
+
+/.junie
+/audit

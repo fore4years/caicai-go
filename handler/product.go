@@ -97,7 +97,8 @@ func (p *ProductController) AddLockProduct(c *gin.Context) {
 
 // AddChargingProduct POST /product/addChargingProduct
 func (p *ProductController) AddChargingProduct(c *gin.Context) {
-	p.addProduct(c, "SCC", nil, "")
+	zero := int32(0)
+	p.addProduct(c, "SCC", &zero, "")
 }
 
 // AddTwiceChargingProduct POST /product/addTwiceChargingProduct

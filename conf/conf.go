@@ -3,12 +3,15 @@ package conf
 import (
 	"caicai-go/logger"
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	db_logger "gorm.io/gorm/logger"
 )
 
 type Config struct {
@@ -62,7 +65,17 @@ func init() {
 func Dbconnection(dbconf MysqlConf) error {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		dbconf.Username, dbconf.Password, dbconf.Host, dbconf.Port, dbconf.Dbname)
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	newLogger := db_logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		db_logger.Config{
+			SlowThreshold: time.Second,
+			LogLevel:      db_logger.Error,
+			Colorful:      false,
+		},
+	)
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: newLogger,
+	})
 	if err != nil {
 		return fmt.Errorf("数据库连接异常: %w", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,43 @@ const deviceTopicPrefix = "device/"
 // gatewayRegisteredKey 网关注册缓存（Redis SET，存放已注册网关的 imei/mac）。
 const gatewayRegisteredKey = "gateway:registered"
 
+const (
+	eventGun    = "gun_status"
+	eventEnergy = "energy_status"
+)
+
+const (
+	workNum     = 10
+	queueLength = 1024
+)
+
+type job struct {
+	topic   string
+	payload []byte
+	qos     byte
+	retain  bool
+}
+
+var topicMessageHandler = map[string]func(job){
+	"report": onDeviceMessage,
+	"event":  onEventMessage,
+	"alarm":  onDeviceMessage,
+	"heart":  onHeartbeat,
+}
+
+func onAnyMessage(j job) {
+	suffix := j.topic
+	if i := strings.LastIndex(suffix, "/"); i >= 0 {
+		suffix = suffix[i+1:]
+	}
+	h, ok := topicMessageHandler[suffix]
+	if !ok {
+		logger.Mylog.Warn().Msgf("未注册的主题: %s", j.topic)
+		return
+	}
+	h(j)
+}
+
 // InitDevice 初始化设备通信依赖的 MQTT 与 Redis 客户端。
 // 连接 broker，并订阅所有设备的上行主题（report/event/alarm/heartbeat）。
 // MQTT 开启自动重连，并在每次（重）连接成功后重新订阅（避免重连后订阅丢失）。
@@ -52,25 +90,20 @@ func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 		opts.SetPassword(mqcfg.Password)
 	}
 
+	jobs := make(chan job, queueLength)
+	var wg sync.WaitGroup
+	for i := range workNum {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := range jobs {
+				onAnyMessage(j)
+			}
+		}(i)
+	}
 	// 连接成功（含重连成功）时重新订阅上行主题。
 	opts.SetOnConnectHandler(func(client mqtt.Client) {
 		logger.Mylog.Info().Msg("MQTT 连接成功")
-		for _, sub := range []string{"report", "event", "alarm"} {
-			topic := deviceTopicPrefix + "+/" + sub
-			if token := client.Subscribe(topic, byte(mqcfg.Qos), onDeviceMessage); token.Wait() && token.Error() != nil {
-				logger.Mylog.Err(token.Error()).Msgf("订阅主题失败: %s", topic)
-			} else {
-				logger.Mylog.Info().Msgf("已订阅主题: %s", topic)
-			}
-		}
-		// 心跳主题（JSON 载荷）：网关注册，首次心跳即注册
-		heartbeatTopic := deviceTopicPrefix + "+/heartbeat"
-		if token := client.Subscribe(heartbeatTopic, byte(mqcfg.Qos), onHeartbeat); token.Wait() && token.Error() != nil {
-			logger.Mylog.Err(token.Error()).Msgf("订阅主题失败: %s", heartbeatTopic)
-		} else {
-			logger.Mylog.Info().Msgf("已订阅主题: %s", heartbeatTopic)
-		}
-		//
 	})
 	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
 		logger.Mylog.Warn().Err(err).Msg("MQTT 连接断开，等待重连")
@@ -82,6 +115,42 @@ func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 	mqttClient = mqtt.NewClient(opts)
 	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
 		logger.Mylog.Err(token.Error()).Msg("MQTT 连接失败")
+	}
+
+	handler := func(client mqtt.Client, msg mqtt.Message) {
+		j := job{
+			topic:   msg.Topic(),
+			payload: append([]byte(nil), msg.Payload()...),
+			qos:     msg.Qos(),
+			retain:  msg.Retained(),
+		}
+
+		select {
+		case jobs <- j:
+		default:
+			logger.Mylog.Warn().Msgf("[MQTT] 工作队列已满, Topic: %s, Len: %d", j.topic, len(j.payload))
+		}
+	}
+
+	filters := make(map[string]byte, len(topicMessageHandler))
+	for suffix := range topicMessageHandler {
+		filters[deviceTopicPrefix+"+/"+suffix] = byte(mqcfg.Qos)
+	}
+
+	// 一次往返批量订阅
+	if token := mqttClient.SubscribeMultiple(filters, handler); token.Wait() && token.Error() != nil {
+		logger.Mylog.Err(token.Error()).Msg("批量订阅失败，回退为逐个订阅")
+		for topic, qos := range filters {
+			if t := mqttClient.Subscribe(topic, qos, handler); t.Wait() && t.Error() != nil {
+				logger.Mylog.Err(t.Error()).Msgf("订阅主题失败: %s", topic)
+			} else {
+				logger.Mylog.Info().Msgf("已订阅主题: %s", topic)
+			}
+		}
+		return
+	}
+	for topic := range filters {
+		logger.Mylog.Info().Msgf("已订阅主题: %s", topic)
 	}
 
 	// Redis（go-redis 按需自动重连，这里补启动探测）
@@ -105,18 +174,18 @@ func InitDevice(mqcfg conf.MqttConf, rcfg conf.RedisConf) {
 }
 
 // onDeviceMessage 处理 MQTT 上行设备数据（topic = device/{imei}/report|event|alarm）。
-// MQTT 上报为 JSON（如 {"event":"relay_on","channel":1,"energy_kwh":...}）；非 JSON 时回退按二进制帧解析（兼容）。
-func onDeviceMessage(client mqtt.Client, msg mqtt.Message) {
-	payload := msg.Payload()
+// MQTT 上行均为 JSON，不做二进制帧解析（二进制帧仅 TCP 通道使用）。
+func onDeviceMessage(j job) {
+	payload := j.payload
 	var report mqttDeviceReport
-	if err := json.Unmarshal(payload, &report); err == nil && report.Channel > 0 {
-		handleMqttReport(extractDeviceFromTopic(msg.Topic()), report)
+	if err := json.Unmarshal(payload, &report); err != nil {
+		logger.Mylog.Warn().Msgf("MQTT 上报 JSON 解析失败, topic=%s, err=%v", j.topic, err)
 		return
 	}
-	processDeviceFrame(payload, msg.Topic())
+	handleMqttReport(extractDeviceFromTopic(j.topic), report)
 }
 
-// processDeviceFrame 解析上行设备帧（MQTT 或 TCP 均复用），按 cmd 缓存 data 到 Redis（供查询用）。
+// processDeviceFrame 解析上行设备二进制帧（仅 TCP 通道使用），按 cmd 缓存 data 到 Redis（供查询用）。
 func processDeviceFrame(frame []byte, source string) {
 	deviceID, ctl, cmd, data, err := protocol.Decode(frame)
 	if err != nil {
@@ -136,18 +205,18 @@ func processDeviceFrame(frame []byte, source string) {
 // onHeartbeat 心跳处理（MQTT JSON 约定：首次心跳即网关注册）。
 // 主题 device/{imei}/heartbeat，载荷 {"imei":"xx","iccid":"xx"}。
 // tab_gateway 已存在该 imei（作为 mac）则跳过；心跳一分钟一次，仅首次注册。
-func onHeartbeat(client mqtt.Client, msg mqtt.Message) {
+func onHeartbeat(j job) {
 	var req struct {
 		Imei  string `json:"imei"`
 		Iccid string `json:"iccid"`
 	}
 	// imei == mac == 网关id
-	if err := json.Unmarshal(msg.Payload(), &req); err != nil {
-		logger.Mylog.Warn().Msgf("网关注册 JSON 解析失败, topic: %s, err: %v", msg.Topic(), err)
+	if err := json.Unmarshal(j.payload, &req); err != nil {
+		logger.Mylog.Warn().Msgf("网关注册 JSON 解析失败, topic: %s, err: %v", j.topic, err)
 		return
 	}
 	if req.Imei == "" {
-		logger.Mylog.Warn().Msgf("网关注册缺少 imei, topic: %s", msg.Topic())
+		logger.Mylog.Warn().Msgf("网关注册缺少 imei, topic: %s", j.topic)
 		return
 	}
 
@@ -155,7 +224,7 @@ func onHeartbeat(client mqtt.Client, msg mqtt.Message) {
 	// 1. 先查 Redis 缓存，已注册则直接跳过，避免每次心跳查库
 	if rdb != nil {
 		if ok, err := rdb.SIsMember(ctx, gatewayRegisteredKey, req.Imei).Result(); err == nil && ok {
-			logger.Mylog.Info().Msgf("网关IMEI %s 心跳: %s", req.Imei, string(msg.Payload()))
+			logger.Mylog.Info().Msgf("网关IMEI %s 心跳: %s", req.Imei, string(j.payload))
 			return
 		}
 	}
@@ -177,6 +246,61 @@ func onHeartbeat(client mqtt.Client, msg mqtt.Message) {
 		rdb.SAdd(ctx, gatewayRegisteredKey, req.Imei)
 	}
 	logger.Mylog.Info().Msgf("网关注册成功: imei=%s, iccid=%s", req.Imei, req.Iccid)
+}
+
+// onEventMessage 处理设备上报事件
+func onEventMessage(j job) {
+	var body struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(j.payload, &body); err != nil {
+		logger.Mylog.Err(err).Msgf("[MQTT] event事件解析异常: %v", j.payload)
+	}
+
+	switch body.Type {
+	case eventGun:
+		var isDraw struct {
+			IsDraw    int8 `json:"isDraw"`
+			Direction int8 `json:"direction"`
+		}
+		if len(body.Data) == 0 {
+			logger.Mylog.Warn().Msgf("[MQTT] event %s 缺少 data: %s", body.Type, j.payload)
+			return
+		}
+		if err := json.Unmarshal(body.Data, &isDraw); err != nil {
+			logger.Mylog.Err(err).Msgf("[MQTT] gun 事件 data 解析异常: %s", body.Data)
+			return
+		}
+		imei := strings.ToUpper(strings.Split(j.topic, "/")[1])
+		// 订单结束: 检测是否还枪 ->还枪: 订单结束      ->未还: 超时占位费
+		if isDraw.IsDraw != 0 {
+			logger.Mylog.Info().Msgf("充电桩: %s ", imei)
+			return
+		}
+
+		// 枪已归还,结算订单：优先待还枪（私桩/邻享），其次使用中（四轮车/私桩）
+		order := repository.FindPrivateReturnGunOrderByDevice(imei)
+		if order == nil {
+			order = repository.FindUseOrderByDevice(imei)
+		}
+		if order == nil {
+			order = repository.FindPrivateUseOrderByDevice(imei)
+		}
+		if order == nil {
+			logger.Mylog.Error().Msgf("设备 %s 通道 %d 未查询到订单", imei, isDraw.Direction)
+			return
+		}
+		logger.Mylog.Info().Msgf("[MQTT Event]找到订单号: %s ", order.Orderid)
+		if FinishGunReturnOrderFn != nil {
+			FinishGunReturnOrderFn(order.Orderid, 0)
+		}
+
+	case eventEnergy:
+	//todo
+	default:
+		logger.Mylog.Warn().Msgf("[MQTT] event事件 %s 未匹配到", body.Type)
+	}
 }
 
 // publish 发布原始 payload 到指定 topic。
@@ -210,7 +334,7 @@ func sendCommand(imei string, cmd int, data []byte) bool {
 	if _, ok := tcpConns.Load(imei); ok {
 		frame := protocol.Encode(imei, byte(cmd), protocol.DirectionDefault, data)
 		if SendTCP(imei, frame) {
-			logger.Mylog.Info().Msgf("已通过 TCP 下发指令, device: %s, cmd: 0x%02X", imei, cmd)
+			logger.Mylog.Info().Msgf("[TCP]已通过 TCP 下发指令, device: %s, cmd: 0x%02X", imei, cmd)
 			return true
 		}
 	}
@@ -230,16 +354,16 @@ func sendCommand(imei string, cmd int, data []byte) bool {
 	if !publish(topic, payload) {
 		return false
 	}
-	logger.Mylog.Info().Msgf("已下发指令, topic: %s, payload: %s", topic, payload)
+	logger.Mylog.Info().Msgf("[MQTT]已下发指令, topic: %s, payload: %s", topic, payload)
 	return true
 }
 
 // intDataToBytes 将单字节数据（int）转为字节切片；负数表示无数据。
 func intDataToBytes(data int) []byte {
-	if data < 0 {
+	if data < -2 {
 		return []byte{}
 	}
-	return []byte{byte(data)}
+	return []byte{byte(int8(data))}
 }
 
 // dataInt 将字节数据转回 int（JSON 载荷用）；空数据返回 -1，多字节取首字节。
@@ -247,7 +371,7 @@ func dataInt(data []byte) int {
 	if len(data) == 0 {
 		return -1
 	}
-	return int(data[0])
+	return int(int8(data[0]))
 }
 
 // SendHex 下发原始 hex 指令到指定设备（不经过 EncodeCmd，直接发原始字节）。

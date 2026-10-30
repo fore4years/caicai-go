@@ -124,7 +124,7 @@ func DeleteChargingState(productID, direction string) int64 {
 }
 
 // FindPrivateUseOrderByDevice 按设备标识查询私桩/邻享「使用中」订单。
-// 对齐 Java OrderService.getPrivateUseByNid（经 private_place_tbl 关联）。
+// 对齐 Java OrderService.getPrivateUseByNid（经 private_place_tbl 关联；4G 设备按 Imei，LoRa 按 nid）。
 func FindPrivateUseOrderByDevice(deviceID string) *model.OrderTbl {
 	var order model.OrderTbl
 	err := conf.Db.Raw(`
@@ -132,8 +132,25 @@ func FindPrivateUseOrderByDevice(deviceID string) *model.OrderTbl {
 		LEFT JOIN private_place_tbl s ON o.spaces_id = s.id
 		LEFT JOIN tab_charging_gun g ON s.charging_gun_id = g.id
 		LEFT JOIN tab_product gp ON gp.pid = g.product_id
-		WHERE o.state = '使用中' AND gp.nid = ?
-		ORDER BY o.reserve_time DESC LIMIT 1`, deviceID).Scan(&order).Error
+		WHERE o.state = '使用中' AND (gp.nid = ? OR gp.Imei = ?)
+		ORDER BY o.reserve_time DESC LIMIT 1`, deviceID, deviceID).Scan(&order).Error
+	if err != nil || order.Orderid == "" {
+		return nil
+	}
+	return &order
+}
+
+// FindPrivateReturnGunOrderByDevice 按设备标识查询私桩/邻享「待还枪」订单。
+// 对齐 Java OrderService.getPrivateReturnGunByNid（经 private_place_tbl 关联；4G 设备按 Imei，LoRa 按 nid）。
+func FindPrivateReturnGunOrderByDevice(deviceID string) *model.OrderTbl {
+	var order model.OrderTbl
+	err := conf.Db.Raw(`
+		SELECT o.* FROM order_tbl o
+		LEFT JOIN private_place_tbl s ON o.spaces_id = s.id
+		LEFT JOIN tab_charging_gun g ON s.charging_gun_id = g.id
+		LEFT JOIN tab_product gp ON gp.pid = g.product_id
+		WHERE o.state = '待还枪' AND (gp.nid = ? OR gp.Imei = ?)
+		ORDER BY o.reserve_time DESC LIMIT 1`, deviceID, deviceID).Scan(&order).Error
 	if err != nil || order.Orderid == "" {
 		return nil
 	}

@@ -419,6 +419,14 @@ func getUniAppToken() string {
 	return resp.AccessToken
 }
 
+// refreshUniAppToken 强制刷新 access_token（token 失效 40001 时调用）。
+func refreshUniAppToken() string {
+	uniAppTokenMu.Lock()
+	uniAppToken = ""
+	uniAppTokenMu.Unlock()
+	return getUniAppToken()
+}
+
 // wxGet 发送 GET 请求并返回响应体字符串
 func wxGet(url string) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)

@@ -5,7 +5,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/protocol"
 	"caicai-go/repository"
 	"caicai-go/service"
 )
@@ -26,6 +25,6 @@ func (e *ExternalController) OpenGunHolderSensor(c *gin.Context) {
 	chargingSocket := row.ChargingSocket
 
 	// 2. chargingSocket 作为设备标识下发 openGunHolderSensor 指令
-	ok := service.SendCommand(chargingSocket, protocol.OpOpenGunHolderSensor, -1)
+	ok := service.OpenGunHolderSensor(chargingSocket)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }

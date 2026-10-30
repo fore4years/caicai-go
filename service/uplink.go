@@ -100,6 +100,9 @@ func handleOrderedUplink(nid, dir string, cmd byte, data []byte, dataStr string)
 		order = repository.FindPrivateUseOrderByDevice(nid)
 	}
 	if order == nil {
+		order = repository.FindPrivateReturnGunOrderByDevice(nid)
+	}
+	if order == nil {
 		logger.Mylog.Debug().Msgf("未找到设备对应订单, device=%s cmd=0x%02X", nid, cmd)
 		return
 	}
@@ -172,15 +175,17 @@ func onGetPrivateData(nid, dir, dataStr string) {
 		repository.SaveOrUpdateOrderElectronicMeter(order.Orderid, int32(meter.IntPart()))
 	}
 
-	// 小程序所需参数：功率(W, 除以1000保留1位)、电压、电流
+	// 小程序所需参数：功率(W, 除以1000保留1位)、电压、电流（精度对齐 Java onGetPrivateData）
 	power, _ := decimal.NewFromString(parts[4])
-	powerValue, _ := power.Div(decimal.NewFromInt(1000)).Round(1).Float64()
-	voltageValue, _ := decimal.NewFromString(parts[3])
-	currentValue, _ := decimal.NewFromString(parts[2])
+	powerValue := power.Div(decimal.NewFromInt(1000)).Round(1).InexactFloat64()
+	voltage, _ := decimal.NewFromString(parts[3])
+	voltageValue := voltage.Round(2).InexactFloat64()
+	current, _ := decimal.NewFromString(parts[2])
+	currentValue := current.Round(2).InexactFloat64()
 	m := map[string]float64{
 		"power":   powerValue,
-		"voltage": voltageValue.InexactFloat64(),
-		"current": currentValue.InexactFloat64(),
+		"voltage": voltageValue,
+		"current": currentValue,
 	}
 	b, _ := json.Marshal(m)
 	SetRedisValue(nid+dir, string(b))
@@ -215,6 +220,11 @@ func onChargeGunBack(nid, dir string, data []byte, order *model.OrderTbl) {
 	repository.UpdateChargingDegreeForOrder(order.Orderid)
 	repository.SaveOrUpdateOrderElectronicMeter(order.Orderid, meter)
 	SetRedisValue("orderState:"+order.Orderid, "充电完成")
+
+	// 还枪后自动结束订单（对齐 Java handleGunReturnOrderCompletion）。
+	if FinishGunReturnOrderFn != nil {
+		FinishGunReturnOrderFn(order.Orderid, meter)
+	}
 }
 
 // onButtonDown 紧急按钮按下：写入 charging_state_tbl（对齐 Java onButtonDown）。
@@ -398,26 +408,74 @@ func handleMqttReport(deviceID string, report mqttDeviceReport) {
 		"device: %s ====> 通道: %d 电流: %.2f 电压: %.2f 功率: %.2f 电量: %.2f",
 		deviceID, report.Channel, report.Current, report.Voltage, report.Power, report.Energy,
 	)
-	channel := fmt.Sprintf("%d", report.Channel)
-	power := decimal.NewFromFloat(report.Power)
-	meterValue := decimal.NewFromFloat(report.Energy)
-	repository.UpsertReceptaclePower(product.Pid, channel, meterValue)
+	switch report.Channel {
+	case 0:
+		// 邻享充电
+		if privateOrder := repository.FindPrivateUseOrderByDevice(deviceID); privateOrder != nil {
+			// 对齐 Java handleNeighbor：key = nid+D，值 {power,voltage,current}（功率 W→kW 保留1位，电压/电流保留2位）
+			nid := strings.ToUpper(deviceID)
+			chargeData := map[string]float64{
+				"power":   decimal.NewFromFloat(report.Power).Div(decimal.NewFromInt(1000)).Round(1).InexactFloat64(),
+				"voltage": decimal.NewFromFloat(report.Voltage).Round(2).InexactFloat64(),
+				"current": decimal.NewFromFloat(report.Current).Round(2).InexactFloat64(),
+			}
+			b, _ := json.Marshal(chargeData)
+			SetRedisValue(nid+"D", string(b))
+			logger.Mylog.Info().Msgf("[MQTT] 邻享充电写入Redis key=%s order=%s", nid+"D", privateOrder.Orderid)
 
-	// 通过 imei::channel 映射订单号（开闸时 SetMap 写入），内存映射丢失时回退 DB 反查并回填
-	orderID, ok := GetMap(deviceID + "::" + channel)
-	if !ok {
-		order := repository.FindTwiceOrderByPidAndChannel(product.Pid, channel)
-		if order == nil {
-			return
+			meter := decimal.NewFromFloat(report.Energy).Mul(decimal.NewFromInt(100)).Round(0)
+			repository.SaveOrUpdateOrderElectronicMeter(privateOrder.Orderid, int32(meter.IntPart()))
+		} else {
+			logger.Mylog.Warn().Msgf("[MQTT] 邻享充电未找到使用中订单, 未写入Redis, device=%s", deviceID)
 		}
-		orderID = order.Orderid
-		SetMap(deviceID+"::"+channel, orderID)
+	case -1, -2:
+		// 驿享充电：-1=左枪(L)、-2=右枪(R)。写功率/电流/电压到 nid+direction（与读取端 getMeterValue/getCurrentValue/getVoltageValue 一致）
+		dir := "D"
+		if report.Channel == -1 {
+			dir = "L"
+		} else if report.Channel == -2 {
+			dir = "R"
+		}
+		nid := strings.ToUpper(deviceID)
+		SetRedisValue(nid+dir, decimal.NewFromFloat(report.Power).String())
+		SetRedisValue(nid+dir+":current", decimal.NewFromFloat(report.Current).String())
+		SetRedisValue(nid+dir+":voltage", decimal.NewFromFloat(report.Voltage).String())
+		logger.Mylog.Info().Msgf("[MQTT] 驿享充电写入Redis nid=%s dir=%s power=%.2f current=%.2f voltage=%.2f", nid, dir, report.Power, report.Current, report.Voltage)
+
+		// 落库电表值到 tab_order_electronic（对齐 Java onGetDoubleGunData：nid+方向查使用中订单，电量 setScale(2)×100）
+		if order := repository.FindYixiangUseOrderByNidDirection(nid, dir); order != nil {
+			meter := decimal.NewFromFloat(report.Energy).Round(2).Mul(decimal.NewFromInt(100))
+			repository.SaveOrUpdateOrderElectronicMeter(order.Orderid, int32(meter.IntPart()))
+			logger.Mylog.Info().Msgf("[MQTT] 驿享充电写入电表值 order=%s meter=%d", order.Orderid, int32(meter.IntPart()))
+		} else {
+			logger.Mylog.Warn().Msgf("[MQTT] 驿享充电未找到使用中订单, 未写入电表值, device=%s dir=%s", deviceID, dir)
+		}
+
+	default:
+		// 二轮车充电
+		channel := fmt.Sprintf("%d", report.Channel)
+		power := decimal.NewFromFloat(report.Power)
+		meterValue := decimal.NewFromFloat(report.Energy)
+		repository.UpsertReceptaclePower(product.Pid, channel, meterValue)
+
+		// 通过 imei::channel 映射订单号（开闸时 SetMap 写入），内存映射丢失时回退 DB 反查并回填
+		orderID, ok := GetMap(deviceID + "::" + channel)
+		if !ok {
+			order := repository.FindTwiceOrderByPidAndChannel(product.Pid, channel)
+			if order == nil {
+				logger.Mylog.Warn().Msgf("[MQTT] 二轮车未找到使用中订单, 未写入Redis, device=%s channel=%s", deviceID, channel)
+				return
+			}
+			orderID = order.Orderid
+			SetMap(deviceID+"::"+channel, orderID)
+		}
+
+		// 计费电量落库
+		repository.SetReOrderPower(orderID, meterValue, power)
+
+		// 前端展示：按订单号缓存最新上报数据
+		reportJSON, _ := json.Marshal(report)
+		SetRedisValue("orderReport:"+orderID, string(reportJSON))
+		logger.Mylog.Info().Msgf("[MQTT] 二轮车写入Redis orderReport:%s channel=%s", orderID, channel)
 	}
-
-	// 计费电量落库
-	repository.SetReOrderPower(orderID, meterValue, power)
-
-	// 前端展示：按订单号缓存最新上报数据
-	reportJSON, _ := json.Marshal(report)
-	SetRedisValue("orderReport:"+orderID, string(reportJSON))
 }

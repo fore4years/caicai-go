@@ -10,7 +10,7 @@ redis:
   host: "81.69.46.160"
   port: 6379
   password: "lanlan1212!!!"
-  dbnumber: 0
+  dbnumber: 1
 
 mysql:
   host: "81.69.46.160"

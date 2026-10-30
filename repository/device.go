@@ -83,11 +83,33 @@ func FindUseOrderByDevice(deviceID string) *model.OrderTbl {
 		LEFT JOIN lock_tbl l ON s.lock_id = l.lockid
 		LEFT JOIN tab_product lp ON lp.pid = l.product_id
 		WHERE o.state = '使用中'
-		  AND (gp.nid = ? OR lp.nid = ?)
+		  AND (gp.nid = ? OR gp.Imei = ? OR lp.nid = ? OR lp.Imei = ?)
 		ORDER BY o.reserve_time DESC
-		LIMIT 1`, deviceID, deviceID).Scan(&order).Error
+		LIMIT 1`, deviceID, deviceID, deviceID, deviceID).Scan(&order).Error
 	if err != nil || order.Orderid == "" {
 		logger.Mylog.Debug().Msgf("未找到设备对应的使用中订单, device: %s", deviceID)
+		return nil
+	}
+	return &order
+}
+
+// FindYixiangUseOrderByNidDirection 按设备标识 + 充电枪方向查询驿享充电「使用中」订单。
+// 对齐 Java OrderService.getUseByNidAndDirection（nid+方向关联，且限定消费类型为驿享充电）。
+func FindYixiangUseOrderByNidDirection(deviceID, direction string) *model.OrderTbl {
+	var order model.OrderTbl
+	err := conf.Db.Raw(`
+		SELECT o.* FROM order_tbl o
+		LEFT JOIN tab_parking_spaces s ON o.spaces_id = s.id
+		LEFT JOIN tab_charging_gun g ON s.charging_gun_id = g.id
+		LEFT JOIN tab_product gp ON gp.pid = g.product_id
+		WHERE o.state = '使用中'
+		  AND o.consumption_type = '驿享充电'
+		  AND g.direction = ?
+		  AND (gp.nid = ? OR gp.Imei = ?)
+		ORDER BY o.reserve_time DESC
+		LIMIT 1`, direction, deviceID, deviceID).Scan(&order).Error
+	if err != nil || order.Orderid == "" {
+		logger.Mylog.Debug().Msgf("未找到设备对应的驿享充电使用中订单, device: %s, direction: %s", deviceID, direction)
 		return nil
 	}
 	return &order

@@ -90,11 +90,15 @@ func queryWxOrderDetail(outOrderNo string) *wxQueryOrderRes {
 	queryURL := wxPayBaseURL + "?" + url.Values{
 		"out_order_no": {outOrderNo},
 		"service_id":   {wxPayServiceID},
-		"appid":        {wxPayAppID},
+		"appid":        {payScoreAppID(outOrderNo)},
 	}.Encode()
 	res := new(wxQueryOrderRes)
 	if err := wxPayGet(queryURL, res); err != nil {
-		logger.Mylog.Warn().Msgf("查询服务订单状态失败 - 订单号: %s, err: %v", outOrderNo, err)
+		if strings.Contains(err.Error(), "ORDER_NOT_EXIST") {
+			logger.Mylog.Debug().Msgf("查询服务订单状态：单据不存在（余额支付订单属正常）- 订单号: %s", outOrderNo)
+		} else {
+			logger.Mylog.Warn().Msgf("查询服务订单状态失败 - 订单号: %s, err: %v", outOrderNo, err)
+		}
 		return nil
 	}
 	return res

@@ -5,7 +5,6 @@
 package protocol
 
 import (
-	"caicai-go/logger"
 	"encoding/hex"
 	"errors"
 )
@@ -32,7 +31,7 @@ const (
 	OpGetVersion           = 0xA0 // 获取软件版本号
 	OpSetPWM               = 0xA1 // 设置 PWM 占空比
 	OpOpenLock             = 0xA2 // 开充电桩箱锁
-	OpOpenCharge           = 0xA3 // 开启充电
+	OpOpenCharge           = 0xA3 // 开枪锁
 	OpCloseEle             = 0xA4 // 电表拉闸
 	OpGetTemperature       = 0xA5 // 读取温度
 	OpOpenPlaceLock        = 0xA6 // 开启车位锁
@@ -165,15 +164,15 @@ func Decode(b []byte) (deviceID string, ctl, cmd byte, data []byte, err error) {
 		return deviceID, ctl, cmd, nil, errors.New("长度字段越界")
 	}
 	data = frame[6:bodyEnd]
-	// CRC 仅日志告警、不拦截（对齐 Java GateWayMessageCodec：读取 crc 但不校验）
-	if frame[bodyEnd] != crc8(frame[:bodyEnd]) {
-		logger.Mylog.Debug().Msgf("CRC 不匹配(忽略): 收到=0x%02X 计算=0x%02X", frame[bodyEnd], crc8(frame[:bodyEnd]))
-	}
-	logger.Mylog.Debug().
-		Str("deviceID", deviceID).
-		Int("cmd", int(cmd)).
-		Bytes("data", data). // bytes 会转 hex
-		Msgf("收到帧 %s", string(data))
+	//// CRC 仅日志告警、不拦截（对齐 Java GateWayMessageCodec：读取 crc 但不校验）
+	//if frame[bodyEnd] != crc8(frame[:bodyEnd]) {
+	//	logger.Mylog.Debug().Msgf("CRC 不匹配(忽略): 收到=0x%02X 计算=0x%02X", frame[bodyEnd], crc8(frame[:bodyEnd]))
+	//}
+	//logger.Mylog.Debug().
+	//	Str("deviceID", deviceID).
+	//	Int("cmd", int(cmd)).
+	//	Bytes("data", data). // bytes 会转 hex
+	//	Msgf("收到帧 %s", string(data))
 	return deviceID, ctl, cmd, data, nil
 }
 

@@ -33,9 +33,9 @@ type privateChargingDTO struct {
 	OneClickOpening    int32           `json:"oneClickOpening,omitempty"`
 	LedID              int32           `json:"ledId,omitempty"`
 	HasCpLine          int32           `json:"hasCpLine,omitempty"`
-	ExchangePlace      bool            `json:"exchangePlace,omitempty"`
-	OfficialUse        bool            `json:"officialUse,omitempty"`
-	OvertimeFee        bool            `json:"overtimeFee,omitempty"`
+	ExchangePlace      string          `json:"exchangePlace,omitempty"`
+	OfficialUse        int32           `json:"officialUse,omitempty"`
+	OvertimeFee        int32           `json:"overtimeFee,omitempty"`
 }
 
 func privateChargingToDTO(p model.PrivateChargingTbl) privateChargingDTO {
@@ -56,15 +56,31 @@ func privateChargingToDTO(p model.PrivateChargingTbl) privateChargingDTO {
 		Status:             p.Status,
 		OneClickOpening:    p.OneClickOpening,
 		ShareTime:          p.ShareTime,
-		ExchangePlace:      p.ExchangePlace,
+		ExchangePlace:      boolToString(p.ExchangePlace),
 		Fee:                p.Fee,
-		OfficialUse:        p.OfficialUse,
-		OvertimeFee:        p.OvertimeFee,
+		OfficialUse:        boolToInt32(p.OfficialUse),
+		OvertimeFee:        boolToInt32(p.OvertimeFee),
 		LedID:              p.LedID,
 		HasCpLine:          p.HasCpLine,
 		CreateTime:         timeToLocal(p.CreateTime),
 		UpdateTime:         timeToLocal(p.UpdateTime),
 	}
+}
+
+// boolToString 将 bool 转为字符串（对齐 Java String 字段：true/false）。
+func boolToString(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+// boolToInt32 将 bool 转为 int32（对齐 Java Integer 字段：true→1，false→0）。
+func boolToInt32(b bool) int32 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // AdminPrivatePileController 对齐 Java System.controller.PrivatePileAuditController。

@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"caicai-go/logger"
 	"caicai-go/model"
 	"caicai-go/repository"
 	"caicai-go/service"
@@ -293,10 +292,11 @@ func (c *OrderPrivateController) Add(ctx *gin.Context) {
 }
 
 // GetOrderState 对齐 Java OrderPrivateServiceImpl.getOrderState（Redis 键 PrivateOrderState:{orderId}）。
+// Java 用 String.valueOf(null) 把缺失键转成字面量 "null"，前端据此回退显示"充电中"；这里保持一致。
 func (c *OrderPrivateController) GetOrderState(ctx *gin.Context) {
 	state := service.GetRedisValue("PrivateOrderState:" + ctx.Query("orderId"))
 	if state == "" {
-		state = "暂时无法获取到订单信息,请稍后重试"
+		state = "null"
 	}
 	ctx.JSON(http.StatusOK, ResultSuccess(state))
 }
@@ -333,7 +333,6 @@ func (c *OrderTwiceController) GetByOrderid(ctx *gin.Context) {
 	}
 	// 对齐 Java ReOrderPowerMapper.getMaxPowerByOrderid：取 max_power 字段。
 	maxPower := repository.ReOrderPowerMaxByOrderid(o.Orderid)
-	logger.Mylog.Info().Msgf("====>> %#v <<=====", maxPower.Round(2))
 	ctx.JSON(http.StatusOK, ResultSuccess(gin.H{
 		"totalFee":   o.PowerRate.Round(2),
 		"serviceFee": o.ServiceRate.Round(2),

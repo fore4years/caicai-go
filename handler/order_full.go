@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"caicai-go/logger"
 	"caicai-go/model"
-	"caicai-go/protocol"
 	"caicai-go/repository"
 	"caicai-go/service"
 )
@@ -162,7 +162,8 @@ func (o *OrderController) GetWaitReturnGunOrderBySpacesId(c *gin.Context) {
 func (o *OrderController) GetOrderState(c *gin.Context) {
 	state := service.GetRedisValue("orderState:" + c.Query("orderId"))
 	if state == "" {
-		state = "暂时无法获取到订单信息,请稍后重试"
+		// 对齐 Java String.valueOf(null)：缺失键返回字面量 "null"，前端据此回退显示"充电中"。
+		state = "null"
 	}
 	c.JSON(http.StatusOK, ResultSuccess(state))
 }
@@ -597,16 +598,21 @@ func (o *OrderController) Close(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(1, "此订单已完成!"))
 		return
 	}
+	c.JSON(http.StatusOK, ResultSuccess(closeOrder(order)))
+}
+
+// closeOrder 结束订单（邻享/普通），设置结算时间与待支付状态，返回是否成功。
+func closeOrder(order *model.OrderTbl) bool {
 	if order.ConsumptionType == repository.ConsumeTypeNeighbor {
 		linXiangCloseOrder(order)
 	} else {
 		normalCloseOrder(order)
 	}
-	res := repository.UpdateOrderFields(orderID, map[string]interface{}{
+	res := repository.UpdateOrderFields(order.Orderid, map[string]interface{}{
 		"close_time": time.Now(),
 		"state":      repository.OrderStateWaitPay,
 	})
-	c.JSON(http.StatusOK, ResultSuccess(res > 0))
+	return res > 0
 }
 
 // normalCloseOrder 结束普通订单（非邻享充电），对齐 Java NormalCloseOrder。
@@ -614,7 +620,7 @@ func normalCloseOrder(order *model.OrderTbl) {
 	gun := repository.ChargingGunByOrder(order.Orderid)
 	if gun != nil {
 		if isZeroTime(order.OverTime) && order.ChargingDegree.IsZero() {
-			if !service.SendCommand(gun.DeviceID(), protocol.OpCloseEle, -1) {
+			if !service.CloseEle(gun.DeviceID(), gun.Gun.Direction) {
 				// Java 抛「拉闸失败」；这里保守继续
 				logger.Mylog.Warn().Msgf("拉闸失败, orderId: %s", order.Orderid)
 			}
@@ -628,7 +634,7 @@ func normalCloseOrder(order *model.OrderTbl) {
 	updateBasicConsumptionForOrder(order.Orderid)
 
 	if lock := repository.LockByOrder(order.Orderid); lock != nil {
-		service.SendCommand(lock.DeviceID(), protocol.OpClosePlaceLock, -1)
+		service.ClosePlaceLock(lock.DeviceID())
 	}
 }
 
@@ -762,7 +768,7 @@ func (o *OrderController) Start(c *gin.Context) {
 			c.JSON(http.StatusOK, ResultError(1, "未找到充电枪信息,请更换设备使用"))
 			return
 		}
-		if !service.SendCommand(gun.DeviceID(), protocol.OpOpenCharge, -1) {
+		if !service.OpenGunLockForYX(gun.DeviceID(), gun.Gun.Direction) {
 			c.JSON(http.StatusOK, ResultError(1, "解锁充电枪失败!"))
 			return
 		}
@@ -776,7 +782,7 @@ func (o *OrderController) Start(c *gin.Context) {
 			}
 		}
 		if lock := repository.LockByOrder(orderID); lock != nil {
-			if !service.SendCommand(lock.DeviceID(), protocol.OpOpenPlaceLock, -1) {
+			if !service.OpenPlaceLock(lock.DeviceID()) {
 				c.JSON(http.StatusOK, ResultError(1, "开车位锁失败"))
 				return
 			}
@@ -795,7 +801,7 @@ func (o *OrderController) Stop(c *gin.Context) {
 		service.ClosePlaceLock(lock.DeviceID())
 	}
 	if gun := repository.ChargingGunByOrder(orderID); gun != nil {
-		service.SendCommand(gun.DeviceID(), protocol.OpCloseEle, -1)
+		service.CloseEle(gun.DeviceID(), gun.Gun.Direction)
 	}
 	c.JSON(http.StatusOK, ResultSuccess(true))
 }
@@ -851,7 +857,7 @@ func (o *OrderController) SetOrderStateIsWaitReturnGun(c *gin.Context) {
 	}
 	gun := repository.ChargingGunByPrivateOrder(orderID)
 	if gun != nil {
-		service.SendCommand(gun.DeviceID(), protocol.OpCloseEle, -1)
+		service.CloseEle(gun.DeviceID(), gun.Gun.Direction)
 		repository.UpdateChargingDegreeForOrder(orderID)
 		orderPrivate := repository.OrderPrivateByOrderid(orderID)
 		if orderPrivate != nil {
@@ -890,7 +896,7 @@ func (o *OrderController) ManualDetectionIsReturnGun(c *gin.Context) {
 func (o *OrderController) ByOrderIdSendCloseEleAndMessage(c *gin.Context) {
 	orderID := c.Query("orderId")
 	if gun := repository.ChargingGunByOrder(orderID); gun != nil {
-		if !service.SendCommand(gun.DeviceID(), protocol.OpCloseEle, -1) {
+		if !service.CloseEle(gun.DeviceID(), gun.Gun.Direction) {
 			c.JSON(http.StatusOK, ResultError(1, "拉闸失败"))
 			return
 		}
@@ -955,7 +961,7 @@ func (o *OrderController) QueryPayScore(c *gin.Context) {
 		switch state {
 		case wxPayStateDone, wxPayStateDoing:
 			gun := repository.ChargingGunByPrivateOrder(orderID)
-			if gun == nil || !service.SendCommand(gun.DeviceID(), protocol.OpOpenCharge, -1) {
+			if gun == nil || !service.OpenGunLock(gun.DeviceID()) {
 				c.JSON(http.StatusOK, ResultError(1, "开充电枪失败"))
 				return
 			}
@@ -987,12 +993,15 @@ func (o *OrderController) WechatCallback(c *gin.Context) {
 }
 
 func (o *OrderController) GetOrderPay(c *gin.Context) {
-	orderID := c.Query("orderId")
+	c.JSON(http.StatusOK, ResultSuccess(getOrderPay(c.Query("orderId"))))
+}
+
+// getOrderPay 判断订单支付方式（对齐 Java getOrderPay）。
+func getOrderPay(orderID string) string {
 	if queryWxOrderState(orderID) != wxPayStateCancel {
-		c.JSON(http.StatusOK, ResultSuccess("微信支付分支付"))
-		return
+		return "微信支付分支付"
 	}
-	c.JSON(http.StatusOK, ResultSuccess("余额支付"))
+	return "余额支付"
 }
 
 func (o *OrderController) Finish(c *gin.Context) {
@@ -1004,12 +1013,19 @@ func (o *OrderController) Finish(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(1, "订单不存在: "+orderID))
 		return
 	}
+	c.JSON(http.StatusOK, ResultSuccess(finishOrder(order, isPrivateUser)))
+}
+
+// finishOrder 结束微信支付分订单（对齐 Java OrderServiceImpl.finish），返回是否成功。
+func finishOrder(order *model.OrderTbl, isPrivateUser string) bool {
+	orderID := order.Orderid
 	if strings.TrimSpace(order.WechatTransactionID) != "" {
 		if order.State != repository.OrderStateFinished {
 			repository.UpdateOrderState(orderID, repository.OrderStateFinished)
 		}
-		c.JSON(http.StatusOK, ResultSuccess(true))
-		return
+		clearDeviceOrderMap(orderID)
+		clearDeviceRedisKey(orderID)
+		return true
 	}
 
 	var fees decimal.Decimal
@@ -1028,18 +1044,18 @@ func (o *OrderController) Finish(c *gin.Context) {
 		}
 		amount = fees.Mul(decimal.NewFromInt(100)).RoundDown(0).IntPart()
 		if repository.UpdateOrderState(orderID, repository.OrderStateFinished) == 0 {
-			c.JSON(http.StatusOK, ResultSuccess(false))
-			return
+			return false
 		}
 		service.DelRedisValue("orderState:" + orderID)
+		clearDeviceOrderMap(orderID)
+		clearDeviceRedisKey(orderID)
 	} else {
 		amount = order.TotalPrice.Mul(decimal.NewFromInt(100)).RoundDown(0).IntPart()
 	}
 
 	if order.ConsumptionType == repository.ConsumeTypeNeighbor && isPrivateUser == "1" {
 		completeWxOrder(orderID, 0)
-		c.JSON(http.StatusOK, ResultSuccess(true))
-		return
+		return true
 	}
 
 	if amount > 0 {
@@ -1050,7 +1066,7 @@ func (o *OrderController) Finish(c *gin.Context) {
 	} else {
 		cancelWxOrder(orderID)
 	}
-	c.JSON(http.StatusOK, ResultSuccess(true))
+	return true
 }
 
 func (o *OrderController) FinishBalans(c *gin.Context) {
@@ -1060,14 +1076,27 @@ func (o *OrderController) FinishBalans(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(1, "订单不存在: "+orderID))
 		return
 	}
+	ok, err := finishBalansOrder(order)
+	if err != nil {
+		c.JSON(http.StatusOK, ResultError(1, err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(ok))
+}
+
+// finishBalansOrder 余额支付结束订单（对齐 Java OrderServiceImpl.finishBalans）。
+// 返回 (是否已更新为已完成, 错误)；状态更新失败返回 (false, nil)，余额扣款失败返回 (false, error)。
+func finishBalansOrder(order *model.OrderTbl) (bool, error) {
+	orderID := order.Orderid
 	var amount decimal.Decimal
 	if order.ConsumptionType != repository.ConsumeTypeCaiParking {
 		amount = order.BasicConsumption
 		if repository.UpdateOrderState(orderID, repository.OrderStateFinished) == 0 {
-			c.JSON(http.StatusOK, ResultSuccess(false))
-			return
+			return false, nil
 		}
 		service.DelRedisValue("orderState:" + orderID)
+		clearDeviceOrderMap(orderID)
+		clearDeviceRedisKey(orderID)
 	} else {
 		amount = order.TotalPrice
 	}
@@ -1077,8 +1106,7 @@ func (o *OrderController) FinishBalans(c *gin.Context) {
 
 	if amount.IsPositive() {
 		if !repository.ConsumeBalance(order.Openid, amount) {
-			c.JSON(http.StatusOK, ResultError(1, "余额支付失败"))
-			return
+			return false, errors.New("余额支付失败")
 		}
 		repository.UpdateOrderBasicConsumption(orderID, amount)
 		repository.InvoiceForOrder(*order, amount)
@@ -1090,7 +1118,7 @@ func (o *OrderController) FinishBalans(c *gin.Context) {
 	} else {
 		repository.CompleteOrderIsamountNot(order.Openid)
 	}
-	c.JSON(http.StatusOK, ResultSuccess(true))
+	return true, nil
 }
 
 func (o *OrderController) Refunds(c *gin.Context) {
@@ -1141,8 +1169,11 @@ func (o *OrderController) GetVoltageValue(c *gin.Context) {
 }
 
 func (o *OrderController) GetMeterValueByPrivate(c *gin.Context) {
-	v := service.GetRedisValue(c.Query("nid") + c.Query("direction"))
+	// 对齐 Java getMeterByPrivate：key = nid+direction（direction 为 "D"），值 {power,voltage,current} 直接返回
+	key := c.Query("nid") + c.Query("direction")
+	v := service.GetRedisValue(key)
 	if v == "" {
+		logger.Mylog.Warn().Msgf("[Redis] 键值 %s 为空", key)
 		c.JSON(http.StatusOK, ResultSuccess(nil))
 		return
 	}
@@ -1611,10 +1642,112 @@ func clearDeviceOrderMap(orderID string) {
 	service.DeleteMap(product.Imei + "::" + rid)
 }
 
-// init 把二轮车结算函数注入 service（用于 service 层 GaugeFull 充满自停触发结算，
-// 打破 service→handler 循环依赖）。
+// clearDeviceRedisKey 清除订单对应设备的实时数据 Redis 键（nid+dir 及 :current/:voltage）。
+// 邻享充电 dir 约定为 "D"，驿享充电 dir 为充电枪方向（L/R）。
+func clearDeviceRedisKey(orderID string) {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
+		return
+	}
+	var gun *repository.ChargingGunCtx
+	dir := ""
+	switch order.ConsumptionType {
+	case repository.ConsumeTypeNeighbor: // 邻享充电
+		gun = repository.ChargingGunByPrivateOrder(orderID)
+		dir = "D"
+	case repository.ConsumeTypeYiXiang: // 驿享充电
+		gun = repository.ChargingGunByOrder(orderID)
+	default:
+		return
+	}
+	if gun == nil {
+		return
+	}
+	nid := gun.DeviceID()
+	if nid == "" {
+		return
+	}
+	if dir == "" {
+		dir = gun.Gun.Direction
+	}
+	service.DelRedisValue(nid + dir)
+	service.DelRedisValue(nid + dir + ":current")
+	service.DelRedisValue(nid + dir + ":voltage")
+}
+
+// finishGunReturnOrder 充电枪归还（OpChargeGunBack）后的订单自动结束（对齐 Java handleGunReturnOrderCompletion）。
+// 数据落库已在 service.onChargeGunBack 完成，这里负责订单状态流转与结算。
+func finishGunReturnOrder(orderID string, meter int32) {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
+		return
+	}
+	origState := order.State
+
+	// 驿享充电订单配有车位锁时不自动结束，需要检测车辆是否驶离。
+	if order.ConsumptionType == repository.ConsumeTypeYiXiang {
+		if lock := repository.LockByOrder(orderID); lock != nil {
+			return
+		}
+	}
+
+	if origState == repository.OrderStateUse {
+		closeOrder(order)
+		// closeOrder 内部会更新 basic_consumption，重新查询后再结算。
+		order, err = repository.FindOrderByOrderid(orderID)
+		if err != nil {
+			return
+		}
+		if getOrderPay(orderID) == "余额支付" {
+			if ok, balErr := finishBalansOrder(order); balErr != nil {
+				logger.Mylog.Err(balErr).Msgf("还枪自动结束-余额支付失败, orderId: %s", orderID)
+			} else if !ok {
+				logger.Mylog.Warn().Msgf("还枪自动结束-状态更新失败, orderId: %s", orderID)
+			}
+		} else {
+			isPrivateUser := ""
+			if order.ConsumptionType == repository.ConsumeTypeNeighbor {
+				if op := repository.OrderPrivateByOrderid(orderID); op != nil {
+					isPrivateUser = strconv.Itoa(int(op.IsPrivateUser))
+				}
+			}
+			finishOrder(order, isPrivateUser)
+		}
+	}
+
+	if order.ConsumptionType != repository.ConsumeTypeNeighbor {
+		return
+	}
+
+	if origState == repository.OrderStateWaitGun {
+		repository.UpdateOrderFields(orderID, map[string]interface{}{
+			"close_time": time.Now(),
+			"state":      repository.OrderStateWaitPay,
+		})
+	}
+
+	// 邻享充电订单给桩主及邻居用户发送订阅消息（对齐 Java handleGunReturnOrderCompletion）。
+	// 仅「邻居所充（is_private_user != 1）且未充满电（full_time 为空）」时发送；充满电由充满电流程自行处理。
+	if op := repository.OrderPrivateByOrderid(orderID); op != nil && op.IsPrivateUser != 1 && isZeroTime(order.FullTime) {
+		sendOrderOverMessage(orderID)
+
+		privatePlace := repository.PrivatePlaceByID(order.SpacesID)
+		if privatePlace == nil {
+			logger.Mylog.Warn().Msgf("未找到对应的私有车位信息, spaces_id: %d", order.SpacesID)
+		} else if privatePlace.SpacesCode == "" {
+			logger.Mylog.Warn().Msgf("私有车位信息中没有 space_code, spaces_id: %d", order.SpacesID)
+		} else if chargingBean := repository.PrivateChargingBySpacesNum(privatePlace.SpacesCode); chargingBean != nil &&
+			chargingBean.OneClickOpening == 1 && chargingBean.ExchangePlace {
+			// 一键开放且需要调换车位时，同步通知桩主
+			sendOwnerOrderOverMessage(orderID, chargingBean.Openid)
+		}
+	}
+}
+
+// init 把结算/自动结束函数注入 service（用于 service 层触发，打破 service→handler 循环依赖）。
 func init() {
 	service.SettleTwiceOrderFn = settleTwiceOrder
+	service.FinishGunReturnOrderFn = finishGunReturnOrder
 }
 
 // parseTimePtr 解析时间字符串为 time.Time（零值表示空）。

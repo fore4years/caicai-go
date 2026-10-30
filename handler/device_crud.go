@@ -245,6 +245,39 @@ func (c *LockController) GetByOrder(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, ResultSuccess(lockToDTO(l)))
 }
 
+// flexInt 兼容 JSON 数字与字符串两种形式的整数。
+// 前端 chargingGun 的 model 以字符串 "220"/"380" 传输，Java Jackson 会自动转 Integer，这里对齐该行为。
+type flexInt int32
+
+func (f *flexInt) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		*f = 0
+		return nil
+	}
+	n, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return err
+	}
+	*f = flexInt(n)
+	return nil
+}
+
+// chargingGunAddReq 对应 Java ChargingGunBean 的请求字段（前端使用驼峰 productId，model 为字符串）。
+type chargingGunAddReq struct {
+	Direction string  `json:"direction"`
+	ProductID string  `json:"productId"`
+	Model     flexInt `json:"model"`
+}
+
+func (r chargingGunAddReq) toModel() model.TabChargingGun {
+	return model.TabChargingGun{
+		Direction: r.Direction,
+		ProductID: r.ProductID,
+		Model:     int32(r.Model),
+	}
+}
+
 // ============ ChargingGunController（/chargingGun） ============
 
 type ChargingGunController struct{}
@@ -259,20 +292,22 @@ func (c *ChargingGunController) GetById(ctx *gin.Context) {
 }
 
 func (c *ChargingGunController) Add(ctx *gin.Context) {
-	var g model.TabChargingGun
-	if err := ctx.ShouldBindJSON(&g); err != nil {
+	var req chargingGunAddReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
+	g := req.toModel()
 	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&g).Error == nil))
 }
 
 func (c *ChargingGunController) AddPrivateGun(ctx *gin.Context) {
-	var g model.TabChargingGun
-	if err := ctx.ShouldBindJSON(&g); err != nil {
+	var req chargingGunAddReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
+	g := req.toModel()
 	ctx.JSON(http.StatusOK, ResultSuccess(repository.Create(&g).Error == nil))
 }
 

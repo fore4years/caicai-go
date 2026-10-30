@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"caicai-go/logger"
 	"fmt"
 	"io"
 	"net/http"
@@ -259,7 +260,11 @@ func (c *PrivateChargingController) Register(ctx *gin.Context) {
 		gun, _ := repository.ChargingGunByProductID(req.Pid)
 		if gun == nil {
 			gun = &model.TabChargingGun{Direction: "D", MeterValue: 0, ProductID: req.Pid}
-			repository.CreateChargingGun(gun)
+			err := repository.CreateChargingGun(gun)
+			if err != nil {
+				logger.Mylog.Err(err).Msg("充电枪注册失败")
+				return
+			}
 			gun, _ = repository.ChargingGunByProductID(req.Pid)
 		}
 		spacesNum = insertPrivatePlace(req, gun.ID)

@@ -233,6 +233,16 @@ func createPayScoreOrder(orderID string, needProfitSharing bool, appID string) *
 	}
 }
 
+// payScoreAppID 根据订单消费类型返回支付分订单应使用的 appid。
+// 踩踩停车（逸泊）用 yiparlAppID，其余用 wxPayAppID（对齐 Java OrderServiceImpl 创单时的 appId 选择）。
+func payScoreAppID(orderID string) string {
+	if order, err := repository.FindOrderByOrderid(orderID); err == nil && order != nil &&
+		order.ConsumptionType == repository.ConsumeTypeCaiParking {
+		return yiparlAppID
+	}
+	return wxPayAppID
+}
+
 // queryWxOrderState 查询微信支付分订单状态（对齐 WxPayService.onQueryWxOrder）。
 // 返回 CREATED / DOING / DONE / REVOKED / EXPIRED；查询失败或单据不存在时返回 CANCEL
 // （语义为「未使用微信支付分」，上层回退到余额支付）。
@@ -243,12 +253,17 @@ func queryWxOrderState(orderID string) string {
 	queryURL := wxPayBaseURL + "?" + url.Values{
 		"out_order_no": {orderID},
 		"service_id":   {wxPayServiceID},
-		"appid":        {wxPayAppID},
+		"appid":        {payScoreAppID(orderID)},
 	}.Encode()
 
 	var res wxQueryOrderRes
 	if err := wxPayGet(queryURL, &res); err != nil {
-		logger.Mylog.Warn().Msgf("查询微信支付分订单失败, orderId: %s, err: %v", orderID, err)
+		if strings.Contains(err.Error(), "ORDER_NOT_EXIST") {
+			// 余额支付订单从未在微信支付分创单，查单返回「单据不存在」属正常情况，降级为 debug
+			logger.Mylog.Debug().Msgf("查询微信支付分订单：单据不存在（余额支付订单属正常）, orderId: %s", orderID)
+		} else {
+			logger.Mylog.Warn().Msgf("查询微信支付分订单失败, orderId: %s, err: %v", orderID, err)
+		}
 		return wxPayStateCancel
 	}
 	if res.State == "" {

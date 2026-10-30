@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"caicai-go/protocol"
 	"caicai-go/service"
 )
 
@@ -21,18 +20,6 @@ func deviceID(gateway, nid string) string {
 		return nid
 	}
 	return gateway
-}
-
-// parseDirection 解析方向字符串。
-func parseDirection(s string) byte {
-	switch s {
-	case "1", "11", "0x11", "LEFT", "left", "L", "l":
-		return protocol.DirectionLeft
-	case "2", "22", "0x22", "RIGHT", "right", "R", "r":
-		return protocol.DirectionRight
-	default:
-		return protocol.DirectionDefault
-	}
 }
 
 // reverseHexString 反转字符串，按 2 个十六进制字符为一组倒序（对齐 Java HexUtil.reverseHexString）。
@@ -80,67 +67,67 @@ func (d *DirectiveController) SendHex(c *gin.Context) {
 
 // OpenLock /directive/openLock?gateway=&nid=
 func (d *DirectiveController) OpenLock(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpOpenLock), -1)
+	ok := service.OpenLock(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // OpenPlaceLock /directive/openPlaceLock
 func (d *DirectiveController) OpenPlaceLock(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpOpenPlaceLock), -1)
+	ok := service.OpenPlaceLock(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // ClosePlaceLock /directive/closePlaceLock
 func (d *DirectiveController) ClosePlaceLock(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpClosePlaceLock), -1)
+	ok := service.ClosePlaceLock(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // OpenCharge /directive/openCharge?gateway=&nid=&direction=
 func (d *DirectiveController) OpenCharge(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpOpenCharge), -1)
+	ok := service.OpenGunLockForYX(deviceID(c.Query("gateway"), c.Query("nid")), c.Query("direction"))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetInfo /directive/getInfo?gateway=&nid=&direction=
 func (d *DirectiveController) GetInfo(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetInfo), -1)
+	ok := service.GetInfo(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetPower /directive/getPower
 func (d *DirectiveController) GetPower(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetPower), -1)
+	ok := service.GetPower(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetElePower /directive/getElePower（SSE 降级为 JSON）
 func (d *DirectiveController) GetElePower(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetElePower), -1)
+	ok := service.GetElePower(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetEleCurrent /directive/getEleCurrent
 func (d *DirectiveController) GetEleCurrent(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetEleCurrent), -1)
+	ok := service.GetEleCurrent(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetEleVoltage /directive/getEleVoltage
 func (d *DirectiveController) GetEleVoltage(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetEleVoltage), -1)
+	ok := service.GetEleVoltage(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetEleFrequency /directive/getEleFrequency
 func (d *DirectiveController) GetEleFrequency(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetEleFrequency), -1)
+	ok := service.GetEleFrequency(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetEleData /directive/getEleData
 func (d *DirectiveController) GetEleData(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetEleData), -1)
+	ok := service.GetEleData(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -162,7 +149,7 @@ func (d *DirectiveController) SetGatewayAddress(c *gin.Context) {
 // SetPwm /directive/setPwm?gateway=&nid=&direction=&pwm=
 func (d *DirectiveController) SetPwm(c *gin.Context) {
 	pwm, _ := strconv.Atoi(c.Query("pwm"))
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpSetPWM), pwm)
+	ok := service.SetPwm(deviceID(c.Query("gateway"), c.Query("nid")), pwm)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -175,7 +162,7 @@ func (d *DirectiveController) GetGatewayList(c *gin.Context) {
 func (d *DirectiveController) SetOpenTime(c *gin.Context) {
 	dataHex := convertStringToHex(reverseHexString(c.Query("ledMac"))) + convertStringToHex(c.Query("OpenTime"))
 	data, _ := hex.DecodeString(dataHex)
-	ok := service.SendCommandBytes(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpOpenTime), data)
+	ok := service.SetOpenTime(deviceID(c.Query("gateway"), c.Query("nid")), data)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -193,46 +180,46 @@ func (d *DirectiveController) CalibrationPower(c *gin.Context) {
 // OpenGauge /directive/openGauge?gateway=&nid=&data=
 func (d *DirectiveController) OpenGauge(c *gin.Context) {
 	v, _ := strconv.Atoi(c.Query("data"))
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpOpenGauge), v)
+	ok := service.OpenGauge(deviceID(c.Query("gateway"), c.Query("nid")), v)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // CloseGauge /directive/closeGauge?gateway=&nid=&data=
 func (d *DirectiveController) CloseGauge(c *gin.Context) {
 	v, _ := strconv.Atoi(c.Query("data"))
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpCloseGauge), v)
+	ok := service.CloseGauge(deviceID(c.Query("gateway"), c.Query("nid")), v)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // OpenEle /directive/OpenEle?gateway=&nid=&direction=
 func (d *DirectiveController) OpenEle(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpOpenEle), -1)
+	ok := service.OpenEle(deviceID(c.Query("gateway"), c.Query("nid")), c.Query("direction"))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // CloseEle /directive/closeEle?gateway=&nid=&direction=
 func (d *DirectiveController) CloseEle(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpCloseEle), -1)
+	ok := service.CloseEle(deviceID(c.Query("gateway"), c.Query("nid")), c.Query("direction"))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // OpenVoice /directive/openVoice?gateway=&nid=&data=
 func (d *DirectiveController) OpenVoice(c *gin.Context) {
 	v, _ := strconv.Atoi(c.Query("data"))
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpOpenVoice), v)
+	ok := service.OpenVoice(deviceID(c.Query("gateway"), c.Query("nid")), v)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // RotationPlatform /directive/rotationPlatform?gateway=&nid=&data=
 func (d *DirectiveController) RotationPlatform(c *gin.Context) {
 	v, _ := strconv.Atoi(c.Query("data"))
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpRotationPlatform), v)
+	ok := service.RotationPlatform(deviceID(c.Query("gateway"), c.Query("nid")), v)
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // ChargingEndDetection /directive/chargingEndDetection?gateway=&nid=&direction=
 func (d *DirectiveController) ChargingEndDetection(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpChargingEndDetection), -1)
+	ok := service.ChargingEndDetection(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -256,37 +243,37 @@ func (d *DirectiveController) SetRedisValue(c *gin.Context) {
 
 // GetChargeGunStatus /directive/getChargeGunStatus?gateway=&nid=&direction=
 func (d *DirectiveController) GetChargeGunStatus(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetChargeGunStatus), -1)
+	ok := service.GetChargeGunStatus(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // ChangeOpenTime /directive/changeOpenTime?gateway=&nid=&timeData=
 func (d *DirectiveController) ChangeOpenTime(c *gin.Context) {
-	ok := service.SendCommandBytes(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpChangeOpenTime), parseTimeData(c.Query("timeData")))
+	ok := service.ChangeOpenTime(deviceID(c.Query("gateway"), c.Query("nid")), parseTimeData(c.Query("timeData")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // CloseOpenTime /directive/closeOpenTime?gateway=&nid=
 func (d *DirectiveController) CloseOpenTime(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpCloseOpenTime), -1)
+	ok := service.CloseOpenTime(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // StartOpenTime /directive/startOpenTime?gateway=&nid=
 func (d *DirectiveController) StartOpenTime(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpStartOpenTime), -1)
+	ok := service.StartOpenTime(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetGunHolderStatus /directive/getGunHolderStatus?gateway=&nid=
 func (d *DirectiveController) GetGunHolderStatus(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetGunHolderStatus), -1)
+	ok := service.GetGunHolderStatus(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // OpenGunHolderSensor /directive/openGunHolderSensor?gateway=&nid=
 func (d *DirectiveController) OpenGunHolderSensor(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpOpenGunHolderSensor), -1)
+	ok := service.OpenGunHolderSensor(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
@@ -295,72 +282,72 @@ func (d *DirectiveController) OpenGunHolderSensor(c *gin.Context) {
 
 // GetVersion /directive/getVersion
 func (d *DirectiveController) GetVersion(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetVersion), -1)
+	ok := service.GetVersion(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetTemperature /directive/getTemperature
 func (d *DirectiveController) GetTemperature(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetTemperature), -1)
+	ok := service.GetTemperature(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetPlaceLock /directive/getPlaceLock
 func (d *DirectiveController) GetPlaceLock(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetPlaceLock), -1)
+	ok := service.GetPlaceLock(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetICCID /directive/getICCID
 func (d *DirectiveController) GetICCID(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetICCID), -1)
+	ok := service.GetICCID(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetGaugePower /directive/getGaugePower
 func (d *DirectiveController) GetGaugePower(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetGaugePower), -1)
+	ok := service.GetGaugePower(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetGaugePowerAll /directive/getGaugePowerAll
 func (d *DirectiveController) GetGaugePowerAll(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetGaugePowerAll), -1)
+	ok := service.GetGaugePowerAll(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetBMS /directive/getBMS
 func (d *DirectiveController) GetBMS(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetBMS), -1)
+	ok := service.GetBMS(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // PowerLimitOn /directive/powerLimitOn
 func (d *DirectiveController) PowerLimitOn(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpPowerLimitOn), -1)
+	ok := service.PowerLimitOn(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // PowerLimitOff /directive/powerLimitOff
 func (d *DirectiveController) PowerLimitOff(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpPowerLimitOff), -1)
+	ok := service.PowerLimitOff(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // OpenFireAlarm /directive/openFireAlarm
 func (d *DirectiveController) OpenFireAlarm(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpOpenFireAlarm), -1)
+	ok := service.OpenFireAlarm(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetPrivateData /directive/getPrivateData
 func (d *DirectiveController) GetPrivateData(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetPrivateData), -1)
+	ok := service.GetPrivateData(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
 
 // GetDoubleGunData /directive/getDoubleGunData
 func (d *DirectiveController) GetDoubleGunData(c *gin.Context) {
-	ok := service.SendCommand(deviceID(c.Query("gateway"), c.Query("nid")), int(protocol.OpGetDoubleGunData), -1)
+	ok := service.GetDoubleGunData(deviceID(c.Query("gateway"), c.Query("nid")))
 	c.JSON(http.StatusOK, ResultSuccess(ok))
 }
