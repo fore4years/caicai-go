@@ -270,12 +270,13 @@ func (o *OrderController) AddByCharge(c *gin.Context) {
 	}
 
 	order := model.OrderTbl{
-		Orderid:     newOrderID(),
-		TotalPrice:  totalPrice,
-		Openid:      openid,
-		SpacesID:    spaces.ID,
-		ReserveTime: timePtr(time.Now()),
-		State:       repository.OrderStateBooking,
+		Orderid:       newOrderID(),
+		TotalPrice:    totalPrice,
+		Openid:        openid,
+		SpacesID:      spaces.ID,
+		ReserveTime:   timePtr(time.Now()),
+		State:         repository.OrderStateBooking,
+		ChargeGunPull: 0,
 	}
 	if err := repository.CreateOrder(&order); err != nil {
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
@@ -423,6 +424,7 @@ func (o *OrderController) Booking(c *gin.Context) {
 		StartMode:        "扫码",
 		StopMode:         "扫码自停",
 		GiftAmount:       "暂未开放~",
+		ChargeGunPull:    0,
 	}
 	if parkingSpaces != nil {
 		order.ConsumptionLocation = parkingSpaces.Place
@@ -439,6 +441,8 @@ func (o *OrderController) BookingByYiXiang(c *gin.Context) {
 	spacesID := int32(queryInt(c, "spacesId", 0))
 	startTime := parseTimePtr(c.Query("startTime"))
 	endTime := parseTimePtr(c.Query("endTime"))
+	chargeType := c.Query("ChargeType")
+	chargeTime := c.Query("ChargeTime")
 
 	parkingSpaces := repository.SpacesByID(spacesID)
 	if getNotFinishOrder(openid) != nil {
@@ -477,6 +481,7 @@ func (o *OrderController) BookingByYiXiang(c *gin.Context) {
 		StartMode:        "扫码",
 		StopMode:         "扫码自停",
 		GiftAmount:       "暂未开放~",
+		ChargeGunPull:    0,
 	}
 	if parkingSpaces != nil {
 		order.ConsumptionLocation = parkingSpaces.Place
@@ -485,7 +490,22 @@ func (o *OrderController) BookingByYiXiang(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(1, "预约失败"))
 		return
 	}
-	// 时间模式：预约结束后自动断电（Java 通过 RabbitMQ 定时任务，此处省略定时调度）
+	// 时间模式：预约结束后自动断电（对齐 Java bookingByYiXiang 的 sendMsg close_order / note_close_order）
+	if chargeType == "time" && chargeTime != "" {
+		hours, _ := strconv.Atoi(chargeTime)
+		if hours <= 0 {
+			hours = 1
+		}
+		between := time.Since(startTime).Minutes()
+		if between < 5 && between > -5 {
+			// 预约现在充电：ChargeTime 小时后自动断电
+			service.SendMsg(service.RoutingCloseOrder, order.Orderid, int64(1000*60*60*hours))
+		} else {
+			// 预约未来充电：betweenMinutes 分钟后投递 note_close_order，再延迟 ChargeTime 小时拉闸
+			betweenMinutes := int(between)
+			service.SendMsg(service.RoutingNoteCloseOrder, "["+order.Orderid+", "+chargeTime+"]", int64(1000*60*betweenMinutes))
+		}
+	}
 	c.JSON(http.StatusOK, ResultSuccess(order.Orderid))
 }
 
@@ -523,6 +543,7 @@ func (o *OrderController) NewBookingByYiXiang(c *gin.Context) {
 		StartMode:       "扫码",
 		StopMode:        "扫码自停",
 		GiftAmount:      "暂未开放~",
+		ChargeGunPull:   0,
 	}
 	if parkingSpaces != nil {
 		order.ConsumptionLocation = parkingSpaces.Place
@@ -598,37 +619,50 @@ func (o *OrderController) Close(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(1, "此订单已完成!"))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(closeOrder(order)))
+	if err := closeOrder(order); err != nil {
+		c.JSON(http.StatusOK, ResultError(1, err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(true))
 }
 
-// closeOrder 结束订单（邻享/普通），设置结算时间与待支付状态，返回是否成功。
-func closeOrder(order *model.OrderTbl) bool {
+// closeOrder 结束订单（邻享/普通），设置结算时间与待支付状态。
+// 对齐 Java OrderServiceImpl.close：拉闸失败/未还枪时抛异常（此处返回 error），订单不会进入「待支付」。
+func closeOrder(order *model.OrderTbl) error {
 	if order.ConsumptionType == repository.ConsumeTypeNeighbor {
-		linXiangCloseOrder(order)
+		if err := linXiangCloseOrder(order); err != nil {
+			return err
+		}
 	} else {
-		normalCloseOrder(order)
+		if err := normalCloseOrder(order); err != nil {
+			return err
+		}
 	}
 	res := repository.UpdateOrderFields(order.Orderid, map[string]interface{}{
 		"close_time": time.Now(),
 		"state":      repository.OrderStateWaitPay,
 	})
-	return res > 0
+	if res == 0 {
+		return errors.New("结束订单失败")
+	}
+	return nil
 }
 
 // normalCloseOrder 结束普通订单（非邻享充电），对齐 Java NormalCloseOrder。
-func normalCloseOrder(order *model.OrderTbl) {
+// 拉闸失败或未归还充电枪时返回错误（Java 抛 CustomException）。
+func normalCloseOrder(order *model.OrderTbl) error {
 	gun := repository.ChargingGunByOrder(order.Orderid)
 	if gun != nil {
+		// 异步执行结束订单断电检测（对齐 Java NormalCloseOrder 的 sendMsg charging_end_detection，延迟 20s）
+		service.SendMsg(service.RoutingChargingEndDetection, order.Orderid, 20*1000)
 		if isZeroTime(order.OverTime) && order.ChargingDegree.IsZero() {
 			if !service.CloseEle(gun.DeviceID(), gun.Gun.Direction) {
-				// Java 抛「拉闸失败」；这里保守继续
-				logger.Mylog.Warn().Msgf("拉闸失败, orderId: %s", order.Orderid)
+				return errors.New("拉闸失败")
 			}
 		}
 	}
 	if order.ChargeGunPull == 1 && order.ChargingDegree.IsZero() {
-		// Java 抛「请先归还充电枪」；保守继续
-		logger.Mylog.Warn().Msgf("请先归还充电枪, 后结束订单~ orderId: %s", order.Orderid)
+		return errors.New("请先归还充电枪, 后结束订单~")
 	}
 	repository.UpdateChargingDegreeForOrder(order.Orderid)
 	updateBasicConsumptionForOrder(order.Orderid)
@@ -636,24 +670,28 @@ func normalCloseOrder(order *model.OrderTbl) {
 	if lock := repository.LockByOrder(order.Orderid); lock != nil {
 		service.ClosePlaceLock(lock.DeviceID())
 	}
+	return nil
 }
 
 // linXiangCloseOrder 结束邻享充电订单，对齐 Java LinXiangCloseOrder。
-func linXiangCloseOrder(order *model.OrderTbl) {
+// 拉闸失败或未归还充电枪时返回错误（Java 抛 CustomException）。
+func linXiangCloseOrder(order *model.OrderTbl) error {
 	gun := repository.ChargingGunByPrivateOrder(order.Orderid)
 	if gun != nil {
 		if isZeroTime(order.OverTime) && order.ChargingDegree.IsZero() {
-			service.CloseGauge(gun.DeviceID(), 0)
+			if !service.CloseGauge(gun.DeviceID(), 0) {
+				return errors.New("拉闸失败")
+			}
 		}
 	}
 	if order.ChargeGunPull == 1 && order.ChargingDegree.IsZero() {
-		logger.Mylog.Warn().Msgf("请先归还充电枪后, 再结束订单~ orderId: %s", order.Orderid)
+		return errors.New("请先归还充电枪后, 再结束订单~")
 	}
 	repository.UpdateChargingDegreeForOrder(order.Orderid)
 
 	orderPrivate := repository.OrderPrivateByOrderid(order.Orderid)
 	if orderPrivate == nil {
-		return
+		return errors.New("当前订单无法查到关联信息, 请联系客服人员~")
 	}
 	var fee decimal.Decimal
 	switch orderPrivate.IsPrivateUser {
@@ -674,6 +712,7 @@ func linXiangCloseOrder(order *model.OrderTbl) {
 		fee = baseFee.Add(neighborOvertimeFee)
 	}
 	repository.UpdateOrderBasicConsumption(order.Orderid, fee.Round(2))
+	return nil
 }
 
 func (o *OrderController) UpdateOrderState(c *gin.Context) {
@@ -737,27 +776,33 @@ func (o *OrderController) StopLock(c *gin.Context) {
 
 func (o *OrderController) Start(c *gin.Context) {
 	orderID := c.Query("orderId")
+	if err := startOrder(orderID); err != nil {
+		c.JSON(http.StatusOK, ResultError(1, err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(true))
+}
+
+// startOrder 开启订单（校验预约时间/紧急按钮，开锁或解锁充电枪，置为「使用中」）。
+// 对齐 Java OrderServiceImpl.start；供 /order/start 与延迟任务 start_charge 消费者复用。
+func startOrder(orderID string) error {
 	order, err := repository.FindOrderByOrderid(orderID)
 	if err != nil {
-		c.JSON(http.StatusOK, ResultError(1, "查无此订单"))
-		return
+		return errors.New("查无此订单")
 	}
 	if !isZeroTime(order.BookingStartTime) {
 		if order.BookingStartTime.Sub(time.Now()) > 30*time.Minute {
-			c.JSON(http.StatusOK, ResultError(1, "还没到您所预约的充电时间,我们支持提前半小时开始充电服务,请耐心等待!"))
-			return
+			return errors.New("还没到您所预约的充电时间,我们支持提前半小时开始充电服务,请耐心等待!")
 		}
 	}
 	spaces := repository.SpacesByID(order.SpacesID)
 	if spaces == nil {
-		c.JSON(http.StatusOK, ResultError(1, "车位不存在"))
-		return
+		return errors.New("车位不存在")
 	}
 	if spaces.ChargingGunID != 0 {
 		if gun := repository.ChargingGunByID(spaces.ChargingGunID); gun != nil {
 			if repository.ChargingStateByProductAndDirection(gun.ProductID, gun.Direction) != nil {
-				c.JSON(http.StatusOK, ResultError(1, "当前充电桩紧急按钮被按下,暂不可用"))
-				return
+				return errors.New("当前充电桩紧急按钮被按下,暂不可用")
 			}
 		}
 	}
@@ -765,33 +810,32 @@ func (o *OrderController) Start(c *gin.Context) {
 	if spaces.LockID == "" {
 		gun := repository.ChargingGunByOrder(orderID)
 		if gun == nil {
-			c.JSON(http.StatusOK, ResultError(1, "未找到充电枪信息,请更换设备使用"))
-			return
+			return errors.New("未找到充电枪信息,请更换设备使用")
 		}
 		if !service.OpenGunLockForYX(gun.DeviceID(), gun.Gun.Direction) {
-			c.JSON(http.StatusOK, ResultError(1, "解锁充电枪失败!"))
-			return
+			return errors.New("解锁充电枪失败!")
 		}
-		service.SetRedisValue("orderState:"+orderID, "拔枪出桩")
+		service.SetRedisState("orderState:"+orderID, "拔枪出桩")
 	} else {
 		if repository.IsOneLockPerSpot(order.SpacesID) {
 			otherID := repository.OtherSpacesIDBySpacesID(order.SpacesID)
 			if repository.CountOrdersBySpacesIDState(otherID, repository.OrderStateUse) > 0 {
-				c.JSON(http.StatusOK, ResultError(1, "当前车位车辆还未驶离,请稍后再试!"))
-				return
+				return errors.New("当前车位车辆还未驶离,请稍后再试!")
 			}
 		}
 		if lock := repository.LockByOrder(orderID); lock != nil {
 			if !service.OpenPlaceLock(lock.DeviceID()) {
-				c.JSON(http.StatusOK, ResultError(1, "开车位锁失败"))
-				return
+				return errors.New("开车位锁失败")
 			}
 		}
-		service.SetRedisValue("orderState:"+orderID, "驱车入位")
+		service.SetRedisState("orderState:"+orderID, "驱车入位")
 	}
 
 	res := repository.UpdateOrderFields(orderID, map[string]interface{}{"state": repository.OrderStateUse, "begin_time": time.Now()})
-	c.JSON(http.StatusOK, ResultSuccess(res > 0))
+	if res == 0 {
+		return errors.New("开启订单失败")
+	}
+	return nil
 }
 
 func (o *OrderController) Stop(c *gin.Context) {
@@ -895,14 +939,23 @@ func (o *OrderController) ManualDetectionIsReturnGun(c *gin.Context) {
 
 func (o *OrderController) ByOrderIdSendCloseEleAndMessage(c *gin.Context) {
 	orderID := c.Query("orderId")
+	if !byOrderIdSendCloseEleAndMessage(orderID) {
+		c.JSON(http.StatusOK, ResultError(1, "拉闸失败"))
+		return
+	}
+	c.JSON(http.StatusOK, ResultSuccess(true))
+}
+
+// byOrderIdSendCloseEleAndMessage 断电并发送消息（对齐 Java ByOrderIdSendCloseEleAndMessage）。
+func byOrderIdSendCloseEleAndMessage(orderID string) bool {
 	if gun := repository.ChargingGunByOrder(orderID); gun != nil {
 		if !service.CloseEle(gun.DeviceID(), gun.Gun.Direction) {
-			c.JSON(http.StatusOK, ResultError(1, "拉闸失败"))
-			return
+			return false
 		}
 	}
-	// 订阅消息提醒（Java subscribeMessageService.sendCarLeaveMessage；此处省略微信订阅消息推送）
-	c.JSON(http.StatusOK, ResultSuccess(true))
+	// 发送车辆驶离提醒（对齐 Java sendCarLeaveMessage）
+	sendCarLeaveMessage(orderID)
+	return true
 }
 
 // ============ 微信支付/结算 ============
@@ -988,7 +1041,39 @@ func (o *OrderController) QueryPayScore(c *gin.Context) {
 	c.JSON(http.StatusOK, ResultSuccess(state))
 }
 
+// wxPayscoreParkingTransaction 微信支付分停车回调交易（对齐 Java wexinpayscoreparking.model.Transaction）。
+type wxPayscoreParkingTransaction struct {
+	OutTradeNo    string `json:"out_trade_no"`
+	TransactionID string `json:"transaction_id"`
+	TradeState    string `json:"trade_state"`
+}
+
 func (o *OrderController) WechatCallback(c *gin.Context) {
+	// 对齐 Java OrderServiceImpl.wechatCallback：验签解密支付分停车通知，SUCCESS 时把订单置为「已预约」。
+	content := new(wxPayscoreParkingTransaction)
+	if _, err := parseWxPayNotify(c.Request, content); err != nil {
+		logger.Mylog.Error().Err(err).Msg("支付分停车回调验签/解密失败")
+		c.String(http.StatusInternalServerError, "FAIL")
+		return
+	}
+
+	logger.Mylog.Info().Msgf("支付分停车回调: outTradeNo=%s tradeState=%s transactionId=%s",
+		content.OutTradeNo, content.TradeState, content.TransactionID)
+
+	if content.TradeState != "SUCCESS" || content.OutTradeNo == "" {
+		logger.Mylog.Info().Msgf("忽略非支付成功回调, tradeState=%s", content.TradeState)
+		c.JSON(http.StatusOK, gin.H{"code": "SUCCESS"})
+		return
+	}
+
+	// 保存微信交易号（供 finish 幂等判断 + 分账），并将订单置为「已预约」（对齐 Java set state = 已预约）。
+	if content.TransactionID != "" {
+		if _, err := repository.UpdateOrderWechatTransactionID(content.OutTradeNo, content.TransactionID); err != nil {
+			logger.Mylog.Warn().Msgf("保存微信交易号失败 - 订单号: %s, err: %v", content.OutTradeNo, err)
+		}
+	}
+	repository.UpdateOrderState(content.OutTradeNo, repository.OrderStateBooked)
+
 	c.JSON(http.StatusOK, gin.H{"code": "SUCCESS"})
 }
 
@@ -1085,18 +1170,13 @@ func (o *OrderController) FinishBalans(c *gin.Context) {
 }
 
 // finishBalansOrder 余额支付结束订单（对齐 Java OrderServiceImpl.finishBalans）。
-// 返回 (是否已更新为已完成, 错误)；状态更新失败返回 (false, nil)，余额扣款失败返回 (false, error)。
+// 返回 (是否已更新为已完成, 错误)；幂等跳过返回 (false, nil)，余额扣款失败返回 (false, error)。
+// DB 写入（状态 + 扣款 + 基本消费 + 发票 + 明细）在 repository.FinishBalansTx 内整体事务。
 func finishBalansOrder(order *model.OrderTbl) (bool, error) {
 	orderID := order.Orderid
 	var amount decimal.Decimal
 	if order.ConsumptionType != repository.ConsumeTypeCaiParking {
 		amount = order.BasicConsumption
-		if repository.UpdateOrderState(orderID, repository.OrderStateFinished) == 0 {
-			return false, nil
-		}
-		service.DelRedisValue("orderState:" + orderID)
-		clearDeviceOrderMap(orderID)
-		clearDeviceRedisKey(orderID)
 	} else {
 		amount = order.TotalPrice
 	}
@@ -1104,21 +1184,18 @@ func finishBalansOrder(order *model.OrderTbl) (bool, error) {
 		amount = decimal.Zero
 	}
 
-	if amount.IsPositive() {
-		if !repository.ConsumeBalance(order.Openid, amount) {
-			return false, errors.New("余额支付失败")
-		}
-		repository.UpdateOrderBasicConsumption(orderID, amount)
-		repository.InvoiceForOrder(*order, amount)
-		if order.ConsumptionType == repository.ConsumeTypeCaiParking {
-			repository.SaveBalanceRecord(order.Openid, "停车消费", amount)
-		} else {
-			repository.SaveBalanceRecord(order.Openid, "充电消费", amount)
-		}
-	} else {
-		repository.CompleteOrderIsamountNot(order.Openid)
+	settled, err := repository.FinishBalansTx(order, amount)
+	if err != nil {
+		return false, err
 	}
-	return true, nil
+
+	// 外部副作用（Redis/内存映射）在事务成功后清理。
+	if settled && order.ConsumptionType != repository.ConsumeTypeCaiParking {
+		service.DelRedisValue("orderState:" + orderID)
+		clearDeviceOrderMap(orderID)
+		clearDeviceRedisKey(orderID)
+	}
+	return settled, nil
 }
 
 func (o *OrderController) Refunds(c *gin.Context) {
@@ -1485,6 +1562,16 @@ func openGauge(orderID string) bool {
 	repository.ActivateReceptacle(receptacle.ID)
 	// 维护设备→订单映射（report 主题按 imei::channel 路由到订单号）
 	service.SetMap(product.Imei+"::"+strconv.Itoa(rid), orderID)
+
+	// 异步 1 小时后存储电量（对齐 Java OpenGAUGE 的 sendMsg save_twice_meter）
+	service.SendMsg(service.RoutingSaveTwiceMeter, orderID, 60*60*1000)
+
+	// 选择了充电时长：定时关闸（对齐 Java OpenGAUGE 的 sendMsg close_twice）
+	if order.TwiceChargeTime != "" {
+		if hours, err := strconv.Atoi(order.TwiceChargeTime[:1]); err == nil && hours > 0 {
+			service.SendMsg(service.RoutingCloseTwice, orderID, int64(1000*60*60*hours))
+		}
+	}
 	return true
 }
 
@@ -1692,7 +1779,10 @@ func finishGunReturnOrder(orderID string, meter int32) {
 	}
 
 	if origState == repository.OrderStateUse {
-		closeOrder(order)
+		if cerr := closeOrder(order); cerr != nil {
+			logger.Mylog.Error().Err(cerr).Msgf("还枪自动结束-结束订单失败, orderId: %s", orderID)
+			return
+		}
 		// closeOrder 内部会更新 basic_consumption，重新查询后再结算。
 		order, err = repository.FindOrderByOrderid(orderID)
 		if err != nil {
@@ -1744,10 +1834,92 @@ func finishGunReturnOrder(orderID string, meter int32) {
 	}
 }
 
-// init 把结算/自动结束函数注入 service（用于 service 层触发，打破 service→handler 循环依赖）。
+// offlineSettleOrder 设备离线结算订单：按最后一次上报电量计费（不含超时占位费），置待支付后按支付方式扣款。
+func offlineSettleOrder(orderID string) {
+	order, err := repository.FindOrderByOrderid(orderID)
+	if err != nil {
+		return
+	}
+
+	// 1. 按最后一次上报电量计算电费/服务费（不含超时占位费）
+	var fee decimal.Decimal
+	if order.ConsumptionType == repository.ConsumeTypeNeighbor {
+		fee = neighborOfflineFee(order)
+	} else {
+		totalFee, serviceFee := electronicFeesByOrderid(orderID)
+		fee = totalFee.Add(serviceFee)
+	}
+	repository.UpdateChargingDegreeForOrder(orderID)
+	repository.UpdateOrderBasicConsumption(orderID, fee.Round(2))
+	repository.UpdateOrderFields(orderID, map[string]interface{}{
+		"close_time": time.Now(),
+		"state":      repository.OrderStateWaitPay,
+	})
+
+	// 2. 扣款（余额或微信支付分）
+	order, err = repository.FindOrderByOrderid(orderID)
+	if err != nil {
+		return
+	}
+	if getOrderPay(orderID) == "余额支付" {
+		if ok, balErr := finishBalansOrder(order); balErr != nil {
+			logger.Mylog.Err(balErr).Msgf("设备离线结算-余额支付失败, orderId: %s", orderID)
+		} else if !ok {
+			logger.Mylog.Warn().Msgf("设备离线结算-状态更新失败, orderId: %s", orderID)
+		}
+	} else {
+		isPrivateUser := ""
+		if order.ConsumptionType == repository.ConsumeTypeNeighbor {
+			if op := repository.OrderPrivateByOrderid(orderID); op != nil {
+				isPrivateUser = strconv.Itoa(int(op.IsPrivateUser))
+			}
+		}
+		finishOrder(order, isPrivateUser)
+	}
+}
+
+// neighborOfflineFee 邻享充电离线计费（不含超时占位费），对齐 linXiangCloseOrder 的电费部分。
+func neighborOfflineFee(order *model.OrderTbl) decimal.Decimal {
+	op := repository.OrderPrivateByOrderid(order.Orderid)
+	if op == nil {
+		return decimal.Zero
+	}
+	switch op.IsPrivateUser {
+	case 1: // 桩主：仅电费
+		return repository.PrivateFeesByPrivateOrderid(order.Orderid)
+	case 0: // 毗邻邻居：电费 + 私桩服务费率
+		var rate decimal.Decimal
+		if privatePlace := repository.PrivatePlaceByID(order.SpacesID); privatePlace != nil {
+			if chargingBean := repository.PrivateChargingBySpacesNum(privatePlace.SpacesCode); chargingBean != nil {
+				rate = chargingBean.Fee
+			}
+		}
+		return repository.PrivateFeesByOrderidAndPrivateUser(order.Orderid, rate)
+	case 2: // 普通用户：电费 + 服务费
+		totalFee, serviceFee := repository.PrivateElectronicByOrderidAndPrivateUser(order.Orderid)
+		return totalFee.Add(serviceFee)
+	default:
+		return decimal.Zero
+	}
+}
+
+// init 把结算/自动结束/定时任务依赖的函数注入 service（用于 service 层触发，打破 service→handler 循环依赖）。
 func init() {
 	service.SettleTwiceOrderFn = settleTwiceOrder
 	service.FinishGunReturnOrderFn = finishGunReturnOrder
+	service.StartOrderFn = func(orderID string) bool { return startOrder(orderID) == nil }
+	service.CloseOrderFn = func(orderID string) bool {
+		order, err := repository.FindOrderByOrderid(orderID)
+		if err != nil {
+			return false
+		}
+		return closeOrder(order) == nil
+	}
+	service.CancelOrderFn = cancelOrderInternal
+	service.ByOrderIdSendCloseEleAndMessageFn = byOrderIdSendCloseEleAndMessage
+	service.GetOrderPayFn = getOrderPay
+	service.RefundQueryFn = refundQueryWxOrder
+	service.OfflineSettleOrderFn = offlineSettleOrder
 }
 
 // parseTimePtr 解析时间字符串为 time.Time（零值表示空）。

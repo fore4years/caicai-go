@@ -176,3 +176,33 @@ func SetReOrderPower(orderID string, energyKwh, powerW decimal.Decimal) {
 		energyKwh, powerW.StringFixed(2), powerW, orderID,
 	)
 }
+
+// ActiveTwiceOrdersByPid 查询产品 pid 下进行中的二轮车充电订单（设备离线清理用）。
+func ActiveTwiceOrdersByPid(pid string) []model.OrderTbl {
+	var orders []model.OrderTbl
+	conf.Db.Where("pid = ? AND consumption_type = ? AND state IN (?, ?)",
+		pid, ConsumeTypeTwice, OrderStateUse, OrderStateConduct).Find(&orders)
+	return orders
+}
+
+// FreeReceptacle 释放插座（status → 0 空闲），返回受影响行数。
+func FreeReceptacle(id int32) int64 {
+	res := conf.Db.Model(&model.ReceptacleTbl{}).Where("id = ?", id).Update("status", 0)
+	return res.RowsAffected
+}
+
+// OfflineCancelOrder 设备离线时取消订单：置为「已取消」，并释放关联车位（二轮车/邻享不涉及车位）。
+// 注意：离线无法读取最终电表，此处不结算、不扣款，仅终止订单并释放资源，避免车位/插座被无限占用。
+func OfflineCancelOrder(orderID string) {
+	order, err := FindOrderByOrderid(orderID)
+	if err != nil {
+		return
+	}
+	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).
+		Updates(map[string]interface{}{"state": OrderStateRevoked, "close_time": time.Now()})
+	if order.ConsumptionType != ConsumeTypeTwice && order.ConsumptionType != ConsumeTypeNeighbor {
+		if spaces := SpacesByID(order.SpacesID); spaces != nil && spaces.SpacesCode != "" {
+			UpdatePlaceState(spaces.SpacesCode, "可使用")
+		}
+	}
+}

@@ -52,22 +52,34 @@ func directionData(dir string) int {
 	}
 }
 
+// directionByte 将方向字符串映射为协议方向字节：L→0x11、R→0x22、其它→0x00（对齐 Java BaseMessage）。
+func directionByte(dir string) byte {
+	switch dir {
+	case "L":
+		return protocol.DirectionLeft
+	case "R":
+		return protocol.DirectionRight
+	default:
+		return protocol.DirectionDefault
+	}
+}
+
 // OpenGunLockForYX 开驿享充电枪锁。dir 为 "L"/"R"（私桩 "D" 不处理）。
 func OpenGunLockForYX(imei, dir string) bool {
 	if dir == "D" {
 		return false
 	}
-	return SendCommand(imei, int(protocol.OpOpenCharge), directionData(dir))
+	return SendCommandDir(imei, int(protocol.OpOpenCharge), directionByte(dir), directionData(dir))
 }
 
 // OpenEle 电表合闸（驿享充电）。dir 为 "L"/"R"。
 func OpenEle(imei, dir string) bool {
-	return SendCommand(imei, int(protocol.OpOpenEle), directionData(dir))
+	return SendCommandDir(imei, int(protocol.OpOpenEle), directionByte(dir), directionData(dir))
 }
 
 // CloseEle 电表拉闸（驿享充电）。dir 为 "L"/"R"。
 func CloseEle(imei, dir string) bool {
-	return SendCommand(imei, int(protocol.OpCloseEle), directionData(dir))
+	return SendCommandDir(imei, int(protocol.OpCloseEle), directionByte(dir), directionData(dir))
 }
 
 // ============ 查询类指令（无 data） ============
@@ -187,6 +199,16 @@ func RotationPlatform(imei string, data int) bool {
 // ChargingEndDetection 结束订单断电检测。
 func ChargingEndDetection(imei string) bool {
 	return SendCommand(imei, int(protocol.OpChargingEndDetection), -1)
+}
+
+// BluetoothMacCancel 取消蓝牙 mac 匹配（对齐 Java MessageFactory.bluetoothMacCancel）。
+func BluetoothMacCancel(imei string) bool {
+	return SendCommand(imei, int(protocol.OpBluetoothMacCancel), -1)
+}
+
+// SendBluetoothMac 下发蓝牙 mac 地址到硬件（对齐 Java MessageFactory.sendBluetoothMac）。
+func SendBluetoothMac(imei, mac string) bool {
+	return SendCommandBytes(imei, int(protocol.OpSendBluetoothMac), []byte(mac))
 }
 
 // CloseOpenTime 关闭车位牌显示。

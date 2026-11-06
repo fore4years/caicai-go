@@ -233,16 +233,6 @@ func createPayScoreOrder(orderID string, needProfitSharing bool, appID string) *
 	}
 }
 
-// payScoreAppID 根据订单消费类型返回支付分订单应使用的 appid。
-// 踩踩停车（逸泊）用 yiparlAppID，其余用 wxPayAppID（对齐 Java OrderServiceImpl 创单时的 appId 选择）。
-func payScoreAppID(orderID string) string {
-	if order, err := repository.FindOrderByOrderid(orderID); err == nil && order != nil &&
-		order.ConsumptionType == repository.ConsumeTypeCaiParking {
-		return yiparlAppID
-	}
-	return wxPayAppID
-}
-
 // queryWxOrderState 查询微信支付分订单状态（对齐 WxPayService.onQueryWxOrder）。
 // 返回 CREATED / DOING / DONE / REVOKED / EXPIRED；查询失败或单据不存在时返回 CANCEL
 // （语义为「未使用微信支付分」，上层回退到余额支付）。
@@ -253,7 +243,7 @@ func queryWxOrderState(orderID string) string {
 	queryURL := wxPayBaseURL + "?" + url.Values{
 		"out_order_no": {orderID},
 		"service_id":   {wxPayServiceID},
-		"appid":        {payScoreAppID(orderID)},
+		"appid":        {wxPayAppID},
 	}.Encode()
 
 	var res wxQueryOrderRes

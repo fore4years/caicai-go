@@ -58,18 +58,15 @@ func handleDeviceUplink(deviceID string, ctl, cmd byte, data []byte) {
 	dataStr := string(data)
 
 	switch cmd {
-	case protocol.OpGetElePower: // 电表功率 → key = nid+方向
-		if v, err := decimal.NewFromString(dataStr); err == nil {
-			SetRedisValue(nid+dir, v.Div(decimal.NewFromInt(10)).Round(2).String())
-		}
-	case protocol.OpGetEleCurrent: // 电流 → key = nid+方向:current
-		if v, err := decimal.NewFromString(dataStr); err == nil {
-			SetRedisValue(nid+dir+":current", v.Div(decimal.NewFromInt(1000)).Round(2).String())
-		}
-	case protocol.OpGetEleVoltage: // 电压 → key = nid+方向:voltage
-		if v, err := decimal.NewFromString(dataStr); err == nil {
-			SetRedisValue(nid+dir+":voltage", v.Div(decimal.NewFromInt(10)).Round(2).String())
-		}
+	case protocol.OpGetElePower: // 电表功率（BCD 编码）→ key = nid+方向
+		v := bcdToInt(data)
+		SetRedisValue(nid+dir, decimal.NewFromInt(int64(v)).Div(decimal.NewFromInt(10)).Round(2).String())
+	case protocol.OpGetEleCurrent: // 电流（BCD 编码）→ key = nid+方向:current
+		v := bcdToInt(data)
+		SetRedisValue(nid+dir+":current", decimal.NewFromInt(int64(v)).Div(decimal.NewFromInt(1000)).Round(2).String())
+	case protocol.OpGetEleVoltage: // 电压（BCD 编码）→ key = nid+方向:voltage
+		v := bcdToInt(data)
+		SetRedisValue(nid+dir+":voltage", decimal.NewFromInt(int64(v)).Div(decimal.NewFromInt(10)).Round(2).String())
 	case protocol.OpGetPrivateData: // 私桩数据 → 更新电量 + Redis 参数
 		onGetPrivateData(nid, dir, dataStr)
 	case protocol.OpGetGunHolderStatus: // 枪座状态 → key = nid:gun_holder_status
@@ -110,18 +107,22 @@ func handleOrderedUplink(nid, dir string, cmd byte, data []byte, dataStr string)
 	switch cmd {
 	case protocol.OpChargingPileDistance: // 充电桩检测距离
 		SetRedisValue("chargingPileDetection:orderId:"+order.Orderid, dataStr)
-	case protocol.OpPlaceLockDistance: // 车位锁检测距离
-		SetRedisValue("placeLockDistance:orderId:"+order.Orderid, dataStr)
+	case protocol.OpPlaceLockDistance: // 车位锁检测距离（含驶离检测）
+		onPlaceLockDistance(order, dataStr)
 	case protocol.OpGetBMS: // 车载 BMS Ready → 充电中
-		SetRedisValue("orderState:"+order.Orderid, "充电中")
-	case protocol.OpPowerFull: // 电量充满
+		// 发送充电开始提醒（对齐 Java onGetBms -> sendChargingMessage）
+		if SendChargingMessageFn != nil {
+			SendChargingMessageFn(order.Openid)
+		}
+		SetRedisState("orderState:"+order.Orderid, "充电中")
+	case protocol.OpPowerFull, protocol.OpCloseEle, protocol.OpCloseGauge: // 电量充满 / 电表拉闸 / 关闭继电器（充满自动断电）
 		if order.FullTime == nil || order.FullTime.IsZero() {
 			repository.UpdateOrderFullTime(order.Orderid)
 		}
 		if order.ConsumptionType == "邻享充电" {
-			SetRedisValue("PrivateOrderState:"+order.Orderid, "充电完成")
+			SetRedisState("PrivateOrderState:"+order.Orderid, "充电完成")
 		} else {
-			SetRedisValue("orderState:"+order.Orderid, "充电完成")
+			SetRedisState("orderState:"+order.Orderid, "充电完成")
 		}
 	case protocol.OpGetPower: // 电表示数
 		onGetPower(nid, dir, data, order)
@@ -131,6 +132,79 @@ func handleOrderedUplink(nid, dir string, cmd byte, data []byte, dataStr string)
 		onChargeGunPull(nid, dir, data, order)
 	case protocol.OpChargeGunBack: // 充电枪已归还
 		onChargeGunBack(nid, dir, data, order)
+	}
+}
+
+// onPlaceLockDistance 车位锁检测距离（对齐 Java onPlaceLockDistance）：
+// 存储距离 → 检测车辆进入/驶离 → 解锁充电枪 / 设置 leave_time（超时占位费依赖 leave_time）。
+func onPlaceLockDistance(order *model.OrderTbl, dataStr string) {
+	// 存储车位锁检测到的距离
+	SetRedisValue("placeLockDistance:orderId:"+order.Orderid, dataStr)
+
+	// 驿享充电订单需有 config 记录（chargeGun 解锁标记）
+	config := repository.ConfigByOrderid(order.Orderid)
+	if config == nil {
+		logger.Mylog.Info().Msgf("参数表中查无此订单信息, 已存储距离数据, orderId: %s", order.Orderid)
+		return
+	}
+
+	// 获取充电桩检测距离（双探头设备才有）
+	chargingPileDetection := GetRedisValue("chargingPileDetection:orderId:" + order.Orderid)
+	if chargingPileDetection == "" {
+		logger.Mylog.Info().Msgf("此订单对应的充电桩不是双探头检测, orderId: %s", order.Orderid)
+	}
+
+	dataValue, err := strconv.Atoi(dataStr)
+	if err != nil {
+		logger.Mylog.Error().Msgf("解析距离数据失败, data=%s, orderId: %s", dataStr, order.Orderid)
+		return
+	}
+	var chargingPileDetectionValue *int
+	if chargingPileDetection != "" {
+		if v, e := strconv.Atoi(chargingPileDetection); e == nil {
+			chargingPileDetectionValue = &v
+		}
+	}
+
+	if config.ChargeGun == 0 {
+		// 未解锁：检测车辆是否进入（单探头看车位锁距离，双探头两个距离都要满足）
+		isVehicleDetected := (dataValue < 1600 && dataValue != 0) &&
+			(chargingPileDetectionValue == nil || (*chargingPileDetectionValue < 3000 && *chargingPileDetectionValue != 0))
+		if isVehicleDetected {
+			logger.Mylog.Info().Msgf("检测到车辆停放, 发送解锁充电枪指令, orderId: %s", order.Orderid)
+			gun := repository.ChargingGunByOrder(order.Orderid)
+			if gun == nil {
+				logger.Mylog.Info().Msgf("未找到充电枪信息, orderId: %s", order.Orderid)
+				return
+			}
+			if !OpenGunLockForYX(gun.DeviceID(), gun.Gun.Direction) {
+				logger.Mylog.Error().Msgf("解锁充电枪失败, orderId: %s", order.Orderid)
+				return
+			}
+			repository.UpdateConfigChargeGun(order.Orderid, 1)
+			SetRedisState("orderState:"+order.Orderid, "拔枪出桩")
+		} else {
+			logger.Mylog.Info().Msgf("车未进入充电位, orderId: %s", order.Orderid)
+		}
+		return
+	}
+
+	// 已解锁：检测车辆是否驶离
+	if order.SettlementTime != nil {
+		return
+	}
+	isVehicleLeave := (dataValue > 1600 || dataValue == 0) &&
+		(chargingPileDetectionValue == nil || (*chargingPileDetectionValue > 3000 || *chargingPileDetectionValue == 0))
+	if isVehicleLeave {
+		logger.Mylog.Info().Msgf("车辆已驶离, 设置驶离时间, orderId: %s", order.Orderid)
+		repository.UpdateOrderLeaveTime(order.Orderid)
+		// 发送车辆驶离通知（对齐 Java ParkingMessage）
+		if ParkingMessageFn != nil {
+			ParkingMessageFn(order.Orderid)
+		}
+		// 异步检测是否结束订单（5 分钟后，对齐 Java sendMsg check_lock_isClose）
+		SendMsg(RoutingCheckLockIsClose, order.Orderid, 1000*60*5)
+		SetRedisState("orderState:"+order.Orderid, "待结订单")
 	}
 }
 
@@ -198,7 +272,7 @@ func onChargeGunPull(nid, dir string, data []byte, order *model.OrderTbl) {
 	repository.UpdateChargingGunMeter(nid, dir, meter)
 	repository.UpdateOrderChargeGunPull(order.Orderid, 1)
 	repository.AddOrderElectronic(order.Orderid, meter)
-	SetRedisValue("orderState:"+order.Orderid, "插枪入车")
+	SetRedisState("orderState:"+order.Orderid, "插枪入车")
 
 	// 驿享充电且无车位锁时，以拔枪时间作为开始时间
 	if order.ConsumptionType == "驿享充电" {
@@ -219,7 +293,7 @@ func onChargeGunBack(nid, dir string, data []byte, order *model.OrderTbl) {
 	repository.UpdateOrderChargingTime(order.Orderid)
 	repository.UpdateChargingDegreeForOrder(order.Orderid)
 	repository.SaveOrUpdateOrderElectronicMeter(order.Orderid, meter)
-	SetRedisValue("orderState:"+order.Orderid, "充电完成")
+	SetRedisState("orderState:"+order.Orderid, "充电完成")
 
 	// 还枪后自动结束订单（对齐 Java handleGunReturnOrderCompletion）。
 	if FinishGunReturnOrderFn != nil {
@@ -352,9 +426,15 @@ func onGetGaugePower(nid, dataStr string) {
 		logger.Mylog.Debug().Msgf("二轮车电量上报未找到使用中订单, pid=%s channel=%s", product.Pid, channel)
 		return
 	}
-	// 功率异常值（>10000）跳过（硬件偶发异常，对齐 Java）
-	if p, e := strconv.ParseFloat(power, 64); e == nil && p > 10000 {
-		return
+	// 功率异常值（>10000）跳过；功率超出充电站上限则发送功率异常（对齐 Java onGetGaugePower）
+	if pw, e := strconv.ParseFloat(power, 64); e == nil {
+		if pw > 10000 {
+			return
+		}
+		if station, err := repository.ChargingStationByPid(product.Pid); err == nil && station != nil && pw > float64(station.PowerMax) {
+			logger.Mylog.Warn().Msgf("充电站 pid=%s, 通道=%s, 功率超出限制 power=%.2f", product.Pid, channel, pw)
+			SendMsg(RoutingPowerException, order.Orderid, 1000*5)
+		}
 	}
 	repository.UpdateReOrderPower(order.Orderid, meterValue, power)
 
@@ -402,6 +482,9 @@ func handleMqttReport(deviceID string, report mqttDeviceReport) {
 	product := repository.ProductByDeviceID(deviceID)
 	if product == nil {
 		logger.Mylog.Debug().Msgf("MQTT 上报未找到产品, device: %s", deviceID)
+		return
+	}
+	if report.Energy <= 0 {
 		return
 	}
 	logger.Mylog.Info().Msgf(
@@ -456,6 +539,15 @@ func handleMqttReport(deviceID string, report mqttDeviceReport) {
 		channel := fmt.Sprintf("%d", report.Channel)
 		power := decimal.NewFromFloat(report.Power)
 		meterValue := decimal.NewFromFloat(report.Energy)
+
+		// 电压 > 250V 判定设备故障，主动关闸（对齐 Java onGetGaugePower）
+		if report.Voltage > 250.0 {
+			logger.Mylog.Warn().Msgf("设备故障: 电压 %.2f > 250V, 自动关闸, pid=%s, 通道=%s", report.Voltage, product.Pid, channel)
+			if rid, e := strconv.Atoi(channel); e == nil {
+				CloseGauge(product.Imei, rid)
+			}
+		}
+
 		repository.UpsertReceptaclePower(product.Pid, channel, meterValue)
 
 		// 通过 imei::channel 映射订单号（开闸时 SetMap 写入），内存映射丢失时回退 DB 反查并回填
@@ -470,8 +562,25 @@ func handleMqttReport(deviceID string, report mqttDeviceReport) {
 			SetMap(deviceID+"::"+channel, orderID)
 		}
 
+		// 功率异常值（>10000）跳过（硬件偶发异常，对齐 Java）
+		if report.Power > 10000 {
+			return
+		}
+		// 功率超出充电站上限：发送功率异常（对齐 Java onGetGaugePower）
+		if station, err := repository.ChargingStationByPid(product.Pid); err == nil && station != nil {
+			if report.Power > float64(station.PowerMax) {
+				logger.Mylog.Warn().Msgf("充电站 pid=%s, 通道=%s, 功率超出限制 power=%.2f", product.Pid, channel, report.Power)
+				SendMsg(RoutingPowerException, orderID, 1000*5)
+			}
+		}
+
 		// 计费电量落库
 		repository.SetReOrderPower(orderID, meterValue, power)
+
+		// 充满自停模式（未选择定时）：功率连续 3 次 < 15W 判定充满并自动关闸（对齐 TCP onGetGaugePower → GaugeFull）
+		if order, err := repository.FindOrderByOrderid(orderID); err == nil && order != nil && order.TwiceChargeTime == "" {
+			GaugeFull(orderID)
+		}
 
 		// 前端展示：按订单号缓存最新上报数据
 		reportJSON, _ := json.Marshal(report)

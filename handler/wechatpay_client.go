@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/wechatpay-apiv3/wechatpay-go/core"
@@ -82,23 +83,59 @@ func prepayJsapi(totalFeeFen int, currency, openid, orderId string) (*jsapi.Prep
 }
 
 // refundWxOrder 申请退款（对齐 Java WxPayService.refunds），金额单位分。
+// 第一个参数为微信支付订单号（transaction_id），与 Java 一致发送 transaction_id 字段。
 // 返回微信退款状态：SUCCESS / PROCESSING / CHANGE / ABNORMAL / CLOSED。
 func refundWxOrder(transactionID, outRefundNo string, refund, total int) (string, error) {
+	return createWxRefund(transactionID, outRefundNo, refund, total, false)
+}
+
+// refundWxOrderByOutTradeNo 按商户订单号（out_trade_no）申请退款。
+// 用于旧数据「未保存微信支付订单号」时回退用系统订单号退款的场景（字段正确，优于 Java 的兼容分支）。
+func refundWxOrderByOutTradeNo(outTradeNo, outRefundNo string, refund, total int) (string, error) {
+	return createWxRefund(outTradeNo, outRefundNo, refund, total, true)
+}
+
+// createWxRefund 校验参数并调用微信退款接口。useOutTradeNo=true 时按商户订单号退款，否则按微信支付订单号退款。
+func createWxRefund(idField, outRefundNo string, refund, total int, useOutTradeNo bool) (string, error) {
+	// 参数校验（对齐 Java WxPayImp.refunds）
+	if strings.TrimSpace(idField) == "" {
+		return "", fmt.Errorf("微信支付订单号不能为空")
+	}
+	if strings.TrimSpace(outRefundNo) == "" {
+		return "", fmt.Errorf("商户退款单号不能为空")
+	}
+	if refund <= 0 {
+		return "", fmt.Errorf("退款金额必须大于0")
+	}
+	if total <= 0 {
+		return "", fmt.Errorf("原订单金额必须大于0")
+	}
+	if refund > total {
+		return "", fmt.Errorf("退款金额不能超过原订单金额")
+	}
+
 	client, err := getWxPayClient()
 	if err != nil {
 		return "", err
 	}
 
-	svc := refunddomestic.RefundsApiService{Client: client}
-	resp, _, err := svc.Create(context.Background(), refunddomestic.CreateRequest{
-		OutTradeNo:  core.String(transactionID),
+	req := refunddomestic.CreateRequest{
 		OutRefundNo: core.String(outRefundNo),
+		NotifyUrl:   core.String(wxPayRefundNotifyURL),
 		Amount: &refunddomestic.AmountReq{
 			Refund:   core.Int64(int64(refund)),
 			Total:    core.Int64(int64(total)),
 			Currency: core.String("CNY"),
 		},
-	})
+	}
+	if useOutTradeNo {
+		req.OutTradeNo = core.String(idField)
+	} else {
+		req.TransactionId = core.String(idField)
+	}
+
+	svc := refunddomestic.RefundsApiService{Client: client}
+	resp, _, err := svc.Create(context.Background(), req)
 	if err != nil {
 		return "", err
 	}

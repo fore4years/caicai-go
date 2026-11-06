@@ -172,11 +172,13 @@ type UsermessageDTO struct {
 }
 
 // Result 对应 Java model.sys.Result 统一封装。
+// 注意：Data 不能用 omitempty —— Java 的 Result.data 为 null 时也序列化为 "data":null，
+// 小程序 wx.$http 取 res.data.data，省略 data 会得到 undefined 而不是 null，导致误判（如「是否桩主」）。
 type Result struct {
 	Success bool        `json:"success"`
 	Code    int         `json:"code"`
 	Msg     string      `json:"msg,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
+	Data    interface{} `json:"data"`
 }
 
 // ResultSuccess 构造成功响应（对齐 Java Result.success(data)）。

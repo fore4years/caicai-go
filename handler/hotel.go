@@ -289,10 +289,11 @@ func (c *HotelSelfController) GetStaffApply(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, ResultSuccess(staffs))
 }
 
-// PassApply GET /hotel/PassApply 对齐 Java PassApply：通过申请（lockPermissions=1），
-// 微信订阅消息推送省略。
+// PassApply GET /hotel/PassApply 对齐 Java PassApply：通过申请（lockPermissions=1）并发送限免券订阅消息。
 func (c *HotelSelfController) PassApply(ctx *gin.Context) {
 	rowsAffected := repository.UpdateHotelStaffLockPermissions(ctx.Query("hotelId"), ctx.Query("openId"), "1")
+	// 发送停车限免券开通通知（对齐 Java ParkingTicketMessage）
+	parkingTicketMessage(ctx.Query("openId"))
 	ctx.JSON(http.StatusOK, ResultSuccess(int(rowsAffected)))
 }
 

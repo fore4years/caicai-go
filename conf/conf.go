@@ -30,7 +30,13 @@ var (
 
 func init() {
 	logger.Mylog.Info().Msg("配置初始化...")
-	viper.SetConfigName("conf")
+	// 按环境加载配置：APP_ENV=prod 时读取 conf.prod.yaml，未设置时读取 conf.yaml。
+	env := os.Getenv("APP_ENV")
+	configName := "conf"
+	if env != "" {
+		configName = "conf." + env
+	}
+	viper.SetConfigName(configName)
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
 	if err := viper.ReadInConfig(); err != nil {
@@ -83,11 +89,20 @@ func Dbconnection(dbconf MysqlConf) error {
 	if err != nil {
 		return fmt.Errorf("获取连接池失败: %w", err)
 	}
+	// 连接池大小：优先使用配置（对齐 Java Hikari maximum-pool-size=50 / minimum-idle=10），未配置时回退默认。
+	maxOpen := dbconf.MaxOpenConns
+	if maxOpen <= 0 {
+		maxOpen = 100
+	}
+	maxIdle := dbconf.MaxIdleConns
+	if maxIdle <= 0 {
+		maxIdle = 10
+	}
 	// SetMaxIdleConns 设置空闲连接池中连接的最大数量。
-	option.SetMaxIdleConns(10)
+	option.SetMaxIdleConns(maxIdle)
 
 	// SetMaxOpenConns 设置打开数据库连接的最大数量。
-	option.SetMaxOpenConns(100)
+	option.SetMaxOpenConns(maxOpen)
 
 	// SetConnMaxLifetime 设置了可以重新使用连接的最大时间。
 	option.SetConnMaxLifetime(time.Hour)

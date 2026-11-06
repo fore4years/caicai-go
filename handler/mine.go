@@ -194,7 +194,12 @@ func (w *WodeController) OverOrder(c *gin.Context) {
 		"charging_time":     chargingTime,
 		"stop_mode":         "扫码自停",
 	})
-	// 微信订阅消息推送省略（Java subscribeMessageService.ParkingMessage）。
+	// 发送车辆驶离通知（对齐 Java wxWodeSerImpl：踩踩停车用 newParkingMessage，其余用 ParkingMessage）。
+	if order.ConsumptionType == repository.ConsumeTypeCaiParking {
+		newParkingMessage(req.Orderid)
+	} else {
+		parkingMessage(req.Orderid)
+	}
 	c.JSON(http.StatusOK, "ok")
 }
 

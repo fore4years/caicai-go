@@ -82,6 +82,22 @@ func UpdateOrderOverTime(orderID string) {
 	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Update("over_time", time.Now())
 }
 
+// UpdateOrderLeaveTime 设置车辆驶离时间 + 结算时间（对齐 Java onPlaceLockDistance 的 isVehicleLeave 分支）。
+// 超时占位费依赖 leave_time 计算，未设置会导致超时费恒为 0。
+func UpdateOrderLeaveTime(orderID string) {
+	now := time.Now()
+	conf.Db.Model(&model.OrderTbl{}).Where("orderid = ?", orderID).Updates(map[string]interface{}{
+		"leave_time":      now,
+		"settlement_time": now,
+	})
+}
+
+// UpdateConfigChargeGun 更新 config_tbl 的 charge_gun 解锁标记（对齐 Java configService.set chargeGun=1）。
+func UpdateConfigChargeGun(orderID string, chargeGun int32) int64 {
+	res := conf.Db.Model(&model.ConfigTbl{}).Where("orderid = ?", orderID).Update("charge_gun", chargeGun)
+	return res.RowsAffected
+}
+
 // UpdateOrderChargingTime 按 begin_time 计算并更新充电时长（varchar HH:MM:SS）。
 func UpdateOrderChargingTime(orderID string) {
 	order, err := FindOrderByOrderid(orderID)

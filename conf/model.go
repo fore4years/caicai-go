@@ -17,15 +17,19 @@ type RedisConf struct {
 }
 
 type MysqlConf struct {
-	Host     string
-	Password string
-	Username string
-	Port     int16
-	Dbname   string
+	Host         string
+	Password     string
+	Username     string
+	Port         int16
+	Dbname       string
+	MaxOpenConns int `mapstructure:"max-open-conns"` // 连接池最大连接数（0 = 使用默认值）
+	MaxIdleConns int `mapstructure:"max-idle-conns"` // 连接池最大空闲连接数（0 = 使用默认值）
 }
 
 type AppConf struct {
-	Port int16
+	Port    int16
+	Env     string // 运行环境标识（prod/local），仅用于日志与后续按环境切换
+	Migrate bool   // 是否在启动时执行 AutoMigrate（生产环境默认 false）
 }
 
 type TcpConf struct {

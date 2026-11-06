@@ -148,6 +148,70 @@ func UpdateOrderBasicConsumption(orderid string, amount decimal.Decimal) int64 {
 	return res.RowsAffected
 }
 
+// FinishBalansTx 余额支付结算事务：状态更新 + 余额扣减 + 基本消费 + 发票 + 余额明细，任一步失败整体回滚。
+// 对齐 Java OrderServiceImpl.finishBalans 的 @Transactional（审计 DT-001 / DT-004）。
+// 返回 settled：是否真正执行了结算（订单已是已完成时幂等跳过，避免重复扣款）。
+func FinishBalansTx(order *model.OrderTbl, amount decimal.Decimal) (bool, error) {
+	settled := false
+	err := conf.Db.Transaction(func(tx *gorm.DB) error {
+		if order.ConsumptionType != ConsumeTypeCaiParking {
+			res := tx.Model(&model.OrderTbl{}).
+				Where("orderid = ? AND state <> ?", order.Orderid, OrderStateFinished).
+				Update("state", OrderStateFinished)
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				// 已是已完成状态，幂等跳过，不重复扣款
+				return nil
+			}
+		}
+		settled = true
+
+		if amount.IsPositive() {
+			ok, _, err := ConsumeBalanceTx(tx, order.Openid, amount)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return errors.New("余额不足")
+			}
+			if err := tx.Model(&model.OrderTbl{}).Where("orderid = ?", order.Orderid).
+				Update("basic_consumption", amount).Error; err != nil {
+				return err
+			}
+			inv := model.Invoice{
+				InvoiceType: "增值税电子普通发票",
+				InvoiceDate: order.OverTime,
+				FarmTax:     "123456789123456",
+				FarmName:    "成都七彩云创信息技术有限公司",
+				FarmAddress: "成都市金牛区长东路一号",
+				InvoiceCode: "123456789123",
+				InvoiceNum:  "123456789123",
+				Amount:      amount,
+				TaxAmount:   decimal.Zero,
+				State:       0,
+				Openid:      order.Openid,
+			}
+			if err := tx.Create(&inv).Error; err != nil {
+				return err
+			}
+			recordType := "充电消费"
+			if order.ConsumptionType == ConsumeTypeCaiParking {
+				recordType = "停车消费"
+			}
+			if err := tx.Create(&model.TabBalanceRecord{Openid: order.Openid, Type: recordType, Amount: amount}).Error; err != nil {
+				return err
+			}
+			return nil
+		}
+
+		// 金额为 0：释放冻结余额（balans = balans + freeze_balans, freeze_balans = 0）
+		return tx.Exec("UPDATE user_tbl SET balans = balans + freeze_balans, freeze_balans = 0 WHERE openid = ?", order.Openid).Error
+	})
+	return settled, err
+}
+
 // UpdateDriverUseReserveNumber 更新用户剩余预约次数，返回受影响行数。
 func UpdateDriverUseReserveNumber(openid string, n int32) int64 {
 	res := conf.Db.Model(&model.DriveruseTbl{}).Where("openid = ?", openid).Update("reserveNumber", n)

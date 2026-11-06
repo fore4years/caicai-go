@@ -90,7 +90,7 @@ func queryWxOrderDetail(outOrderNo string) *wxQueryOrderRes {
 	queryURL := wxPayBaseURL + "?" + url.Values{
 		"out_order_no": {outOrderNo},
 		"service_id":   {wxPayServiceID},
-		"appid":        {payScoreAppID(outOrderNo)},
+		"appid":        {wxPayAppID},
 	}.Encode()
 	res := new(wxQueryOrderRes)
 	if err := wxPayGet(queryURL, res); err != nil {

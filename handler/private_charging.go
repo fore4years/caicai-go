@@ -466,8 +466,12 @@ func (c *PrivateChargingController) GetSharePlaceCountByName(ctx *gin.Context) {
 }
 
 func (c *PrivateChargingController) SetInfoToPrivateUser(ctx *gin.Context) {
-	// 微信订阅消息推送省略。
-	ctx.JSON(http.StatusOK, ResultSuccess(true))
+	var req setInfoToPrivateUserReq
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusOK, ResultSuccess(false))
+		return
+	}
+	ctx.JSON(http.StatusOK, ResultSuccess(sendNeighborInfoToPrivateUser(req)))
 }
 
 // SendNewRelocateCarMessage 对齐 Java sendNewRelocateCarMessage：更新挪车通知时间。
@@ -485,8 +489,7 @@ func (c *PrivateChargingController) SendNewRelocateCarMessage(ctx *gin.Context) 
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
-	repository.UpdateOrderNeighborRelocateTime(req.OrderID)
-	ctx.JSON(http.StatusOK, ResultSuccess(true))
+	ctx.JSON(http.StatusOK, ResultSuccess(sendNewRelocateCarMessage(req.OrderID, req.Openid, req.IsPrivateUser)))
 }
 
 // UpdateByProductId 对齐 Java updateByProductId。

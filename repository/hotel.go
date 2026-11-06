@@ -121,3 +121,17 @@ func DeleteHotelStaff(hotelID, openID string) int64 {
 	res := conf.Db.Where("hotelId = ? AND openId = ?", hotelID, openID).Delete(&model.HotelStaffTbl{})
 	return res.RowsAffected
 }
+
+// HotelByStaffOpenid 按员工 openid 查询所属酒店（对齐 Java HotelMapper.selectStaffByOpenid）。
+func HotelByStaffOpenid(openid string) *model.HotelTbl {
+	var h model.HotelTbl
+	err := conf.Db.Table("hotel_staff_tbl").
+		Select("hotel_tbl.*").
+		Joins("left join hotel_tbl on hotel_staff_tbl.hotelId = hotel_tbl.id").
+		Where("hotel_staff_tbl.openId = ?", openid).
+		First(&h).Error
+	if err != nil {
+		return nil
+	}
+	return &h
+}

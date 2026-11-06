@@ -80,9 +80,9 @@ const (
 	OpCloseOpenTime        = 0xD3 // 关闭车位牌显示
 	OpStartOpenTime        = 0xD4 // 开启车位牌显示
 	OpChargingEndDetection = 0xDC // 结束订单断电检测
-	_OpSendBluetoothMac    = 0xDD // 传输蓝牙 mac 地址
+	OpSendBluetoothMac     = 0xDD // 传输蓝牙 mac 地址
 	_OpBluetoothMacSuccess = 0xDE // 蓝牙 mac 匹配成功
-	_OpBluetoothMacCancel  = 0xDF // 蓝牙 mac 取消匹配
+	OpBluetoothMacCancel   = 0xDF // 蓝牙 mac 取消匹配
 	OpGetGunHolderStatus   = 0xF3 // 获取枪座状态与电量
 	OpOpenGunHolderSensor  = 0xF6 // 打开枪座压感开关
 	OpGatewayRegister      = 0xFF // 网关注册

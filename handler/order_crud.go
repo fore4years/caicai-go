@@ -621,16 +621,16 @@ func (c *WithdrawalController) processRefund(recordID string) (string, error) {
 		return "", fmt.Errorf("关联的充值订单不存在")
 	}
 
-	// 3. 获取微信支付交易号（为空则回退系统订单号，兼容旧数据）
-	transactionID := rechargeOrder.WechatTransactionID
-	if strings.TrimSpace(transactionID) == "" {
-		transactionID = refundRecord.RelatedRechargeOrderID
-	}
-
 	// 调用微信支付退款接口。金额单位：分。
 	refundFen := refundRecord.WithdrawalAmount.Mul(decimal.NewFromInt(100)).IntPart()
 	totalFen := rechargeOrder.RechargeAmount.Mul(decimal.NewFromInt(100)).IntPart()
-	refundStatus, err := refundWxOrder(transactionID, refundRecord.RefundOrderID, int(refundFen), int(totalFen))
+	var refundStatus string
+	if wechatTxID := strings.TrimSpace(rechargeOrder.WechatTransactionID); wechatTxID != "" {
+		refundStatus, err = refundWxOrder(wechatTxID, refundRecord.RefundOrderID, int(refundFen), int(totalFen))
+	} else {
+		// 旧数据未保存微信支付订单号，回退用商户订单号（out_trade_no）退款
+		refundStatus, err = refundWxOrderByOutTradeNo(refundRecord.RelatedRechargeOrderID, refundRecord.RefundOrderID, int(refundFen), int(totalFen))
+	}
 	if err != nil {
 		return "", fmt.Errorf("微信退款失败: %w", err)
 	}

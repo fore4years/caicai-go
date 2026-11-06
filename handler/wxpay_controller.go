@@ -37,13 +37,14 @@ const (
 
 // 环境相关配置（appid/商户号/密钥/回调地址等）从 conf.yaml 的 wxpay 段读取。
 var (
-	wxPayAppID       string
-	wxPayMerchantID  string
-	wxPayMchSerialNo string
-	wxPayAPIv3Key    string
-	wxPayServiceID   string
-	wxPayServiceName string
-	wxPayNotifyURL   string
+	wxPayAppID           string
+	wxPayMerchantID      string
+	wxPayMchSerialNo     string
+	wxPayAPIv3Key        string
+	wxPayServiceID       string
+	wxPayServiceName     string
+	wxPayNotifyURL       string
+	wxPayRefundNotifyURL string
 )
 
 func init() {
@@ -55,6 +56,11 @@ func init() {
 	wxPayServiceName = conf.Cfg.Wxpay.ServiceName
 	wxPayNotifyURL = strings.TrimRight(conf.Cfg.Wxpay.NotifyDomain, "/") + "/pay/payCallback"
 	wxPayScoreNotifyURL = strings.TrimRight(conf.Cfg.Wxpay.NotifyDomain, "/") + "/wx/wechat/callback"
+	wxPayRefundNotifyURL = strings.TrimRight(conf.Cfg.Wxpay.NotifyDomain, "/") + "/wx/wechat/refund/notify"
+
+	// 启动时预初始化微信支付客户端并注册平台证书下载器（对齐 Java RSAAutoCertificateConfig 启动即建），
+	// 避免进程重启后首个回调在下载器未注册时验签失败。异步执行，失败仅记日志。
+	go getWxPayClient()
 }
 
 // ============================ 请求 / 响应 DTO ============================
@@ -190,6 +196,7 @@ func (w *WeChatPaymentController) Payment(c *gin.Context) {
 	totalFee, err := strconv.Atoi(req.Totalfee)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResultError(400, "请输入正确费用"))
+		return
 	}
 	totalFen := totalFee * 100
 	resp, err := prepayJsapi(totalFen, req.Tradeno, req.Openid, orderId)

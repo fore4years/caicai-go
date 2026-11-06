@@ -25,6 +25,9 @@ var (
 	mqttClient     mqtt.Client
 	rdb            *redis.Client
 	orderDeviceMap map[string]string //用于设备反查orderid
+
+	heartTicker = make(map[string]*time.Timer) // 心跳时钟
+	timerMutex  sync.Mutex
 )
 
 // deviceTopicPrefix 设备主题前缀。
@@ -39,8 +42,10 @@ const (
 )
 
 const (
-	workNum     = 10
-	queueLength = 1024
+	workNum     = 10   // mqtt处理的goroutine树
+	queueLength = 1024 // mqtt接收队列changdu
+
+	liveTime = 2 * time.Minute
 )
 
 type job struct {
@@ -197,20 +202,23 @@ func processDeviceFrame(frame []byte, source string) {
 
 	if rdb != nil {
 		key := "device:" + deviceID + ":" + strconv.Itoa(int(cmd))
-		rdb.Set(context.Background(), key, data, 10*time.Minute)
+		rdb.Set(context.Background(), key, data, 5*time.Second)
 	}
-	logger.Mylog.Info().Msgf("收到设备数据, source: %s, device: %s, cmd: 0x%02X, data: %q", source, deviceID, cmd, data)
+	bcdData := bcdToInt(data)
+	if cmd == protocol.OpGetPower && bcdData == 0 {
+		return
+	}
+	logger.Mylog.Info().Msgf("收到设备数据, source: %s, device: %s, cmd: 0x%02X, dataHex: %X, bcd: %d", source, deviceID, cmd, data, bcdData)
 }
 
 // onHeartbeat 心跳处理（MQTT JSON 约定：首次心跳即网关注册）。
 // 主题 device/{imei}/heartbeat，载荷 {"imei":"xx","iccid":"xx"}。
-// tab_gateway 已存在该 imei（作为 mac）则跳过；心跳一分钟一次，仅首次注册。
+// imei == mac == 网关id。每次心跳都会刷新「离线检测」定时器，liveTime 内无心跳视为设备离线。
 func onHeartbeat(j job) {
 	var req struct {
 		Imei  string `json:"imei"`
 		Iccid string `json:"iccid"`
 	}
-	// imei == mac == 网关id
 	if err := json.Unmarshal(j.payload, &req); err != nil {
 		logger.Mylog.Warn().Msgf("网关注册 JSON 解析失败, topic: %s, err: %v", j.topic, err)
 		return
@@ -219,6 +227,9 @@ func onHeartbeat(j job) {
 		logger.Mylog.Warn().Msgf("网关注册缺少 imei, topic: %s", j.topic)
 		return
 	}
+
+	// 每次心跳刷新离线检测定时器（无论是否已注册，都要重置，否则定时器会误判已在线设备为离线）
+	refreshHeartbeatTimer(req.Imei)
 
 	ctx := context.Background()
 	// 1. 先查 Redis 缓存，已注册则直接跳过，避免每次心跳查库
@@ -246,6 +257,74 @@ func onHeartbeat(j job) {
 		rdb.SAdd(ctx, gatewayRegisteredKey, req.Imei)
 	}
 	logger.Mylog.Info().Msgf("网关注册成功: imei=%s, iccid=%s", req.Imei, req.Iccid)
+}
+
+// refreshHeartbeatTimer 刷新设备离线检测定时器：每次心跳重置，超时后触发 handleDeviceOffline。
+func refreshHeartbeatTimer(imei string) {
+	timerMutex.Lock()
+	defer timerMutex.Unlock()
+	if t, ok := heartTicker[imei]; ok {
+		t.Stop()
+	}
+	timer := time.AfterFunc(liveTime, func() {
+		handleDeviceOffline(imei)
+
+		timerMutex.Lock()
+		delete(heartTicker, imei)
+		timerMutex.Unlock()
+	})
+	heartTicker[imei] = timer
+}
+
+// handleDeviceOffline 设备心跳超时（离线）后的清理：关闭该设备上进行中的订单，并释放相关资源状态。
+// 扫描的业务状态：
+//   - 二轮车充电订单：结算（离线不关闸，结算事务内释放插座），并额外兜底释放插座
+//   - 驿享充电 / 邻享订单：按最后一次上报电量结算扣款（不含超时占位费）
+//   - 踩踩停车订单：置为「已取消」，释放关联车位
+func handleDeviceOffline(imei string) {
+	logger.Mylog.Warn().Msgf("设备离线(心跳超时), 清理进行中订单: imei=%s", imei)
+	seen := map[string]bool{}
+
+	// 1. 二轮车充电订单：按产品 pid 结算（离线不关闸）
+	if product := repository.ProductByDeviceID(imei); product != nil {
+		for _, o := range repository.ActiveTwiceOrdersByPid(product.Pid) {
+			if seen[o.Orderid] {
+				continue
+			}
+			seen[o.Orderid] = true
+			logger.Mylog.Info().Msgf("设备离线, 结算二轮车订单: %s", o.Orderid)
+			if SettleTwiceOrderFn != nil {
+				SettleTwiceOrderFn(o.Orderid, false)
+			}
+			// 兜底释放插座（结算失败也能保证插座恢复空闲）
+			if rec := repository.ReceptacleByOrderid(o.Orderid); rec != nil {
+				repository.FreeReceptacle(rec.ID)
+			}
+		}
+	}
+
+	// 2. 驿享充电 / 邻享订单：按最后一次上报电量结算扣款；踩踩停车订单：取消并释放车位
+	candidates := []*model.OrderTbl{
+		repository.FindUseOrderByDevice(imei),
+		repository.FindPrivateUseOrderByDevice(imei),
+		repository.FindPrivateReturnGunOrderByDevice(imei),
+	}
+	for _, o := range candidates {
+		if o == nil || seen[o.Orderid] {
+			continue
+		}
+		seen[o.Orderid] = true
+		switch o.ConsumptionType {
+		case repository.ConsumeTypeYiXiang, repository.ConsumeTypeNeighbor:
+			logger.Mylog.Info().Msgf("设备离线, 结算充电订单: %s (type=%s, state=%s)", o.Orderid, o.ConsumptionType, o.State)
+			if OfflineSettleOrderFn != nil {
+				OfflineSettleOrderFn(o.Orderid)
+			}
+		default:
+			logger.Mylog.Info().Msgf("设备离线, 取消订单: %s (type=%s, state=%s)", o.Orderid, o.ConsumptionType, o.State)
+			repository.OfflineCancelOrder(o.Orderid)
+		}
+	}
 }
 
 // onEventMessage 处理设备上报事件
@@ -297,7 +376,47 @@ func onEventMessage(j job) {
 		}
 
 	case eventEnergy:
-	//todo
+		var isFull struct {
+			Ctl  string `json:"ctl"`
+			Type string `json:"type"`
+			Data struct {
+				IsFull bool `json:"isFull"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(body.Data, &isFull); err != nil {
+			logger.Mylog.Warn().Msgf("[MQTT] energy 事件解析异常: %s", body.Data)
+			return
+		}
+		// isFull=1 表示充电已满/枪已离车；未充满直接忽略
+		if !isFull.Data.IsFull {
+			return
+		}
+
+		imei := strings.ToUpper(strings.Split(j.topic, "/")[1])
+		// 找订单（同 eventGun 还枪结算的查找顺序：待还枪 > 四轮车使用中 > 私桩使用中）
+		order := repository.FindPrivateReturnGunOrderByDevice(imei)
+		if order == nil {
+			order = repository.FindUseOrderByDevice(imei)
+		}
+		if order == nil {
+			order = repository.FindPrivateUseOrderByDevice(imei)
+		}
+		if order == nil {
+			logger.Mylog.Warn().Msgf("[MQTT] energy 事件未找到设备对应订单, imei: %s, ctl: %s", imei, isFull.Ctl)
+			return
+		}
+
+		// 清除缓存：记录充满时间（供后续还枪结算计算超时占位费）+ 状态置「充电完成」（对齐 TCP OpPowerFull）
+		if order.FullTime == nil || order.FullTime.IsZero() {
+			repository.UpdateOrderFullTime(order.Orderid)
+		}
+		if order.ConsumptionType == repository.ConsumeTypeNeighbor {
+			SetRedisState("PrivateOrderState:"+order.Orderid, "充电完成")
+		} else {
+			SetRedisState("orderState:"+order.Orderid, "充电完成")
+		}
+		// 还枪检测与超时占位费计费由 gun_status 事件（eventGun → FinishGunReturnOrderFn）处理：
+		// 还枪则结算（按 full_time 计超时占位费），未还则等待还枪事件。
 	default:
 		logger.Mylog.Warn().Msgf("[MQTT] event事件 %s 未匹配到", body.Type)
 	}
@@ -316,30 +435,36 @@ func publish(topic string, payload []byte) bool {
 	return true
 }
 
-// SendCommand 下发指令到指定设备。
+// SendCommand 下发指令到指定设备（方向=默认）。
 // 路由规则：设备已建立 TCP 连接（老设备）→ 走二进制帧；否则 → 走 MQTT JSON。
 // data 为单字节数据（如插座号/占空比）；无数据传 -1。
 func SendCommand(imei string, cmd int, data int) bool {
-	return sendCommand(imei, cmd, intDataToBytes(data))
+	return sendCommand(imei, cmd, protocol.DirectionDefault, intDataToBytes(data))
 }
 
 // SendCommandBytes 下发带多字节数据的指令（如时段/网关地址等）。路由规则同 SendCommand。
 func SendCommandBytes(imei string, cmd int, data []byte) bool {
-	return sendCommand(imei, cmd, data)
+	return sendCommand(imei, cmd, protocol.DirectionDefault, data)
+}
+
+// SendCommandDir 下发带方向的指令（direction 为协议方向字节：DirectionLeft/Right/Default）。
+// 用于开枪锁/拉闸/合闸等需要区分左右枪的指令。
+func SendCommandDir(imei string, cmd int, direction byte, data int) bool {
+	return sendCommand(imei, cmd, direction, intDataToBytes(data))
 }
 
 // sendCommand 核心下发：优先 TCP 二进制帧，否则 MQTT JSON。
-func sendCommand(imei string, cmd int, data []byte) bool {
+func sendCommand(imei string, cmd int, direction byte, data []byte) bool {
 	// 老设备：走 TCP 二进制协议（连接即设备身份，帧不带 nid 前缀，4G 帧）
 	if _, ok := tcpConns.Load(imei); ok {
-		frame := protocol.Encode(imei, byte(cmd), protocol.DirectionDefault, data)
+		frame := protocol.Encode(imei, byte(cmd), direction, data)
 		if SendTCP(imei, frame) {
-			logger.Mylog.Info().Msgf("[TCP]已通过 TCP 下发指令, device: %s, cmd: 0x%02X", imei, cmd)
+			logger.Mylog.Info().Msgf("[TCP]已通过 TCP 下发指令, device: %s, cmd: 0x%02X, direction: 0x%02X", imei, cmd, direction)
 			return true
 		}
 	}
 
-	// 新设备：MQTT JSON
+	// 新设备：MQTT JSON（方向在 data 字段以 -1/-2/0 编码，ctl 恒为 0）
 	body := CmdBody{
 		Ctl:  0,
 		Cmd:  cmd,
@@ -385,11 +510,20 @@ func SendHex(imei, hexStr string) bool {
 	if _, ok := tcpConns.Load(imei); ok {
 		return SendTCP(imei, data)
 	}
-	return publish(deviceTopicPrefix+imei+"/cmd", data)
+	logger.Mylog.Warn().Msgf("imei %s 掉线,无法发送 %q", imei, hexStr)
+	return false
 }
 
-// SetRedisValue 设置 Redis 键值（对齐 Java DirectiveController.setRedisValue 测试接口）。
+// SetRedisValue 设置 Redis 键值，5 秒过期（用于 TCP/MQTT 上报数据：功率/电流/电压/距离/电表等临时读数）。
 func SetRedisValue(key, value string) {
+	if rdb == nil {
+		return
+	}
+	rdb.Set(context.Background(), key, value, 30*time.Second)
+}
+
+// SetRedisState 设置 Redis 键值，不过期（用于订单状态标记 orderState/PrivateOrderState）。
+func SetRedisState(key, value string) {
 	if rdb == nil {
 		return
 	}

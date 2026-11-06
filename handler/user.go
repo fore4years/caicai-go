@@ -427,6 +427,9 @@ func refreshUniAppToken() string {
 	return getUniAppToken()
 }
 
+// httpClient 带超时的共享 HTTP 客户端（对齐审计 CR-004：避免 http.DefaultClient 无超时导致微信 API 调用无限挂起）。
+var httpClient = &http.Client{Timeout: 15 * time.Second}
+
 // wxGet 发送 GET 请求并返回响应体字符串
 func wxGet(url string) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -435,7 +438,7 @@ func wxGet(url string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("GET 请求失败 %s: %w", url, err)
 	}
@@ -459,7 +462,7 @@ func wxPostJSON(url, jsonBody string) (map[string]interface{}, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("POST 请求失败 %s: %w", url, err)
 	}

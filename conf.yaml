@@ -18,9 +18,16 @@ mysql:
   username: "root"
   password: "lanlan1313!@#"
   dbname: "test_parking"
+  # 连接池（对齐 Java Hikari maximum-pool-size=50 / minimum-idle=10）
+  max-open-conns: 50
+  max-idle-conns: 10
 
 app:
   port: 8888
+  # 运行环境标识（prod/local）；多环境可通过 APP_ENV 环境变量加载 conf.<env>.yaml（对齐 Java application-{profile}.yml）
+  env: "local"
+  # 是否在启动时执行 AutoMigrate（生产默认 false，避免改动生产表结构）
+  migrate: false
 
 tcp:
   port: 10013

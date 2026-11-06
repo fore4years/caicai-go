@@ -531,6 +531,8 @@ func (c *NeighborShareUserController) Save(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, ResultSuccess(false))
 		return
 	}
+	// 发送私桩共享申请通知给桩主（对齐 Java sendPrivateShareMessage）
+	sendPrivateShareMessage(charging.Openid, rec.ID)
 	ctx.JSON(http.StatusOK, ResultSuccess(true))
 }
 
@@ -541,11 +543,23 @@ func (c *NeighborShareUserController) Delete(ctx *gin.Context) {
 
 func (c *NeighborShareUserController) Update(ctx *gin.Context) {
 	rowsAffected := repository.UpdateNeighborShareUserStatus(ctx.Param("id"), 1)
+	if rowsAffected > 0 {
+		var u model.NeighborShareUserTbl
+		if err := repository.FindByID(&u, ctx.Param("id")).Error; err == nil {
+			sendPrivateShareResultMessage(u)
+		}
+	}
 	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
 func (c *NeighborShareUserController) RefuseShareById(ctx *gin.Context) {
 	rowsAffected := repository.UpdateNeighborShareUserStatus(ctx.Param("id"), -1)
+	if rowsAffected > 0 {
+		var u model.NeighborShareUserTbl
+		if err := repository.FindByID(&u, ctx.Param("id")).Error; err == nil {
+			sendPrivateShareResultMessage(u)
+		}
+	}
 	ctx.JSON(http.StatusOK, ResultSuccess(rowsAffected > 0))
 }
 
