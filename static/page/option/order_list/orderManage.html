@@ -434,7 +434,7 @@
                     // 获取用户手机号
                     await this.getUserPhone(order.openid);
                     // 计算订单费用详情
-                    this.calculateOrderFees(order);
+                    await this.calculateOrderFees(order);
                 },
 
                 closeModal() {

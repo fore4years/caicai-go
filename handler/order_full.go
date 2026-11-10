@@ -1104,10 +1104,9 @@ func (o *OrderController) Finish(c *gin.Context) {
 // finishOrder 结束微信支付分订单（对齐 Java OrderServiceImpl.finish），返回是否成功。
 func finishOrder(order *model.OrderTbl, isPrivateUser string) bool {
 	orderID := order.Orderid
-	if strings.TrimSpace(order.WechatTransactionID) != "" {
-		if order.State != repository.OrderStateFinished {
-			repository.UpdateOrderState(orderID, repository.OrderStateFinished)
-		}
+	// 幂等：已完成则跳过。不能用「微信交易号非空」判断，否则支付分订单在支付成功回调写入交易号后，
+	// 完结会被跳过，微信支付分订单一直停留在 DOING（进行中）。
+	if order.State == repository.OrderStateFinished {
 		clearDeviceOrderMap(orderID)
 		clearDeviceRedisKey(orderID)
 		return true
