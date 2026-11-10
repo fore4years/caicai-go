@@ -519,7 +519,11 @@ func SetRedisValue(key, value string) {
 	if rdb == nil {
 		return
 	}
-	rdb.Set(context.Background(), key, value, 30*time.Second)
+	if err := rdb.Set(context.Background(), key, value, 70*time.Second).Err(); err != nil {
+		logger.Mylog.Error().Err(err).Msgf("[Redis] SET 失败 key=%s value=%s", key, value)
+		return
+	}
+	logger.Mylog.Debug().Msgf("[Redis] SET 成功 key=%s value=%s", key, value)
 }
 
 // SetRedisState 设置 Redis 键值，不过期（用于订单状态标记 orderState/PrivateOrderState）。
