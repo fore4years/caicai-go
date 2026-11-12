@@ -380,7 +380,7 @@ func onEventMessage(j job) {
 			Ctl  string `json:"ctl"`
 			Type string `json:"type"`
 			Data struct {
-				IsFull bool `json:"isFull"`
+				IsFull int8 `json:"isFull"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(body.Data, &isFull); err != nil {
@@ -388,7 +388,7 @@ func onEventMessage(j job) {
 			return
 		}
 		// isFull=1 表示充电已满/枪已离车；未充满直接忽略
-		if !isFull.Data.IsFull {
+		if isFull.Data.IsFull != 1 {
 			return
 		}
 
@@ -552,6 +552,32 @@ func DelRedisValue(key string) {
 		return
 	}
 	rdb.Del(context.Background(), key)
+}
+
+// SetRedisValueTTL 设置 Redis 键值，带自定义过期时间（用于 access_token 等需要 TTL 的缓存）。
+func SetRedisValueTTL(key, value string, ttl time.Duration) {
+	if rdb == nil {
+		return
+	}
+	if err := rdb.Set(context.Background(), key, value, ttl).Err(); err != nil {
+		logger.Mylog.Error().Err(err).Msgf("[Redis] SET 失败 key=%s", key)
+		return
+	}
+	logger.Mylog.Debug().Msgf("[Redis] SET 成功 key=%s ttl=%s", key, ttl)
+}
+
+// AcquireLock 分布式锁（SET NX EX）：仅当 key 不存在时设置成功，返回是否抢到锁。
+// 用于 access_token 刷新等需要「多实例只有一个刷新」的场景。
+func AcquireLock(key, value string, ttl time.Duration) bool {
+	if rdb == nil {
+		return false
+	}
+	ok, err := rdb.SetNX(context.Background(), key, value, ttl).Result()
+	if err != nil {
+		logger.Mylog.Error().Err(err).Msgf("[Redis] SetNX 失败 key=%s", key)
+		return false
+	}
+	return ok
 }
 
 var orderDeviceMu sync.RWMutex

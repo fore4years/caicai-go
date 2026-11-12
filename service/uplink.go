@@ -115,7 +115,7 @@ func handleOrderedUplink(nid, dir string, cmd byte, data []byte, dataStr string)
 			SendChargingMessageFn(order.Openid)
 		}
 		SetRedisState("orderState:"+order.Orderid, "充电中")
-	case protocol.OpPowerFull, protocol.OpCloseEle, protocol.OpCloseGauge: // 电量充满 / 电表拉闸 / 关闭继电器（充满自动断电）
+	case protocol.OpPowerFull: // 电量已充满（对齐 Java：仅 0xB0 触发充满；0xA4 电表拉闸 / 0xC1 关闭继电器是下行指令，不是充满）
 		if order.FullTime == nil || order.FullTime.IsZero() {
 			repository.UpdateOrderFullTime(order.Orderid)
 		}
@@ -209,7 +209,12 @@ func onPlaceLockDistance(order *model.OrderTbl, dataStr string) {
 }
 
 // onGetPower 返回电表示数：更新充电枪表底 + 订单电子电量（对齐 Java onGetPower）。
+// 对齐 Java GetPowerMessage.getMeterValue：数据为空或超过 4 字节时返回 -1（上层跳过）。
+// 否则空数据经 bcdToInt 会得到 0，首次上报把 start_value 记为 0，后续 (over_value-0) 会把电表总数整段计入费用。
 func onGetPower(nid, dir string, data []byte, order *model.OrderTbl) {
+	if len(data) == 0 || len(data) > 4 {
+		return
+	}
 	meter := int32(bcdToInt(data))
 	repository.UpdateChargingGunMeter(nid, dir, meter)
 	repository.SaveOrUpdateOrderElectronicMeter(order.Orderid, meter)
@@ -284,11 +289,12 @@ func onChargeGunPull(nid, dir string, data []byte, order *model.OrderTbl) {
 
 // onChargeGunBack 充电枪归还：更新表底 + 结束时间/充电时长/充电度数/电子电量 + Redis。
 // 对齐 Java onChangeGunBack → handleGunReturnOrderCompletion 的数据落库部分（订单扣费结束仍走 HTTP）。
+// 注意：还枪不重置 charge_gun_pull。Java 里该字段是「是否曾拔枪」的历史标记（拔枪置 1 后保持不变）；
+// 若此处再置 0，会把订单状态覆盖为「未拔枪」，导致结束订单校验与前端误判为没有拔枪。
 func onChargeGunBack(nid, dir string, data []byte, order *model.OrderTbl) {
 	meter := meterFromGunData(nid, data)
 	logger.Mylog.Info().Msgf("充电枪归还: device=%s dir=%s order=%s meter=%d", nid, dir, order.Orderid, meter)
 	repository.UpdateChargingGunMeter(nid, dir, meter)
-	repository.UpdateOrderChargeGunPull(order.Orderid, 0)
 	repository.UpdateOrderOverTime(order.Orderid)
 	repository.UpdateOrderChargingTime(order.Orderid)
 	repository.UpdateChargingDegreeForOrder(order.Orderid)

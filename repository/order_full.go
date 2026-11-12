@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"caicai-go/conf"
+	"caicai-go/logger"
 	"caicai-go/model"
 )
 
@@ -347,8 +348,11 @@ func SettleTwiceOrderTx(orderID, openid string, powerRate, serviceRate, fee, met
 		}
 
 		if wxCompleted {
-			completeWx(orderID, int(fee.Mul(decimal.NewFromInt(100)).IntPart()))
+			amountFen := int(fee.Mul(decimal.NewFromInt(100)).IntPart())
+			logger.Mylog.Info().Msgf("二轮车结算事务：orderId=%s 走微信支付分完结, amountFen=%d", orderID, amountFen)
+			completeWx(orderID, amountFen)
 		} else if fee.IsPositive() {
+			logger.Mylog.Info().Msgf("二轮车结算事务：orderId=%s 走余额扣款, fee=%s", orderID, fee.String())
 			ok, _, cerr := ConsumeBalanceTx(tx, openid, fee)
 			if cerr != nil {
 				return cerr
@@ -360,6 +364,7 @@ func SettleTwiceOrderTx(orderID, openid string, powerRate, serviceRate, fee, met
 				return err
 			}
 		} else {
+			logger.Mylog.Info().Msgf("二轮车结算事务：orderId=%s 费用为0, 释放冻结余额", orderID)
 			if err := tx.Exec("UPDATE user_tbl SET balans = balans + freeze_balans, freeze_balans = 0 WHERE openid = ?", openid).Error; err != nil {
 				return err
 			}

@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +16,7 @@ import (
 	"caicai-go/logger"
 	"caicai-go/model"
 	"caicai-go/repository"
+	"caicai-go/service"
 )
 
 const (
@@ -33,11 +33,11 @@ const (
 	phoneNumberURL    = "https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=%s"
 )
 
-// uniAppToken 微信小程序 access_token 缓存（对齐 WeChatServiceImpl 的 uniAppToken 字段）。
-// Java 侧用 Timer 每 110 分钟定时刷新，这里简化为「为空则拉取」。
-var (
-	uniAppTokenMu sync.RWMutex
-	uniAppToken   string
+// access_token 集中缓存在 Redis（统一中控，所有节点共用同一 token，避免多实例各自刷新互相顶掉）。
+const (
+	accessTokenRedisKey = "wx:access_token:" + appid
+	accessTokenLockKey  = "wx:access_token:lock:" + appid
+	accessTokenTTL      = 7000 * time.Second // 略短于微信 7200s，到期自动失效重新获取
 )
 
 type UserController struct{}
@@ -388,15 +388,23 @@ func getOpenid(fanhui string) (string, bool) {
 	return resp.Openid, resp.Openid != ""
 }
 
-// getUniAppToken 获取小程序 access_token（带进程内缓存）
+// getUniAppToken 获取小程序 access_token（Redis 集中缓存，所有节点共用同一 token）。
+// 缓存不存在或已过期时重新获取；Redis 7000s TTL 到期自动失效，避免 token 在微信 7200s 过期前被长期占用。
 func getUniAppToken() string {
-	uniAppTokenMu.RLock()
-	if uniAppToken != "" {
-		t := uniAppToken
-		uniAppTokenMu.RUnlock()
-		return t
+	if token := service.GetRedisValue(accessTokenRedisKey); token != "" {
+		return token
 	}
-	uniAppTokenMu.RUnlock()
+	return refreshUniAppToken()
+}
+
+// refreshUniAppToken 强制刷新 access_token（分布式锁避免并发刷新、多实例 token 互相顶掉失效）。
+func refreshUniAppToken() string {
+	// 抢分布式锁：抢到锁的实例负责拉取并回写，其余实例短暂等待后复用缓存
+	if !service.AcquireLock(accessTokenLockKey, "1", 10*time.Second) {
+		time.Sleep(200 * time.Millisecond)
+		return service.GetRedisValue(accessTokenRedisKey)
+	}
+	defer service.DelRedisValue(accessTokenLockKey)
 
 	body, err := wxGet(fmt.Sprintf(accessTokenURL, appid, appSecret))
 	if err != nil {
@@ -412,19 +420,13 @@ func getUniAppToken() string {
 		logger.Mylog.Err(err).Caller().Send()
 		return ""
 	}
+	if resp.AccessToken == "" {
+		logger.Mylog.Error().Msgf("[订阅消息] access_token 获取失败: %s", body)
+		return ""
+	}
 
-	uniAppTokenMu.Lock()
-	uniAppToken = resp.AccessToken
-	uniAppTokenMu.Unlock()
+	service.SetRedisValueTTL(accessTokenRedisKey, resp.AccessToken, accessTokenTTL)
 	return resp.AccessToken
-}
-
-// refreshUniAppToken 强制刷新 access_token（token 失效 40001 时调用）。
-func refreshUniAppToken() string {
-	uniAppTokenMu.Lock()
-	uniAppToken = ""
-	uniAppTokenMu.Unlock()
-	return getUniAppToken()
 }
 
 // httpClient 带超时的共享 HTTP 客户端（对齐审计 CR-004：避免 http.DefaultClient 无超时导致微信 API 调用无限挂起）。

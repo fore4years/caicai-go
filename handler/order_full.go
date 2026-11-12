@@ -67,6 +67,21 @@ func getNotFinishBySpacesIdList(spacesID int32) []model.OrderTbl {
 	return append(list, list1...)
 }
 
+// hasOccupiedOrderOnPile 判断车位是否存在「已占用」状态的未完成驿享订单（他人）。
+// 对齐邻享 addByPrivateCharge 的占用校验，补齐驿享侧缺失的同桩重复下单拦截。
+func hasOccupiedOrderOnPile(spacesID int32) bool {
+	for _, ob := range getNotFinishBySpacesIdList(spacesID) {
+		switch ob.State {
+		case repository.OrderStateBooked, // 已预约（已支付待开始）
+			repository.OrderStateUse,     // 使用中
+			repository.OrderStateWaitGun, // 待还枪
+			repository.OrderStateConduct: // 进行中
+			return true
+		}
+	}
+	return false
+}
+
 // ============ 查询 ============
 
 func (o *OrderController) GetByOrderId(c *gin.Context) {
@@ -264,6 +279,10 @@ func (o *OrderController) AddByCharge(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(1, "已有未完成订单"))
 		return
 	}
+	if hasOccupiedOrderOnPile(spaces.ID) {
+		c.JSON(http.StatusOK, ResultError(1, "充电桩存在未完成订单,请等待"))
+		return
+	}
 	var totalPrice decimal.Decimal
 	if gun := repository.ChargingGunByID(spaces.ChargingGunID); gun != nil {
 		totalPrice = gun.UnitPrice
@@ -294,7 +313,9 @@ func (o *OrderController) AddByTwiceCharge(c *gin.Context) {
 	chargeTime := c.Query("ChargeTime")
 
 	station, err := repository.ChargingStationByPid(pid)
-	if err != nil {
+	// ChargingStationByPid 用 Raw+Scan，查无记录时不返回 error，需再校验 pid 是否真的查到；
+	// 否则前端把 undefined/null 当 pid 传进来时会被原样落库，订单「充电桩主机箱编号」就变成了 "undefined"。
+	if err != nil || station == nil || station.Pid == "" {
 		c.JSON(http.StatusOK, ResultError(1, "充电站不存在"))
 		return
 	}
@@ -532,6 +553,10 @@ func (o *OrderController) NewBookingByYiXiang(c *gin.Context) {
 		}
 	}
 
+	if hasOccupiedOrderOnPile(spacesID) {
+		c.JSON(http.StatusOK, ResultError(1, "充电桩存在未完成订单,请等待"))
+		return
+	}
 	order := model.OrderTbl{
 		Orderid:         newOrderID(),
 		Openid:          openid,
@@ -1610,10 +1635,7 @@ func settleTwiceOrder(orderID string, withGauge bool) bool {
 		} else if pr.Duration > 0 {
 			hasValidPackage = true
 			if !isZeroTime(order.BeginTime) {
-				chargingMinutes = int64(time.Since(timeOrZero(order.BeginTime)).Minutes())
-				if chargingMinutes < 1 {
-					chargingMinutes = 1
-				}
+				chargingMinutes = max(int64(time.Since(timeOrZero(order.BeginTime)).Minutes()), 1)
 			}
 		}
 	}
@@ -1701,12 +1723,31 @@ func settleTwiceOrder(orderID string, withGauge bool) bool {
 	}
 
 	// 落库 + 扣款（整体事务，对齐 Java transactionManager，任何一步失败整体回滚）
-	state := queryWxOrderState(orderID)
+	// 查询微信支付分状态（区分单据不存在与查询失败），失败时重试几次，仍失败则跳过本次结算，
+	// 避免把「微信侧仍进行中」的支付分订单误按余额结算。
+	var state string
+	var qerr error
+	for attempt := 0; attempt < 3; attempt++ {
+		state, qerr = queryWxOrderStateStrict(orderID)
+		if qerr == nil {
+			break
+		}
+		if attempt < 2 {
+			time.Sleep(300 * time.Millisecond)
+		}
+	}
+	if qerr != nil {
+		logger.Mylog.Error().Err(qerr).Msgf("二轮车结算：查询微信支付分订单失败，暂不结算, orderId: %s", orderID)
+		return false
+	}
+	wxCompleted := state != wxPayStateCancel
+	logger.Mylog.Info().Msgf("二轮车结算：orderId=%s 微信支付分状态=%s wxCompleted=%v fee=%s powerRate=%s serviceFee=%s meter=%s",
+		orderID, state, wxCompleted, fee.String(), powerRate.Round(2).String(), calculatedServiceFee.Round(2).String(), meterValue.String())
 	err = repository.SettleTwiceOrderTx(
 		orderID, order.Openid,
 		powerRate.Round(2), calculatedServiceFee.Round(2), fee, meterValue,
 		newPackageDuration, packageOrderNo, receptacleID, chargingTime, now,
-		state != wxPayStateCancel, completeWxOrder,
+		wxCompleted, completeWxOrder,
 	)
 	if err == nil {
 		clearDeviceOrderMap(orderID)

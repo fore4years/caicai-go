@@ -143,6 +143,8 @@ type refundResult struct {
 	OutRefundNo         string           `json:"out_refund_no,omitempty"`
 	Channel             string           `json:"channel,omitempty"`
 	UserReceivedAccount string           `json:"user_received_account,omitempty"`
+	SuccessTime         *LocalDateTime   `json:"success_time,omitempty"`
+	CreateTime          *LocalDateTime   `json:"create_time,omitempty"`
 	Status              string           `json:"status,omitempty"`
 	FundsAccount        string           `json:"funds_account,omitempty"`
 	Amount              *refundAmountDTO `json:"amount,omitempty"`
@@ -157,6 +159,31 @@ type refundAmountDTO struct {
 	SettlementRefund int    `json:"settlement_refund,omitempty"`
 	SettlementTotal  int    `json:"settlement_total,omitempty"`
 	DiscountRefund   int    `json:"discount_refund,omitempty"`
+	Currency         string `json:"currency,omitempty"`
+}
+
+// refundQueryResult 对齐 Java domain.RefundQueryResult（退款查询响应，驼峰字段名）。
+type refundQueryResult struct {
+	RefundID            string                `json:"refundId,omitempty"`
+	OutRefundNo         string                `json:"outRefundNo,omitempty"`
+	Transaction         string                `json:"transaction,omitempty"`
+	Channel             string                `json:"channel,omitempty"`
+	UserReceivedAccount string                `json:"userReceivedAccount,omitempty"`
+	SuccessTime         string                `json:"successTime,omitempty"`
+	CreateTime          string                `json:"createTime,omitempty"`
+	Status              string                `json:"status,omitempty"`
+	Amount              *refundQueryAmountDTO `json:"amount,omitempty"`
+}
+
+// refundQueryAmountDTO 对齐 Java RefundQueryResult.AmountDTO。
+type refundQueryAmountDTO struct {
+	Total            int    `json:"total,omitempty"`
+	Refund           int    `json:"refund,omitempty"`
+	PayerTotal       int    `json:"payerTotal,omitempty"`
+	PayerRefund      int    `json:"payerRefund,omitempty"`
+	SettlementTotal  int    `json:"settlementTotal,omitempty"`
+	SettlementRefund int    `json:"settlementRefund,omitempty"`
+	DiscountRefund   int    `json:"discountRefund,omitempty"`
 	Currency         string `json:"currency,omitempty"`
 }
 
@@ -393,16 +420,18 @@ func (w *WxPayController) CompleteWxOrder(c *gin.Context) {
 	outOrderNo := c.Query("outOrderNo")
 	address := c.Query("address")
 
-	// 对齐 Java WxPayImp.onCompleteWxOrder：读取订单电费明细构造 post_payments 描述
-	// （getElectronicByOrderid -> totalFee / serviceFee，getFeesByOrderid -> fees）。
-	totalFee, serviceFee := electronicFeesByOrderid(outOrderNo)
-	fees := totalFee.Add(serviceFee).Round(2)
-	servicePart := fees.Sub(totalFee).Round(2)
-	desc := "电费" + totalFee.String() + "元,服务费" + servicePart.String() + "元"
-	logger.Mylog.Info().Msgf("订单完成: outOrderNo=%s address=%s 费用明细=%s", outOrderNo, address, desc)
-
-	// 控制器将 amount 硬编码为 1（对齐 Java onCompleteWxOrder(outOrderNo, address, 1)）。
-	completeWxOrder(outOrderNo, 1)
+	// 金额：优先取显式 amount（分），否则按订单 basic_consumption×100 计算（对齐订单实付金额）。
+	amount := queryInt(c, "amount", -1)
+	if amount < 0 {
+		order, err := repository.FindOrderByOrderid(outOrderNo)
+		if err != nil {
+			c.JSON(http.StatusOK, ResultError(1, "查无此订单: "+outOrderNo))
+			return
+		}
+		amount = int(order.BasicConsumption.Mul(decimal.NewFromInt(100)).Round(0).IntPart())
+	}
+	logger.Mylog.Info().Msgf("订单完成: outOrderNo=%s address=%s amountFen=%d", outOrderNo, address, amount)
+	completeWxOrder(outOrderNo, amount)
 	c.JSON(http.StatusOK, ResultSuccess(wxCompleteOrderRes{OutOrderNo: outOrderNo}))
 }
 
@@ -413,14 +442,15 @@ func (w *WxPayController) Refunds(c *gin.Context) {
 	refund := queryInt(c, "refund", 0)
 	total := queryInt(c, "total", 0)
 
-	// 对齐 Java WxPayImp.refunds：body 为 {transaction_id, out_refund_no, amount{refund,total,currency:CNY}}。
-	status, err := refundWxOrder(transactionID, outRefundNo, refund, total)
+	// 对齐 Java WxPayImp.refunds：body 为 {transaction_id, out_refund_no, amount{refund,total,currency:CNY}}，
+	// 返回完整 RefundResult（refund_id/status/amount/success_time 等），与 Java 返回内容一致。
+	result, err := refundWxOrderFull(transactionID, outRefundNo, refund, total)
 	if err != nil {
 		logger.Mylog.Error().Err(err).Msg("微信退款失败")
 		c.JSON(http.StatusOK, ResultError(500, "退款失败"))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(refundResult{Status: status}))
+	c.JSON(http.StatusOK, ResultSuccess(result))
 }
 
 // RefundQuery 查询退款状态，对齐 Java WxPayController.refundQuery。
@@ -430,13 +460,13 @@ func (w *WxPayController) RefundQuery(c *gin.Context) {
 		c.JSON(http.StatusOK, ResultError(500, "参数错误: outRefundNo不能为空"))
 		return
 	}
-	status, err := refundQueryWxOrder(outRefundNo)
+	result, err := refundQueryWxOrderFull(outRefundNo)
 	if err != nil {
 		logger.Mylog.Error().Err(err).Msg("退款查询失败")
 		c.JSON(http.StatusOK, ResultError(500, "退款查询失败"))
 		return
 	}
-	c.JSON(http.StatusOK, ResultSuccess(refundResult{Status: status, OutRefundNo: outRefundNo}))
+	c.JSON(http.StatusOK, ResultSuccess(result))
 }
 
 // SubtractDefaultAmount 取消订单扣除违约金/定金，对齐 Java subtractDefaultAmount。

@@ -200,7 +200,8 @@ func sendWeChatSubscribeMessage(templateID, page, openid string, data map[string
 		return false
 	}
 
-	for attempt := range 3 {
+	// 首次发送 + 42001/40001 token 过期后刷新重试一次（仅重试一次，避免死循环）
+	for attempt := 0; attempt < 2; attempt++ {
 		token := getUniAppToken()
 		if token == "" {
 			logger.Mylog.Warn().Msg("[订阅消息] 获取 access_token 失败")
@@ -209,24 +210,29 @@ func sendWeChatSubscribeMessage(templateID, page, openid string, data map[string
 
 		resp, err := wxPostJSON(subscribeSendURL+token, string(body))
 		if err != nil {
-			logger.Mylog.Err(err).Msgf("[订阅消息] 发送失败, openid=%s", openid)
+			logger.Mylog.Err(err).Msgf("[订阅消息] 发送网络异常, openid=%s err=%v time=%s", openid, err, sysTimeString())
 			return false
 		}
 
 		errcode, _ := resp["errcode"].(float64)
+		errmsg, _ := resp["errmsg"].(string)
+		rid, _ := resp["rid"].(string)
+
 		if errcode == 0 {
+			logger.Mylog.Info().Msgf("[订阅消息] 发送成功, openid=%s errcode=0 rid=%s time=%s", openid, rid, sysTimeString())
 			return true
 		}
-		if errcode == 40001 {
-			logger.Mylog.Warn().Msgf("[订阅消息] token 失效(40001), 第%d次刷新重试", attempt+1)
+
+		// 42001 access_token expired / 40001 invalid credential：强制刷新 token 后重试一次
+		if errcode == 42001 || errcode == 40001 {
+			logger.Mylog.Warn().Msgf("[订阅消息] token 过期(errcode=%v), 刷新后重试(第%d次), openid=%s rid=%s time=%s",
+				errcode, attempt+1, openid, rid, sysTimeString())
 			refreshUniAppToken()
 			continue
 		}
-		if errcode == 43101 {
-			logger.Mylog.Warn().Msgf("[订阅消息] 用户未订阅(43101), openid=%s", openid)
-		} else {
-			logger.Mylog.Warn().Msgf("[订阅消息] 发送返回错误: errcode=%v errmsg=%v", resp["errcode"], resp["errmsg"])
-		}
+
+		logger.Mylog.Warn().Msgf("[订阅消息] 发送失败, openid=%s errcode=%v errmsg=%s rid=%s time=%s",
+			openid, errcode, errmsg, rid, sysTimeString())
 		return false
 	}
 	return false

@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -233,12 +234,12 @@ func createPayScoreOrder(orderID string, needProfitSharing bool, appID string) *
 	}
 }
 
-// queryWxOrderState 查询微信支付分订单状态（对齐 WxPayService.onQueryWxOrder）。
-// 返回 CREATED / DOING / DONE / REVOKED / EXPIRED；查询失败或单据不存在时返回 CANCEL
-// （语义为「未使用微信支付分」，上层回退到余额支付）。
-func queryWxOrderState(orderID string) string {
+// queryWxOrderStateStrict 查询微信支付分订单状态，区分「单据不存在」与「查询失败」。
+// 单据不存在（ORDER_NOT_EXIST）返回 (CANCEL, nil)；查询失败或状态为空返回 (空串, err)。
+// 供结算等关键路径使用：查询失败时不能降级为余额支付，否则会把「微信侧仍进行中」的支付分订单误结为余额。
+func queryWxOrderStateStrict(orderID string) (string, error) {
 	if orderID == "" {
-		return wxPayStateCancel
+		return wxPayStateCancel, nil
 	}
 	queryURL := wxPayBaseURL + "?" + url.Values{
 		"out_order_no": {orderID},
@@ -251,15 +252,26 @@ func queryWxOrderState(orderID string) string {
 		if strings.Contains(err.Error(), "ORDER_NOT_EXIST") {
 			// 余额支付订单从未在微信支付分创单，查单返回「单据不存在」属正常情况，降级为 debug
 			logger.Mylog.Debug().Msgf("查询微信支付分订单：单据不存在（余额支付订单属正常）, orderId: %s", orderID)
-		} else {
-			logger.Mylog.Warn().Msgf("查询微信支付分订单失败, orderId: %s, err: %v", orderID, err)
+			return wxPayStateCancel, nil
 		}
-		return wxPayStateCancel
+		logger.Mylog.Warn().Msgf("查询微信支付分订单失败, orderId: %s, err: %v", orderID, err)
+		return "", err
 	}
 	if res.State == "" {
+		return "", fmt.Errorf("微信支付分订单状态为空")
+	}
+	return res.State, nil
+}
+
+// queryWxOrderState 查询微信支付分订单状态（对齐 WxPayService.onQueryWxOrder）。
+// 返回 CREATED / DOING / DONE / REVOKED / EXPIRED；查询失败或单据不存在时返回 CANCEL
+// （语义为「未使用微信支付分」，上层回退到余额支付）。
+func queryWxOrderState(orderID string) string {
+	state, err := queryWxOrderStateStrict(orderID)
+	if err != nil {
 		return wxPayStateCancel
 	}
-	return res.State
+	return state
 }
 
 // completeWxOrder 完结微信支付分订单（对齐 WxPayService.onCompleteWxOrder / onCompleteWxPrivateOrder /
@@ -268,9 +280,16 @@ func queryWxOrderState(orderID string) string {
 func completeWxOrder(orderID string, amount int) {
 	req := buildCompleteOrder(orderID, amount)
 	if req == nil {
+		logger.Mylog.Warn().Msgf("完结微信支付分订单：buildCompleteOrder 返回空, orderId: %s, amount: %d", orderID, amount)
 		return
 	}
+	for i, p := range req.PostPayments {
+		logger.Mylog.Info().Msgf("完结微信支付分订单：post_payments[%d] name=%s desc=%s len=%d",
+			i, p.Name, p.Description, len([]rune(p.Description)))
+	}
 	completeURL := wxPayBaseURL + "/" + url.PathEscape(orderID) + "/complete"
+	logger.Mylog.Info().Msgf("完结微信支付分订单：发起请求, orderId: %s, url: %s, amount: %d, totalAmount: %d, profitSharing: %v",
+		orderID, completeURL, amount, req.TotalAmount, req.ProfitSharing)
 	if err := wxPayPost(completeURL, req, nil); err != nil {
 		logger.Mylog.Err(err).Msgf("完结微信支付分订单失败, orderId: %s, amount: %d", orderID, amount)
 		return
@@ -301,7 +320,7 @@ func buildCompleteOrder(orderID string, amount int) *wxCompleteOrder {
 		req.ProfitSharing = true
 		req.PostPayments = []wxCompletePostPayment{
 			{Name: "计费规则", Description: "电费最低0.23元/度起,服务费0.4元起,详情请见小程序", Count: 1},
-			{Name: "费用明细", Description: "电费" + totalFee.String() + "元,服务费" + serviceFee.String() + "元", Count: 1},
+			{Name: "费用明细", Description: "电费" + totalFee.Round(2).String() + "元,服务费" + serviceFee.Round(2).String() + "元", Count: 1},
 		}
 	case repository.ConsumeTypeNeighbor:
 		// 邻享充电：不分账（对齐 onCompleteWxPrivateOrder）
@@ -309,7 +328,7 @@ func buildCompleteOrder(orderID string, amount int) *wxCompleteOrder {
 		req.ProfitSharing = false
 		req.PostPayments = []wxCompletePostPayment{
 			{Name: "计费规则", Description: "电费最低0.23元/度起,服务费0.2元起,详情请见小程序", Count: 1},
-			{Name: "费用明细", Description: "电费" + totalFee.String() + "元,服务费" + serviceFee.String() + "元", Count: 1},
+			{Name: "费用明细", Description: "电费" + totalFee.Round(2).String() + "元,服务费" + serviceFee.Round(2).String() + "元", Count: 1},
 		}
 	case repository.ConsumeTypeTwice:
 		// 二轮车充电：不分账（对齐 onCompleteWxTwiceOrder）
@@ -321,7 +340,7 @@ func buildCompleteOrder(orderID string, amount int) *wxCompleteOrder {
 		req.ProfitSharing = false
 		req.PostPayments = []wxCompletePostPayment{
 			{Name: "计费规则", Description: "电费最低0.23元/度起,服务费0.6元起,详情请见小程序", Count: 1},
-			{Name: "费用明细", Description: "电费" + totalFee.String() + "元,服务费" + serviceFee.String() + "元", Count: 1},
+			{Name: "费用明细", Description: "电费" + totalFee.Round(2).String() + "元,服务费" + serviceFee.Round(2).String() + "元", Count: 1},
 		}
 	default:
 		// 踩踩停车：不分账，仅计费规则（对齐 onCompleteWxLockOrder）
